@@ -35,6 +35,8 @@ cargo test --workspace
 
 `nib` の実行ファイルは、ビルド時に `target/plugins/` にある標準プラグイン（helix と `plugins/languages/` の言語）を埋め込む（一覧は `tui/standard-plugins.txt`）。言語を足したら、そこにも足す。crates.io に出すときは `cargo xtask package` で同梱の準備をする（docs/distribution.md）。コアのビルドには cmake が要る（tree-sitter が WASM の文法を読むのに使う wasmtime の C API のため）。wasmtime のバージョンは tree-sitter が使うものにそろえる。プラグインを変えたら `cargo xtask build-plugins` のあとで `nib` をビルドし直す。
 
+`target/debug` は、版や依存を変えるたびに古い成果物が残って膨らむ（一度 165 GB になった）。大きくなっていたら `cargo clean --profile dev` で消す（release のビルドと `target/plugins/` は残る）。
+
 ## ライセンス
 
 - リポジトリ全体は `MIT OR Apache-2.0`。
@@ -44,6 +46,7 @@ cargo test --workspace
 ## バージョン
 
 - エディタ本体は workspace の `version` で管理する。
+- **1.0.0 までは、変更のたびには上げない**（グローバルの「変更に応じて上げる」より優先する）。リリースしないので版は外から見えず、上げるたびに `target/debug` に古い成果物が 1 世代まるごと残る（cargo は版をビルドの識別に含める）。1.0.0 を出したあとは、変更に応じて細かく上げる。
 - SDK はエディタとは別にバージョンを付ける。`api/` が変わらない限り SDK のバージョンは上げない。例外は、Go のモジュールのパスが変わったときのように、打ち直さないと SDK を取れなくなるとき（パッチだけ上げる。`nib-editor` に移したときの `sdk/go/v0.4.1`）。
 - `api/wit/` を変えたら、同じコミットで WIT のパッケージのバージョン（`nib:plugin@X.Y.Z`）も SDK と同じ段だけ上げ、`メジャー.マイナー` が変わったら `core` の `API_VERSION` と全プラグインの `plugin.toml` の `api` も合わせる。プラグインの `api` が nib と違えば読み込まない。
 - Go SDK は `sdk/go/` に独自の `go.mod` を置き、タグは `sdk/go/vX.Y.Z` 形式にする。

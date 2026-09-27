@@ -24,6 +24,8 @@ cargo test --workspace
 cargo run --release -p nib-editor -- FILE
 ```
 
+`target/debug` keeps the artifacts of earlier builds when versions or dependencies change, and grows to many gigabytes over time. `cargo clean --profile dev` removes it and keeps release builds and the built plugins.
+
 The plugins live in their own workspace, so check them with `--manifest-path plugins/Cargo.toml`: clippy with `--target wasm32-wasip2`, and their unit tests natively. CI runs the same checks.
 
 ```sh
