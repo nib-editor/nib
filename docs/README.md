@@ -11,6 +11,7 @@
 | [lsp.md](lsp.md) | LSP プラグインの範囲、サーバーの設定、位置の数え方 |
 | [plugin-dev.md](plugin-dev.md) | プラグインの開発（`nib plugin new` / `build` / `test`、テストの書き方、作者向けの文書） |
 | [plugin-install.md](plugin-install.md) | プラグインの配布とインストール（`nib plugin search` / `add` / `update` / `remove`） |
+| [distribution.md](distribution.md) | nib の配布（リリース、mise、Homebrew、Scoop、crates.io） |
 | [benchmarks.md](benchmarks.md) | vim と Helix との比べ方と結果、nib の起動の内訳、これまでの推移 |
 | [roadmap.md](roadmap.md) | マイルストーン |
 | adr/ | 個別の設計判断の記録（`NNNN-title.md`） |
