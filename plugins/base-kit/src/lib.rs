@@ -10,6 +10,7 @@ pub mod hints;
 pub mod keys;
 pub mod leader;
 pub mod line_edit;
+pub mod text;
 pub mod tree;
 
 use nib_plugin::nib::plugin::types::Span;

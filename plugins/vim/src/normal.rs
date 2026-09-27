@@ -14,8 +14,8 @@ use crate::motion::{self, Kind};
 use crate::object::{self, Object};
 use crate::parse::{Action, Cmd, InsertAt, Motion, Op, Parsed, Scroll, Target, parse};
 use crate::register::{Shape, Value, Why};
-use crate::text::Text;
 use crate::{Change, Mode, Vim, clamp_normal, is_escape, plain};
+use base_kit::text::Text;
 
 /// A range of text an operator works on.
 #[derive(Clone, Copy, Debug)]

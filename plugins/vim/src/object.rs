@@ -3,7 +3,7 @@
 use base_kit::doc::Doc;
 
 use crate::motion::char_class;
-use crate::text::Text;
+use base_kit::text::Text;
 
 /// The text an object covers, `start..end`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

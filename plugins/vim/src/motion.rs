@@ -3,7 +3,7 @@
 
 use base_kit::doc::{self, Doc, FindKind};
 
-use crate::text::Text;
+use base_kit::text::Text;
 
 /// How an operator takes the text a motion passes over.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
