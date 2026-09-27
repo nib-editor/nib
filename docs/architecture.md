@@ -390,7 +390,7 @@ servers.rust.command = ["rust-analyzer"]
 
 ### 既存エディタの実測値
 
-vim と Helix と nib を同じ条件で測った結果は [benchmarks.md](benchmarks.md) にまとめる。設計を決めたとき（2026-09-25）の値では、3,455 行の Rust ファイルで、打鍵が vim 7.1 ms、Helix 15.8 ms（中央値）だった。
+vim、Neovim、Helix、Emacs と nib を同じ条件で測った結果は [benchmarks.md](benchmarks.md) にまとめる。設計を決めたとき（2026-09-25）の値では、3,455 行の Rust ファイルで、打鍵が vim 7.1 ms、Helix 15.8 ms（中央値）だった。
 
 Helix は、プレーンテキストなら打鍵が 0.8 ms だった。ファイルが大きいほど遅くなるので、構文ハイライトの処理量がファイルの大きさに比例していると見られる。nib も tree-sitter をコアに持つので、同じ落とし穴に注意する。構文木の更新は差分で行い、ハイライトのクエリは表示範囲だけに実行する。
 
