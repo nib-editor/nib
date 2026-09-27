@@ -448,6 +448,24 @@ fn colors_code_blocks_in_their_language() {
     fs::remove_file(&path).unwrap();
 }
 
+/// A block with no language is in the language the Markdown is in: Rust
+/// in a doc comment, as rustdoc reads it. In a Markdown file it stays
+/// Markdown's.
+#[test]
+fn code_blocks_with_no_language_are_in_their_host_language() {
+    let text = "/// ```\n/// let x = 1;\n/// ```\nfn f() {}\n";
+    let (editor, path) = editor_with(&["rust", "markdown"], "bare.rs", text);
+    assert_eq!(fg(&editor, 4, 1), KEYWORD);
+    fs::remove_file(&path).unwrap();
+
+    let text = "```\nfn main() {}\n```\n\n```rust\nfn main() {}\n```\n";
+    let (editor, path) = editor_with(&["markdown", "rust"], "bare.md", text);
+    assert_eq!(fg(&editor, 0, 1), LITERAL);
+    // One with a language is only in that language.
+    assert_eq!(fg(&editor, 0, 5), KEYWORD);
+    fs::remove_file(&path).unwrap();
+}
+
 #[test]
 fn doc_comments_are_markdown() {
     let text = "/// # Title\n///\n/// ```rust\n/// let x = 1;\n/// ```\nfn f() {}\n// # plain\n";

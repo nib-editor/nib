@@ -228,6 +228,8 @@ struct Layer {
     /// How deep it is among injections, 1 for a layer in the buffer's own
     /// language.
     depth: usize,
+    /// The language whose tree it was found in.
+    parent: Option<usize>,
     /// Its parse under way on the syntax thread, and the edits since it
     /// started.
     job: Option<u64>,
@@ -310,6 +312,9 @@ struct Found<'a> {
     tree: &'a Tree,
     host: &'a [TsRange],
     regions: Option<&'a [Range<usize>]>,
+    /// The language whose tree this one is injected into, for
+    /// `injection.parent`; `None` for a buffer's own tree.
+    parent: Option<usize>,
 }
 
 /// Which layer after a parse is which before it.
@@ -639,6 +644,7 @@ impl Languages {
             tree: &tree,
             host: &layer.ranges,
             regions: regions.as_deref(),
+            parent: layer.parent,
         };
         let (language, depth) = (layer.language, layer.depth);
         self.inject(
@@ -729,6 +735,7 @@ impl Languages {
                     tree,
                     host: &[],
                     regions: regions.as_deref(),
+                    parent: None,
                 };
                 self.inject(language, found, text, injections, edited.as_ref(), 1);
                 let changed = std::mem::take(&mut self.repaint);
@@ -755,6 +762,7 @@ impl Languages {
                 tree,
                 host: &[],
                 regions: None,
+                parent: None,
             };
             let (language, injections) = (syntax.language, &mut syntax.injections);
             self.inject(language, found, text, injections, None, 1);
@@ -821,6 +829,7 @@ impl Languages {
                     tree: &tree,
                     host: &layer.ranges,
                     regions: None,
+                    parent: layer.parent,
                 };
                 self.inject(
                     layer.language,
@@ -873,6 +882,7 @@ impl Languages {
         if depth > MAX_DEPTH {
             return;
         }
+        let host = language;
         let changed = self.find_injections(language, &found, text, &mut injections.found);
         if changed.as_ref().is_some_and(HashSet::is_empty) {
             return;
@@ -916,6 +926,7 @@ impl Languages {
                 touched: false,
                 injections: Injections::default(),
                 depth,
+                parent: Some(host),
                 job: None,
                 since_job: Vec::new(),
                 edited: None,
@@ -948,6 +959,7 @@ impl Languages {
                         tree: &tree,
                         host: &layer.ranges,
                         regions: Some(&regions),
+                        parent: layer.parent,
                     };
                     self.inject(language, found, text, &mut inner, edited, depth + 1);
                     layer.tree = Some(tree);
@@ -1003,6 +1015,12 @@ impl Languages {
                 let setting = |key: &str| settings.iter().find(|p| &*p.key == key);
                 let name = match m.captures().iter().find(|c| Some(c.index) == named) {
                     Some(c) => text.byte_slice(c.node.byte_range()).to_string(),
+                    // The language this tree is injected into, as for code
+                    // blocks with no language in Rust's doc comments.
+                    None if setting("injection.parent").is_some() => match found.parent {
+                        Some(parent) => self.list[parent].name.clone(),
+                        None => continue,
+                    },
                     None => match setting("injection.language").and_then(|p| p.value.as_deref()) {
                         Some(name) => name.to_string(),
                         None => continue,

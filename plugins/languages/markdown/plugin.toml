@@ -1,6 +1,6 @@
 # Data only: a grammar and its queries, no plugin code.
 name = "markdown"
-version = "0.1.2"
+version = "0.1.3"
 api = "0.4"
 
 [[languages]]
