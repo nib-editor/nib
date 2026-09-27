@@ -367,7 +367,7 @@ impl Editor {
     /// Loads the plugin in `dir` and calls its `init` with its table from
     /// config.toml.
     pub fn load_plugin(&mut self, dir: &Path) -> Result<(), Error> {
-        self.add_plugin(PluginSource::Dir(dir))
+        self.add_plugin(&PluginSource::Dir(dir))
     }
 
     /// Loads a plugin built into the editor from its manifest and its other
@@ -377,53 +377,24 @@ impl Editor {
         manifest: &str,
         files: &'static [(&'static str, &'static [u8])],
     ) -> Result<(), Error> {
-        self.add_plugin(PluginSource::Bytes { manifest, files })
+        self.add_plugin(&PluginSource::Bytes { manifest, files })
     }
 
     /// Loads plugins in order, as `load_plugin` and `load_builtin_plugin`
-    /// do one by one, but compiles them all at once: taking their compiled
-    /// code from the cache is most of a plugin's startup, milliseconds each.
+    /// do, going on past those that fail. They are compiled one after
+    /// another on this thread: compiling on others took 2 ms less at
+    /// startup, but kept 1.4 MB more, the compiled code scattered over
+    /// their allocators.
     pub fn load_plugins(&mut self, sources: &[PluginSource]) -> Vec<Result<(), Error>> {
-        let read: Vec<_> = sources.iter().map(|s| self.read_plugin(s)).collect();
-        let has_code = read.iter().any(|r| matches!(r, Ok((_, Some(_)))));
-        let engine: Option<Result<Engine, String>> =
-            has_code.then(|| self.engine().cloned().map_err(|err| err.to_string()));
-        let compiled: Vec<Result<(manifest::Manifest, Option<Component>), Error>> =
-            thread::scope(|scope| {
-                let jobs: Vec<_> = read
-                    .into_iter()
-                    .map(|read| {
-                        let engine = &engine;
-                        scope.spawn(move || {
-                            let (manifest, wasm) = read?;
-                            let Some(wasm) = wasm else {
-                                return Ok((manifest, None));
-                            };
-                            let engine = engine.as_ref().expect("made when any has code");
-                            let engine =
-                                engine.as_ref().map_err(|err| Error::Plugin(err.clone()))?;
-                            let component = compile_component(engine, &manifest, &wasm)?;
-                            Ok((manifest, Some(component)))
-                        })
-                    })
-                    .collect();
-                jobs.into_iter()
-                    .map(|job| job.join().expect("compiling a plugin panicked"))
-                    .collect()
-            });
         sources
             .iter()
-            .zip(compiled)
-            .map(|(source, compiled)| {
-                let (manifest, component) = compiled?;
-                self.add_compiled(source, manifest, component)
-            })
+            .map(|source| self.add_plugin(source))
             .collect()
     }
 
-    fn add_plugin(&mut self, source: PluginSource) -> Result<(), Error> {
-        let (manifest, component) = self.compile(&source)?;
-        self.add_compiled(&source, manifest, component)
+    fn add_plugin(&mut self, source: &PluginSource) -> Result<(), Error> {
+        let (manifest, component) = self.compile(source)?;
+        self.add_compiled(source, manifest, component)
     }
 
     fn add_compiled(
