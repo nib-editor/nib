@@ -4,7 +4,9 @@
 use std::time::{Duration, Instant};
 use std::{env, fs, thread};
 
-use nib_core::{Config, Editor, KeyCode, KeyEvent, Menu, PluginOptions, PluginSource, Range};
+use nib_core::{
+    API_VERSION, Config, Editor, KeyCode, KeyEvent, Menu, PluginOptions, PluginSource, Range,
+};
 
 mod common;
 use common::{key, plugin_dir, screen};
@@ -674,8 +676,10 @@ fn other_base(dir: &std::path::Path) -> std::path::PathBuf {
         other.join("plugin.wasm"),
     )
     .unwrap();
-    let manifest = "name = \"other\"\nversion = \"0.1.0\"\napi = \"0.4\"\nbase = true\n\
-                    menu-key = \"F10\"\nevents = [\"editor.syntax_updated\"]\n";
+    let manifest = format!(
+        "name = \"other\"\nversion = \"0.1.0\"\napi = \"{API_VERSION}\"\nbase = true\n\
+         menu-key = \"F10\"\nevents = [\"editor.syntax_updated\"]\n"
+    );
     fs::write(other.join("plugin.toml"), manifest).unwrap();
     other
 }

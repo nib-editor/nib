@@ -1,8 +1,8 @@
-package nib:go-plugin@0.4.0;
+package nib:go-plugin@0.5.0;
 
 /// nib's plugin world with the WASI imports TinyGo's runtime uses. Rust's
 /// toolchain adds those by itself; TinyGo needs them in the world.
 world plugin {
-    include nib:plugin/plugin@0.4.0;
+    include nib:plugin/plugin@0.5.0;
     include wasi:cli/imports@0.2.0;
 }

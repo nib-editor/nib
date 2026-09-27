@@ -16,6 +16,7 @@ use crate::history::UndoMode;
 use crate::input::{KeyCode, KeyEvent};
 use crate::layout;
 use crate::process::Stream;
+use crate::prompt::{Action, Prompt};
 use crate::selection::{Range, Selection};
 use crate::syntax::{self as trees, NodeInfo};
 use crate::ui::{Panel, Popup, PopupAnchor, Side, Span, StatusItem, StyledLine};
@@ -35,14 +36,15 @@ pub(crate) mod bindings {
             "nib:plugin/editor.view": super::ViewHandle,
             "nib:plugin/ui.panel": super::PanelHandle,
             "nib:plugin/ui.popup": super::PopupHandle,
+            "nib:plugin/prompt.line": super::PromptHandle,
             "nib:plugin/process.child": super::ChildHandle,
         },
     });
 }
 
 use bindings::nib::plugin::{
-    clipboard, commands, editor, events, files, input, process, settings, syntax, timers,
-    types as wit, ui as wit_ui,
+    clipboard, commands, editor, events, files, input, process, prompt as wit_prompt, settings,
+    syntax, timers, types as wit, ui as wit_ui,
 };
 
 /// A buffer as seen by a plugin. The resource's rep is the buffer index.
@@ -56,6 +58,10 @@ pub struct PanelHandle;
 
 /// A popup as seen by a plugin. The resource's rep is the popup id.
 pub struct PopupHandle;
+
+/// A prompt as seen by the plugin that opened it. The resource's rep is the
+/// prompt id.
+pub struct PromptHandle;
 
 /// A program as seen by the plugin that started it. The resource's rep is
 /// the process id.
@@ -731,6 +737,26 @@ pub(crate) fn wit_event(event: &Event) -> events::Event {
                 done: *done,
             })
         }
+        Event::PromptChanged {
+            prompt,
+            text,
+            cursor,
+        } => events::Event::PromptChanged(events::PromptChange {
+            id: u64::from(*prompt),
+            text: text.clone(),
+            cursor: *cursor as u32,
+        }),
+        Event::PromptAction { prompt, action } => events::Event::PromptAction(events::PromptAct {
+            id: u64::from(*prompt),
+            action: match action {
+                Action::Accept => wit_prompt::Action::Accept,
+                Action::Cancel => wit_prompt::Action::Cancel,
+                Action::Next => wit_prompt::Action::Next,
+                Action::Previous => wit_prompt::Action::Previous,
+                Action::Complete => wit_prompt::Action::Complete,
+                Action::CompleteBack => wit_prompt::Action::CompleteBack,
+            },
+        }),
     }
 }
 
@@ -929,7 +955,108 @@ impl wit_ui::HostPanel for PluginData {
     }
 }
 
+impl wit_prompt::HostLine for PluginData {
+    fn new(&mut self, label: String) -> HostResult<Resource<PromptHandle>> {
+        let owner = self.plugin;
+        let state = self.state()?;
+        state.last_prompt_id += 1;
+        let id = state.last_prompt_id;
+        state.prompts.push(Prompt::new(id, owner, label));
+        Ok(Resource::new_own(id))
+    }
+
+    fn id(&mut self, prompt: Resource<PromptHandle>) -> HostResult<u64> {
+        Ok(u64::from(prompt.rep()))
+    }
+
+    fn text(&mut self, prompt: Resource<PromptHandle>) -> HostResult<String> {
+        Ok(self.prompt(&prompt)?.text.clone())
+    }
+
+    fn cursor(&mut self, prompt: Resource<PromptHandle>) -> HostResult<u32> {
+        Ok(self.prompt(&prompt)?.cursor as u32)
+    }
+
+    fn set(&mut self, prompt: Resource<PromptHandle>, text: String, cursor: u32) -> HostResult<()> {
+        self.prompt(&prompt)?.set(text, cursor as usize);
+        Ok(())
+    }
+
+    fn set_hint(&mut self, prompt: Resource<PromptHandle>, hint: String) -> HostResult<()> {
+        self.prompt(&prompt)?.hint = hint;
+        Ok(())
+    }
+
+    fn drop(&mut self, prompt: Resource<PromptHandle>) -> HostResult<()> {
+        // Outside a call, the plugin is being stopped and its prompts are
+        // removed anyway.
+        if let Some(state) = self.state.as_mut() {
+            state.prompts.retain(|p| p.id != prompt.rep());
+        }
+        Ok(())
+    }
+}
+
+impl wit_prompt::Host for PluginData {
+    fn active(&mut self) -> HostResult<Option<wit_prompt::State>> {
+        let caller = self.plugin;
+        Ok(self.state()?.prompts.last().map(|p| wit_prompt::State {
+            id: u64::from(p.id),
+            label: p.label.clone(),
+            text: p.text.clone(),
+            cursor: p.cursor as u32,
+            mine: p.owner == caller,
+        }))
+    }
+
+    fn edit(&mut self, text: String, cursor: u32) -> HostResult<()> {
+        let state = self.state()?;
+        let Some(prompt) = state.prompts.last_mut() else {
+            return Ok(());
+        };
+        prompt.set(text, cursor as usize);
+        let event = Event::PromptChanged {
+            prompt: prompt.id,
+            text: prompt.text.clone(),
+            cursor: prompt.cursor,
+        };
+        let owner = prompt.owner;
+        state.push_event(Some(owner), event);
+        Ok(())
+    }
+
+    fn act(&mut self, action: wit_prompt::Action) -> HostResult<()> {
+        let state = self.state()?;
+        let Some(prompt) = state.prompts.last() else {
+            return Ok(());
+        };
+        let action = match action {
+            wit_prompt::Action::Accept => Action::Accept,
+            wit_prompt::Action::Cancel => Action::Cancel,
+            wit_prompt::Action::Next => Action::Next,
+            wit_prompt::Action::Previous => Action::Previous,
+            wit_prompt::Action::Complete => Action::Complete,
+            wit_prompt::Action::CompleteBack => Action::CompleteBack,
+        };
+        let event = Event::PromptAction {
+            prompt: prompt.id,
+            action,
+        };
+        let owner = prompt.owner;
+        state.push_event(Some(owner), event);
+        Ok(())
+    }
+}
+
 impl PluginData {
+    fn prompt(&mut self, handle: &Resource<PromptHandle>) -> HostResult<&mut Prompt> {
+        self.state()?
+            .prompts
+            .iter_mut()
+            .find(|prompt| prompt.id == handle.rep())
+            .ok_or_else(|| wasmtime::Error::msg("the prompt is closed"))
+    }
+
     fn panel(&mut self, handle: &Resource<PanelHandle>) -> HostResult<&mut Panel> {
         self.state()?
             .panels

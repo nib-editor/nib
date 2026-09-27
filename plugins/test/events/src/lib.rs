@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use nib_plugin::exports::nib::plugin::guest::{Guest, KeyResult};
 use nib_plugin::nib::plugin::events::{self, Event};
 use nib_plugin::nib::plugin::process::{self, Child, Stream};
+use nib_plugin::nib::plugin::prompt::Line;
 use nib_plugin::nib::plugin::types::{Edit, KeyEvent, UndoMode};
 use nib_plugin::nib::plugin::{commands, editor, files, timers};
 
@@ -20,9 +21,10 @@ struct Program {
 thread_local! {
     static LOG: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
     static PROGRAMS: RefCell<Vec<Program>> = const { RefCell::new(Vec::new()) };
+    static PROMPT: RefCell<Option<Line>> = const { RefCell::new(None) };
 }
 
-const COMMANDS: [&str; 16] = [
+const COMMANDS: [&str; 18] = [
     "echo",
     "call",
     "log",
@@ -39,6 +41,8 @@ const COMMANDS: [&str; 16] = [
     "stop-walk",
     "save",
     "load",
+    "prompt",
+    "close-prompt",
 ];
 
 struct Events;
@@ -131,6 +135,17 @@ impl Guest for Events {
                 files::cancel(args.parse().map_err(|_| "stop-walk needs an id")?);
                 Ok(String::new())
             }
+            // Opens a prompt labeled `args`, and says its id.
+            "prompt" => {
+                let line = Line::new(&args);
+                let id = line.id();
+                PROMPT.set(Some(line));
+                Ok(id.to_string())
+            }
+            "close-prompt" => {
+                PROMPT.set(None);
+                Ok(String::new())
+            }
             _ => Err(format!("no command {name}")),
         }
     }
@@ -191,6 +206,10 @@ impl Guest for Events {
                     printed(&program.stderr)
                 )
             }),
+            Event::PromptChanged(change) => {
+                format!("prompt {} {:?} {}", change.id, change.text, change.cursor)
+            }
+            Event::PromptAction(act) => format!("prompt {} {:?}", act.id, act.action),
             Event::FilesListed(listed) => {
                 let mut paths = listed.paths;
                 paths.sort();

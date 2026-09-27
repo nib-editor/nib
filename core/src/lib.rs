@@ -17,6 +17,7 @@ mod layout;
 pub mod marks;
 mod plugin;
 mod process;
+mod prompt;
 mod render;
 pub mod search;
 pub mod selection;

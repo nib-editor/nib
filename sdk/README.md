@@ -31,7 +31,7 @@ wordcount/
 ```toml
 name = "wordcount"        # also the prefix of its commands and events
 version = "0.1.0"
-api = "0.4"               # the nib:plugin version it is built for
+api = "0.5"               # the nib:plugin version it is built for
 capabilities = []         # what it may do beyond the editor API
 events = ["buffer-opened", "buffer-changed"]
 ```
@@ -89,6 +89,12 @@ Positions are UTF-8 byte offsets into a buffer. Screen rows and columns are the 
 
 Keys go down a stack of layers, top first. `input.push-layer()` puts one on top for the plugin and `input.pop-layer()` takes it off; a keymap pushes its layer in `init` and keeps it. A plugin without a layer gets no keys. The menu key (Ctrl-g unless the user changes it) never reaches plugins.
 
+### Prompts
+
+A line to type into, such as a picker's query: `prompt.line(label)` opens one, drawn above the status line with `label` in front, and dropping it closes it. While it is the newest one open, keys go to the base in use (helix, by default), which edits the text its own way; you hear about it through events, only to you: `prompt-changed` with the text and cursor, and `prompt-action` for what a key asked, such as `accept` (Enter), `cancel` (Escape), `next` / `previous` (Down / Up), and `complete` / `complete-back` (Tab / Shift-Tab). Closing it on `accept` or `cancel` is yours to do. Lists of candidates are yours to draw, in a panel.
+
+A base answers keys while `prompt.active()` says a prompt is open: `prompt.edit(text, cursor)` changes its text, `prompt.act(action)` passes on an action, and a key it passes gets the core's default (typing, Backspace, arrows, Home, End, Enter, Escape, Tab).
+
 ### Commands
 
 `commands.register("count", "…")` makes `wordcount.count`. Anyone can call it with `commands.call(name, args)`: users from a keymap or the command line, other plugins, and tests. Calls are synchronous and return the result. Calling into a plugin that is already in a call, such as your own, is an error.
@@ -102,6 +108,7 @@ The core's commands (arguments are JSON):
 | `buffer.next` / `buffer.previous` | Shows the next / previous buffer |
 | `config.open` | Opens config.toml, or `{"plugin": name}`'s settings file |
 | `config.reload` | Reads the settings again, as saving one of their files does |
+| `core.menu` | Opens the core menu |
 | `buffer.close` | Closes the shown buffer; `{"force": true}` drops unsaved changes. Its handles trap from then on |
 | `view.split` | Splits the view, `{"direction": "vertical"}` or `"horizontal"` |
 | `view.close` / `view.only` | Closes the focused view / all others |
@@ -120,7 +127,7 @@ A plugin gets the kinds of events listed under `events` in its manifest:
 | `editor.buffer_closed` | A buffer was closed: `{"path": …}`. The core emits it |
 | `editor.syntax_updated` | A buffer's syntax tree caught up with its edits: `{"path": …, "version": …}`. The core emits it |
 
-These come to the plugin that asked for them, without being listed: `timer` (from `timers.set`), `process-output` and `process-exit` (from `process.spawn`), and `files-listed` (from `files.walk`).
+These come to the plugin that asked for them, without being listed: `timer` (from `timers.set`), `process-output` and `process-exit` (from `process.spawn`), `files-listed` (from `files.walk`), and `prompt-changed` and `prompt-action` (from `prompt.line`).
 
 Commands ask someone to do something; events tell whoever cares that something happened.
 
@@ -245,7 +252,7 @@ To make it findable by name, add it to [nib-editor/plugins](https://github.com/n
 crate-type = ["cdylib"]
 
 [dependencies]
-nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.4.2" }
+nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.5.0" }
 ```
 
 Implement `nib_plugin::exports::nib::plugin::guest::Guest` and export it with `nib_plugin::export!(YourType)`. The API is under `nib_plugin::nib::plugin::<interface>`. Build for `wasm32-wasip2`; `nib plugin build` does it.
@@ -256,4 +263,4 @@ Built with [TinyGo](https://tinygo.org/) 0.42 or later, since Go itself cannot m
 
 ### Versions
 
-SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.4.2`, `sdk/go/v0.4.1`.
+SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.5.0`, `sdk/go/v0.5.0`.

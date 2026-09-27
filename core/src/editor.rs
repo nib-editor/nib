@@ -17,6 +17,7 @@ use crate::input::{KeyCode, KeyEvent};
 use crate::layout;
 use crate::plugin::{PluginId, Plugins};
 use crate::process::Processes;
+use crate::prompt::{Outcome, Prompt};
 use crate::selection::Selection;
 use crate::syntax::{BufferSyntax, Languages};
 use crate::ui::{Panel, Popup, StatusItem, Theme};
@@ -55,6 +56,9 @@ pub(crate) struct State {
     /// Popups, drawn in the order they were opened.
     pub popups: Vec<Popup>,
     pub last_popup_id: u32,
+    /// Prompts, oldest first; keys go to the last one.
+    pub prompts: Vec<Prompt>,
+    pub last_prompt_id: u32,
     /// Events waiting for the current call to end, with the plugin they
     /// are for, or `None` for every plugin that listens to their kind.
     pub events: VecDeque<(Option<PluginId>, Event)>,
@@ -405,7 +409,8 @@ impl State {
     /// Rows left for text above the panels and the status line.
     pub fn text_area_rows(&self) -> u16 {
         let status = u16::from(self.height > 1);
-        let panels: usize = self.panels.iter().map(|p| p.lines.len()).sum();
+        let panels: usize = self.panels.iter().map(|p| p.lines.len()).sum::<usize>()
+            + usize::from(!self.prompts.is_empty());
         self.height
             .saturating_sub(status)
             .saturating_sub(panels.min(u16::MAX as usize) as u16)
@@ -802,6 +807,7 @@ impl State {
         self.status.retain(|item| item.owner != plugin);
         self.panels.retain(|panel| panel.owner != plugin);
         self.popups.retain(|popup| popup.owner != plugin);
+        self.prompts.retain(|prompt| prompt.owner != plugin);
         for buffer in &mut self.buffers {
             buffer.remove_decorations(plugin);
         }
@@ -956,6 +962,8 @@ impl Default for Editor {
                 last_panel_id: 0,
                 popups: Vec::new(),
                 last_popup_id: 0,
+                prompts: Vec::new(),
+                last_prompt_id: 0,
                 events: VecDeque::new(),
                 commands: Vec::new(),
                 timers: Vec::new(),
@@ -1124,8 +1132,10 @@ impl Editor {
             let state = self.state_mut();
             state.menu = Some(Menu::Main);
             state.menu_cursor = 0;
-        } else {
+        } else if self.state().prompts.is_empty() {
             self.send_to_plugins(key);
+        } else {
+            self.prompt_key(key);
         }
         self.after_plugins_ran();
     }
@@ -1431,6 +1441,34 @@ impl Editor {
         } else if column >= view.left_col + width {
             view.left_col = column + 1 - width;
         }
+    }
+
+    /// While a prompt is open, keys go to the base, which edits it its own
+    /// way; the core's defaults take the keys it leaves.
+    fn prompt_key(&mut self, key: KeyEvent) {
+        if let Some(base) = self.running_base()
+            && self.plugin_handle_key(base, key)
+        {
+            return;
+        }
+        let state = self.state_mut();
+        let Some(prompt) = state.prompts.last_mut() else {
+            return;
+        };
+        let event = match prompt.default_key(key) {
+            Some(Outcome::Edited) => Event::PromptChanged {
+                prompt: prompt.id,
+                text: prompt.text.clone(),
+                cursor: prompt.cursor,
+            },
+            Some(Outcome::Asked(action)) => Event::PromptAction {
+                prompt: prompt.id,
+                action,
+            },
+            None => return,
+        };
+        let owner = prompt.owner;
+        state.push_event(Some(owner), event);
     }
 
     fn send_to_plugins(&mut self, key: KeyEvent) {

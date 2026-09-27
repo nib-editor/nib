@@ -2,8 +2,8 @@
 
 package events
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.4.0".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.0".
 
-//go:wasmimport nib:plugin/events@0.4.0 emit
+//go:wasmimport nib:plugin/events@0.5.0 emit
 //go:noescape
 func wasmimport_Emit(name0 *uint8, name1 uint32, data0 *uint8, data1 uint32)

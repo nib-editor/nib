@@ -39,13 +39,14 @@ fn picks_a_file_by_fuzzy_name() {
     open_picker(&mut editor);
     assert!(shows(&editor, "files> "));
     type_keys(&mut editor, "cargotoml");
-    // Below the prompt, the best match first.
+    // Above the prompt, the best match first.
     let rows = screen(&editor);
     let prompt = rows
         .iter()
         .position(|row| row.starts_with("files> "))
         .unwrap();
-    assert_eq!(rows[prompt + 1].trim(), "Cargo.toml", "{rows:#?}");
+    let first = rows[..prompt].iter().find(|row| !row.trim().is_empty());
+    assert_eq!(first.map(|row| row.trim()), Some("Cargo.toml"), "{rows:#?}");
     type_keys(&mut editor, "<ret>");
     let path = editor.buffer().path().unwrap().to_path_buf();
     assert!(path.ends_with("Cargo.toml"), "{path:?}");

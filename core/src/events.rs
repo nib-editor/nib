@@ -8,6 +8,7 @@ use ropey::Rope;
 use crate::change::ChangeSet;
 use crate::plugin::PluginId;
 use crate::process::Stream;
+use crate::prompt::Action;
 
 /// One change of a buffer, at positions in the text as it is when the
 /// changes before it in its list have been applied.
@@ -52,6 +53,15 @@ pub(crate) enum Event {
         paths: Vec<String>,
         done: bool,
     },
+    PromptChanged {
+        prompt: u32,
+        text: String,
+        cursor: usize,
+    },
+    PromptAction {
+        prompt: u32,
+        action: Action,
+    },
 }
 
 impl Event {
@@ -66,6 +76,8 @@ impl Event {
             Event::ProcessOutput { .. } => "process-output",
             Event::ProcessExit { .. } => "process-exit",
             Event::FilesListed { .. } => "files-listed",
+            Event::PromptChanged { .. } => "prompt-changed",
+            Event::PromptAction { .. } => "prompt-action",
         }
     }
 }

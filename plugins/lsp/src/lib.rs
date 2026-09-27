@@ -273,7 +273,7 @@ impl Guest for Plugin {
                     }
                 }
             }
-            Event::FilesListed(_) => {}
+            Event::FilesListed(_) | Event::PromptChanged(_) | Event::PromptAction(_) => {}
         })
     }
 }

@@ -19,11 +19,12 @@ use base_kit::edit::{
     select_matches, set_ranges,
 };
 use base_kit::keys::{Binding, Keymap, lookup};
-use base_kit::{call_or_show, regex_escape, span, tree};
+use base_kit::{call_or_show, line_edit, regex_escape, span, tree};
 use keys::Keymaps;
 use nib_plugin::exports::nib::plugin::guest::{Guest, KeyResult};
 use nib_plugin::nib::plugin::editor::{ScrollAmount, View};
 use nib_plugin::nib::plugin::events::{self, Event};
+use nib_plugin::nib::plugin::prompt::{self as prompts, Action, Line};
 use nib_plugin::nib::plugin::types::{
     CursorShape, Edit, KeyCode, KeyEvent, Modifiers, SelRange, Selection, UndoMode,
 };
@@ -84,10 +85,12 @@ impl Prompt {
 
 struct CommandLine {
     prompt: Prompt,
+    /// The line itself, which the core keeps and draws.
+    line: Line,
+    /// The commands that fit what is typed, above the line.
     panel: Panel,
-    input: String,
     /// Tab cycling through the commands that start with what was typed:
-    /// the candidates, and the one in `input`.
+    /// the candidates, and the one in the line.
     completing: Option<(Vec<(String, String)>, usize)>,
 }
 
@@ -198,11 +201,19 @@ impl Guest for Plugin {
     }
 
     fn on_event(ev: Event) {
-        // The tree caught up with an edit: the bracket match waited for it.
-        if let Event::Custom(event) = ev
-            && event.name == "editor.syntax_updated"
-        {
-            highlight_match(&editor::active_view());
+        match ev {
+            // The tree caught up with an edit: the bracket match waited
+            // for it.
+            Event::Custom(event) if event.name == "editor.syntax_updated" => {
+                highlight_match(&editor::active_view());
+            }
+            Event::PromptChanged(change) => {
+                HELIX.with_borrow_mut(|helix| helix.prompt_changed(change.id))
+            }
+            Event::PromptAction(act) => {
+                HELIX.with_borrow_mut(|helix| helix.prompt_action(act.id, act.action))
+            }
+            _ => {}
         }
     }
 }
@@ -225,9 +236,9 @@ fn ctrl(ev: &KeyEvent) -> Option<char> {
 
 impl Helix {
     fn handle_key(&mut self, ev: KeyEvent) -> KeyResult {
-        if self.command_line.is_some() {
-            self.command_line_key(ev);
-            return KeyResult::Handled;
+        // Keys come here for any prompt, this plugin's or another's.
+        if prompts::active().is_some() {
+            return prompt_key(ev);
         }
         let view = editor::active_view();
         let version = view.buffer().version();
@@ -1106,46 +1117,37 @@ impl Helix {
     }
 
     fn open_prompt(&mut self, prompt: Prompt) {
-        let line = CommandLine {
+        self.command_line = Some(CommandLine {
             prompt,
+            line: Line::new(prompt.label()),
             panel: Panel::new(&[]),
-            input: String::new(),
             completing: None,
-        };
-        line.show();
-        self.command_line = Some(line);
+        });
     }
 
-    fn command_line_key(&mut self, ev: KeyEvent) {
-        let Some(line) = self.command_line.as_mut() else {
+    fn prompt_changed(&mut self, id: u64) {
+        if let Some(line) = self.command_line.as_mut().filter(|l| l.line.id() == id) {
+            line.completing = None;
+            line.show();
+        }
+    }
+
+    fn prompt_action(&mut self, id: u64, action: Action) {
+        let Some(line) = self.command_line.as_mut().filter(|l| l.line.id() == id) else {
             return;
         };
-        let completes = line.prompt == Prompt::Command && !line.input.contains(' ');
-        match ev.code {
-            KeyCode::Escape => self.command_line = None,
-            KeyCode::Enter => {
-                let input = std::mem::take(&mut line.input);
-                let prompt = line.prompt;
+        match action {
+            Action::Accept => {
+                let (prompt, input) = (line.prompt, line.line.text());
                 self.command_line = None;
                 self.run_prompt(prompt, input);
             }
-            KeyCode::Tab if completes => {
-                let back = ev.modifiers.contains(Modifiers::SHIFT);
-                line.complete(back);
-            }
-            KeyCode::Backspace if line.input.is_empty() => self.command_line = None,
-            KeyCode::Backspace => {
-                line.input.pop();
-                line.completing = None;
-            }
-            KeyCode::Char(c) if ev.modifiers.is_empty() => {
-                line.input.push(c);
-                line.completing = None;
+            Action::Cancel => self.command_line = None,
+            Action::Complete | Action::CompleteBack if line.completes() => {
+                line.complete(action == Action::CompleteBack);
+                line.show();
             }
             _ => {}
-        }
-        if let Some(line) = &self.command_line {
-            line.show();
         }
     }
 
@@ -1170,6 +1172,11 @@ impl Helix {
 }
 
 impl CommandLine {
+    /// Whether a command's name is being typed.
+    fn completes(&self) -> bool {
+        self.prompt == Prompt::Command && !self.line.text().contains(' ')
+    }
+
     /// Fills in the next command that starts with what was typed, or the
     /// previous one.
     fn complete(&mut self, back: bool) {
@@ -1180,7 +1187,7 @@ impl CommandLine {
                 (candidates, at)
             }
             None => {
-                let candidates = cmdline::candidates(&self.input);
+                let candidates = cmdline::candidates(&self.line.text());
                 if candidates.is_empty() {
                     return;
                 }
@@ -1188,21 +1195,18 @@ impl CommandLine {
                 (candidates, at)
             }
         };
-        self.input = candidates[at].0.clone();
+        let name = &candidates[at].0;
+        self.line.set(name, name.len() as u32);
         self.completing = Some((candidates, at));
     }
 
-    /// The commands that fit what is typed, above the line itself.
+    /// The commands that fit what is typed, above the line.
     fn show(&self) {
-        let label = self.prompt.label();
         let mut lines = Vec::new();
         let listed = match &self.completing {
             Some((candidates, at)) => Some((candidates.clone(), Some(*at))),
-            None if self.prompt == Prompt::Command
-                && !self.input.is_empty()
-                && !self.input.contains(' ') =>
-            {
-                Some((cmdline::candidates(&self.input), None))
+            None if self.completes() && !self.line.text().is_empty() => {
+                Some((cmdline::candidates(&self.line.text()), None))
             }
             None => None,
         };
@@ -1223,12 +1227,45 @@ impl CommandLine {
                 ]);
             }
         }
-        let text = format!("{label}{}", self.input);
-        lines.push(vec![span(&text, "")]);
         self.panel.update(&lines);
-        self.panel
-            .set_cursor(Some(((lines.len() - 1) as u32, text.len() as u32)));
     }
+}
+
+/// A key for a prompt, with Helix's prompt keys: the core does the rest,
+/// such as typing, Enter, and Escape.
+fn prompt_key(ev: KeyEvent) -> KeyResult {
+    let Some(active) = prompts::active() else {
+        return KeyResult::Pass;
+    };
+    let (text, cursor) = (active.text.as_str(), active.cursor as usize);
+    let ctrl = ctrl(&ev);
+    let alt = match ev.code {
+        KeyCode::Char(c) if ev.modifiers == Modifiers::ALT => Some(c),
+        _ => None,
+    };
+    let edited = match (ctrl, alt, ev.code) {
+        (Some('c'), _, _) => return act(Action::Cancel),
+        (Some('n'), _, _) => return act(Action::Next),
+        (Some('p'), _, _) => return act(Action::Previous),
+        (Some('w'), _, _) => line_edit::delete_word_before(text, cursor),
+        (_, _, KeyCode::Backspace) if ev.modifiers == Modifiers::ALT => {
+            line_edit::delete_word_before(text, cursor)
+        }
+        (Some('u'), _, _) => line_edit::delete_to_start(text, cursor),
+        (Some('k'), _, _) => line_edit::delete_to_end(text, cursor),
+        (Some('a'), _, _) => (text.to_string(), 0),
+        (Some('e'), _, _) => (text.to_string(), text.len()),
+        (_, Some('b'), _) => (text.to_string(), line_edit::word_left(text, cursor)),
+        (_, Some('f'), _) => (text.to_string(), line_edit::word_right(text, cursor)),
+        _ => return KeyResult::Pass,
+    };
+    prompts::edit(&edited.0, edited.1 as u32);
+    KeyResult::Handled
+}
+
+fn act(action: Action) -> KeyResult {
+    prompts::act(action);
+    KeyResult::Handled
 }
 
 /// Turns the points among the ranges into blocks, as normal mode keeps

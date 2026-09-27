@@ -8,6 +8,7 @@ pub mod doc;
 pub mod edit;
 pub mod hints;
 pub mod keys;
+pub mod line_edit;
 pub mod tree;
 
 use nib_plugin::nib::plugin::types::Span;

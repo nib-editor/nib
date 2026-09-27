@@ -68,6 +68,12 @@ fn the_go_template_builds_and_passes_its_tests() {
     }
     let dir = fresh("new-go");
     nib(&["plugin", "new", "demo", "--go"], &dir, &[]);
+    // The SDK from this checkout, not from its tag.
+    let go_mod = dir.join("go.mod");
+    let text = fs::read_to_string(&go_mod).unwrap();
+    let local = root().join("sdk/go").display().to_string();
+    let replace = format!("\nreplace github.com/nib-editor/nib/sdk/go => {local}\n");
+    fs::write(&go_mod, text + &replace).unwrap();
     nib(&["plugin", "build"], &dir, &[]);
     let out = nib(&["plugin", "test"], &dir, &[]);
     assert!(out.contains("3 passed, 0 failed"), "{out}");

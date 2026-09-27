@@ -80,7 +80,7 @@ pub fn read_manifest(dir: &Path) -> Result<PluginManifest, Error> {
 const FALLBACK_BASE: &str = "helix";
 
 /// The version of `nib:plugin` this host implements.
-pub const API_VERSION: &str = "0.4";
+pub const API_VERSION: &str = "0.5";
 
 /// How often the epoch advances during a plugin call. Timeouts are
 /// accurate to about one tick.
@@ -681,6 +681,15 @@ impl Editor {
             self.disable_plugin(other);
         }
         running.first().copied()
+    }
+
+    /// The base in use, if it is running.
+    pub(crate) fn running_base(&self) -> Option<PluginId> {
+        let name = self.plugins.base.as_ref()?;
+        self.plugins
+            .entries
+            .iter()
+            .position(|p| &p.name == name && p.enabled && p.instance.is_some())
     }
 
     /// The base in use, by name.

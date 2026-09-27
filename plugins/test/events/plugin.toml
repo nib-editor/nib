@@ -1,6 +1,6 @@
 name = "test-events"
 version = "0.0.0"
-api = "0.4"
+api = "0.5"
 capabilities = ["process", "fs-read"]
 events = [
     "buffer-opened",

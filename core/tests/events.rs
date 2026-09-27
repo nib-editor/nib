@@ -4,10 +4,10 @@
 use std::time::Instant;
 use std::{env, fs};
 
-use nib_core::{Config, Editor};
+use nib_core::{Config, Editor, Grid, KeyCode, KeyEvent};
 
 mod common;
-use common::{plugin_dir, type_keys};
+use common::{key, plugin_dir, screen, type_keys};
 
 fn editor_with(plugins: &[&str]) -> Editor {
     let mut editor = Editor::default();
@@ -234,4 +234,61 @@ fn closed_buffers_are_gone_for_plugins() {
     assert!(editor.plugins()[0].last_error.is_none());
     fs::remove_file(&a).unwrap();
     fs::remove_file(&b).unwrap();
+}
+
+#[test]
+fn prompts_take_keys_the_core_way_without_a_base() {
+    let mut editor = Editor::default();
+    editor.resize(40, 6);
+    editor.load_plugin(&plugin_dir("test-events")).unwrap();
+    let id = editor.call_command("test-events.prompt", "ask> ").unwrap();
+    for c in "hé".chars() {
+        editor.handle_key(key(c));
+    }
+    editor.handle_key(KeyEvent::new(KeyCode::Left));
+    editor.handle_key(KeyEvent::new(KeyCode::Down));
+    editor.handle_key(KeyEvent::new(KeyCode::Enter));
+    assert_eq!(
+        log(&mut editor),
+        [
+            format!("prompt {id} \"h\" 1"),
+            format!("prompt {id} \"hé\" 3"),
+            format!("prompt {id} \"hé\" 1"),
+            format!("prompt {id} Action::Next"),
+            format!("prompt {id} Action::Accept"),
+        ]
+    );
+    // Drawn above the status line, with the cursor in it.
+    assert_eq!(screen(&editor)[4].trim_end(), "ask> hé");
+    let cursor = editor.render(&mut Grid::default()).unwrap();
+    assert_eq!((cursor.x, cursor.y), (6, 4));
+
+    // Closed, keys go down the input stack again, and the text has room.
+    editor.call_command("test-events.close-prompt", "").unwrap();
+    editor.handle_key(key('x'));
+    assert!(log(&mut editor).is_empty());
+    assert_eq!(screen(&editor)[4].trim_end(), "");
+}
+
+#[test]
+fn the_base_edits_prompts_its_own_way() {
+    let mut editor = Editor::default();
+    editor.load_plugin(&plugin_dir("helix")).unwrap();
+    editor.load_plugin(&plugin_dir("test-events")).unwrap();
+    let id = editor.call_command("test-events.prompt", "ask> ").unwrap();
+    type_keys(&mut editor, "one two");
+    editor.handle_key(KeyEvent::ctrl('w'));
+    editor.handle_key(KeyEvent::ctrl('p'));
+    editor.handle_key(KeyEvent::new(KeyCode::Escape));
+    let log = log(&mut editor);
+    assert_eq!(
+        log[log.len() - 3..],
+        [
+            format!("prompt {id} \"one \" 4"),
+            format!("prompt {id} Action::Previous"),
+            format!("prompt {id} Action::Cancel"),
+        ]
+    );
+    // The keys never reached helix's own: nothing was typed into the text.
+    assert_eq!(editor.buffer().text().to_string(), "");
 }

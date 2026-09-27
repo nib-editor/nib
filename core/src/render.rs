@@ -6,6 +6,7 @@ use crate::buffer::Buffer;
 use crate::editor::{Editor, Menu};
 use crate::grid::{Cursor, CursorShape, Grid, Style, display_width, graphemes};
 use crate::layout;
+use crate::prompt::Prompt;
 use crate::ui::{Panel, PopupAnchor, Side, Span, StyledLine, Theme};
 use crate::view::View;
 use crate::windows::{Rect, Separator};
@@ -108,7 +109,14 @@ impl Editor {
             lines: menu,
             cursor: None,
         };
-        for panel in self.state().panels.iter().chain([&menu_panel]) {
+        let prompt = self.state().prompts.last().map(Prompt::panel);
+        for panel in self
+            .state()
+            .panels
+            .iter()
+            .chain(&prompt)
+            .chain([&menu_panel])
+        {
             for (i, line) in panel.lines.iter().enumerate() {
                 if y >= end {
                     return cursor;

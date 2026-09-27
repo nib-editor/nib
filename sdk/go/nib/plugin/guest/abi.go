@@ -5,6 +5,7 @@ package guest
 import (
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/events"
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/process"
+	"github.com/nib-editor/nib/sdk/go/nib/plugin/prompt"
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/types"
 	"go.bytecodealliance.org/cm"
 	"strconv"
@@ -92,6 +93,19 @@ func lift_FilesListed(f0 uint64, f1 *string, f2 uint32, f3 uint32) (v events.Fil
 	return
 }
 
+func lift_PromptChange(f0 uint64, f1 *uint8, f2 uint32, f3 uint32) (v events.PromptChange) {
+	v.ID = (uint64)(f0)
+	v.Text = cm.LiftString[string](f1, f2)
+	v.Cursor = (uint32)(f3)
+	return
+}
+
+func lift_PromptAct(f0 uint64, f1 uint32) (v events.PromptAct) {
+	v.ID = (uint64)(f0)
+	v.Action = (prompt.Action)(f1)
+	return
+}
+
 func lift_Event(f0 uint32, f1 uint64, f2 uint64, f3 uint32, f4 uint32) (v events.Event) {
 	switch f0 {
 	case 0:
@@ -110,6 +124,10 @@ func lift_Event(f0 uint32, f1 uint64, f2 uint64, f3 uint32, f4 uint32) (v events
 		return cm.New[events.Event](6, lift_ProcessExit((uint64)(f1), (uint32)(f2), (uint32)(f3)))
 	case 7:
 		return cm.New[events.Event](7, lift_FilesListed((uint64)(f1), cm.U64ToPointer[string](f2), (uint32)(f3), (uint32)(f4)))
+	case 8:
+		return cm.New[events.Event](8, lift_PromptChange((uint64)(f1), cm.U64ToPointer[uint8](f2), (uint32)(f3), (uint32)(f4)))
+	case 9:
+		return cm.New[events.Event](9, lift_PromptAct((uint64)(f1), (uint32)(f2)))
 	}
 	panic("lift variant: unknown case: " + strconv.Itoa(int(f0)))
 }

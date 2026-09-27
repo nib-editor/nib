@@ -1,4 +1,4 @@
-package nib:plugin@0.4.0;
+package nib:plugin@0.5.0;
 
 interface types {
     /// A UTF-8 byte offset into a buffer.
@@ -201,6 +201,7 @@ interface events {
     use types.{offset};
     use editor.{buffer};
     use process.{%stream};
+    use prompt.{action};
 
     /// One change, at positions in the text as it is when the changes
     /// before it in the list have been applied. Lines and columns count
@@ -237,6 +238,13 @@ interface events {
     /// `done`.
     record files-listed { job: u64, paths: list<string>, done: bool }
 
+    /// A prompt's text after the base edited it; `cursor` is a byte offset
+    /// into `text`.
+    record prompt-change { id: u64, text: string, cursor: u32 }
+
+    /// What a key asked of a prompt, besides editing it.
+    record prompt-act { id: u64, action: action }
+
     variant event {
         buffer-opened(buffer),
         buffer-saved(buffer),
@@ -249,6 +257,9 @@ interface events {
         process-exit(process-exit),
         /// Only to the plugin that asked for the list.
         files-listed(files-listed),
+        /// Only to the plugin that opened the prompt.
+        prompt-changed(prompt-change),
+        prompt-action(prompt-act),
     }
 
     /// Emits the custom event `<plugin>.<name>` with JSON `data`.
@@ -321,6 +332,55 @@ interface ui {
     /// decorations. Notes move with edits and stay when the text around
     /// them is deleted.
     set-notes: func(buf: borrow<buffer>, namespace: string, notes: list<note>);
+}
+
+/// A line of text being typed, such as a command line or a picker's query.
+/// The plugin that opens one owns it and hears what happens to it through
+/// events; the base in use decides what each key does to it.
+interface prompt {
+    /// What a key can ask of a prompt's owner, besides editing the text.
+    enum action {
+        /// Take the text, as Enter does.
+        accept,
+        /// Give up, as Escape does.
+        cancel,
+        /// The next candidate, as Down does.
+        next,
+        previous,
+        /// Complete what is typed, as Tab does.
+        complete,
+        /// Back to the completion before, as Shift-Tab does.
+        complete-back,
+    }
+
+    /// Drawn above the status line, with `label` in front. While it is the
+    /// newest one open, keys go to the base in use instead of the input
+    /// stack. Dropping it closes it.
+    resource line {
+        constructor(label: string);
+        /// The id its events carry.
+        id: func() -> u64;
+        text: func() -> string;
+        /// A byte offset into the text.
+        cursor: func() -> u32;
+        /// Replaces the text, as when completing; no event follows. The
+        /// cursor is moved back to a char boundary and into the text.
+        set: func(text: string, cursor: u32);
+        /// Shown at the right end, such as "3/10".
+        set-hint: func(hint: string);
+    }
+
+    /// The prompt keys go to; `mine` if the caller opened it.
+    record state { id: u64, label: string, text: string, cursor: u32, mine: bool }
+
+    /// For the base: the prompt keys go to, if one is open.
+    active: func() -> option<state>;
+    /// For the base: replaces the active prompt's text; its owner gets
+    /// `prompt-changed`.
+    edit: func(text: string, cursor: u32);
+    /// For the base: sends `action` to the active prompt's owner as
+    /// `prompt-action`.
+    act: func(action: action);
 }
 
 interface settings {
@@ -407,6 +467,7 @@ world plugin {
     import input;
     import commands;
     import ui;
+    import prompt;
     import settings;
     import syntax;
     import events;

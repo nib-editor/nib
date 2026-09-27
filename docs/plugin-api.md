@@ -28,7 +28,7 @@ helix-keymap/
 ```toml
 name = "helix"            # コマンドの名前空間にもなる
 version = "0.1.0"
-api = "0.4"               # 対応する nib:plugin のバージョン（メジャー.マイナー）
+api = "0.5"               # 対応する nib:plugin のバージョン（メジャー.マイナー）
 
 capabilities = []         # "fs-read" / "fs-write" / "process" / "network"
 events = ["buffer-changed"]
@@ -275,6 +275,40 @@ JSON を選んだのは、WIT に再帰する型がなく、任意の値の木�
 - キーマッププラグインは `init` で 1 層積み、それを外さない。
 - 貼り付け（bracketed paste）は、キーではなく `paste` イベントとして届ける。
 
+## 入力欄
+
+`:` のコマンドライン、`/` の検索、picker の検索欄のように、1 行の文字を打つ欄。仕組みはコアが、キーの作法はベースが持つ（[base.md](base.md) の「プラグインの画面の操作」）。
+
+```wit
+interface prompt {
+    enum action { accept, cancel, next, previous, complete, complete-back }
+
+    resource line {
+        constructor(label: string);   // label は ":" や "files> "
+        id: func() -> u64;
+        text: func() -> string;
+        cursor: func() -> u32;        // text の中のバイト位置
+        set: func(text: string, cursor: u32);
+        set-hint: func(hint: string); // 右端に出す。"3/10" など
+    }
+
+    record state { id: u64, label: string, text: string, cursor: u32, mine: bool }
+    active: func() -> option<state>;       // ベースが使う
+    edit: func(text: string, cursor: u32); // ベースが使う
+    act: func(action: action);             // ベースが使う
+}
+```
+
+- 欄を開くのは、使うプラグイン（持ち主）。`prompt.line(label)` で開き、リソースを捨てると閉じる。ベース自身の `:` も同じ。
+- 開いている欄のうち、最後に開いたもの（アクティブな欄）だけをステータスラインのすぐ上に描き、端末のカーソルをそこに置く。パネルはその上に並ぶ。
+- アクティブな欄があるあいだ、キーは入力スタックではなく、使っているベースの `handle-key` に届く。ベースは `prompt.active()` で欄があるかを知り、自分の作法でキーを解釈する。
+  - 文字列を変えるときは `prompt.edit(text, cursor)`。持ち主に `prompt-changed` が届く。
+  - 決定、取り消し、次の候補などは `prompt.act(action)`。持ち主に `prompt-action` が届く。
+  - 知らないキーは `pass` を返す。コアが既定の動きをする: 修飾のない文字は入れる、Backspace は 1 文字消す（空なら `cancel`）、Delete、左右、Home、End で動く、上下は `previous` / `next`、Tab と Shift-Tab は `complete` / `complete-back`、Enter は `accept`、Esc は `cancel`。ベースがない、または作りかけでも、欄は使える。
+- 持ち主は、イベントを受けて動く。決定や取り消しで欄を閉じるのも持ち主（捨てる）。欄を開いたまま持ち主が止まると、コアが閉じる。
+- `set` は持ち主が補完などで文字列を書き換えるためのもので、`prompt-changed` は出ない。
+- 一覧（picker の候補、補完の候補）は、持ち主がパネルやポップアップで描く。欄が持つのは 1 行の文字と右端の hint だけ。
+
 ## イベント
 
 - イベントは guest の `on-event(ev)` で届く。
@@ -296,6 +330,7 @@ events = ["buffer-opened", "buffer-changed", "helix.mode_changed"]
 | `timer` | `timers.set` で予約した時間がたった | 予約したプラグインだけ |
 | `process-output` / `process-exit` | 起動した外部プロセスの出力と終了 | 起動したプラグインだけ |
 | `files-listed` | `files.walk` で頼んだファイルの一覧（1,000 件ずつ） | 頼んだプラグインだけ |
+| `prompt-changed` / `prompt-action` | 入力欄の文字列が変わった（id、文字列、カーソル）・操作の意味（id、`action`） | 欄を開いたプラグインだけ |
 | `selection-changed`、`paste` | 必要になったときに足す | |
 
 - `buffer-changed` の変更の列は、先頭から順に 1 つずつ適用していけば変更後のテキストになるように並べる。LSP の `didChange` の `contentChanges` と同じ考え方で、変更ごとに、その時点のテキストでの行と列（バイト数）を付ける。LSP プラグインは、これをそのまま差分の同期に使える。

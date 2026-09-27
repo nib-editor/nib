@@ -7,108 +7,108 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.4.0".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.0".
 
-//go:wasmimport nib:plugin/editor@0.4.0 [resource-drop]buffer
+//go:wasmimport nib:plugin/editor@0.5.0 [resource-drop]buffer
 //go:noescape
 func wasmimport_BufferResourceDrop(self0 uint32)
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]buffer.find
+//go:wasmimport nib:plugin/editor@0.5.0 [method]buffer.find
 //go:noescape
 func wasmimport_BufferFind(self0 uint32, pattern0 *uint8, pattern1 uint32, start0 uint64, backward0 uint32, result *cm.Result[OptionTupleOffsetOffsetShape, cm.Option[[2]Offset], Error])
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]buffer.find-all
+//go:wasmimport nib:plugin/editor@0.5.0 [method]buffer.find-all
 //go:noescape
 func wasmimport_BufferFindAll(self0 uint32, pattern0 *uint8, pattern1 uint32, start0 uint64, end0 uint64, result *cm.Result[ErrorShape, cm.List[[2]Offset], Error])
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]buffer.len
+//go:wasmimport nib:plugin/editor@0.5.0 [method]buffer.len
 //go:noescape
 func wasmimport_BufferLen(self0 uint32) (result0 uint64)
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]buffer.line-count
+//go:wasmimport nib:plugin/editor@0.5.0 [method]buffer.line-count
 //go:noescape
 func wasmimport_BufferLineCount(self0 uint32) (result0 uint64)
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]buffer.line-of
+//go:wasmimport nib:plugin/editor@0.5.0 [method]buffer.line-of
 //go:noescape
 func wasmimport_BufferLineOf(self0 uint32, pos0 uint64, result *cm.Result[ErrorShape, uint64, Error])
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]buffer.line-start
+//go:wasmimport nib:plugin/editor@0.5.0 [method]buffer.line-start
 //go:noescape
 func wasmimport_BufferLineStart(self0 uint32, line0 uint64, result *cm.Option[Offset])
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]buffer.next-grapheme
+//go:wasmimport nib:plugin/editor@0.5.0 [method]buffer.next-grapheme
 //go:noescape
 func wasmimport_BufferNextGrapheme(self0 uint32, pos0 uint64, result *cm.Result[ErrorShape, Offset, Error])
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]buffer.path
+//go:wasmimport nib:plugin/editor@0.5.0 [method]buffer.path
 //go:noescape
 func wasmimport_BufferPath(self0 uint32, result *cm.Option[string])
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]buffer.prev-grapheme
+//go:wasmimport nib:plugin/editor@0.5.0 [method]buffer.prev-grapheme
 //go:noescape
 func wasmimport_BufferPrevGrapheme(self0 uint32, pos0 uint64, result *cm.Result[ErrorShape, Offset, Error])
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]buffer.slice
+//go:wasmimport nib:plugin/editor@0.5.0 [method]buffer.slice
 //go:noescape
 func wasmimport_BufferSlice(self0 uint32, start0 uint64, end0 uint64, result *cm.Result[ErrorShape, string, Error])
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]buffer.version
+//go:wasmimport nib:plugin/editor@0.5.0 [method]buffer.version
 //go:noescape
 func wasmimport_BufferVersion(self0 uint32) (result0 uint64)
 
-//go:wasmimport nib:plugin/editor@0.4.0 [resource-drop]view
+//go:wasmimport nib:plugin/editor@0.5.0 [resource-drop]view
 //go:noescape
 func wasmimport_ViewResourceDrop(self0 uint32)
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]view.apply
+//go:wasmimport nib:plugin/editor@0.5.0 [method]view.apply
 //go:noescape
 func wasmimport_ViewApply(self0 uint32, baseVersion0 uint64, edits0 *Edit, edits1 uint32, after0 uint32, after1 *types.SelRange, after2 uint32, after3 uint32, undo0 uint32, result *cm.Result[Error, struct{}, Error])
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]view.buffer
+//go:wasmimport nib:plugin/editor@0.5.0 [method]view.buffer
 //go:noescape
 func wasmimport_ViewBuffer(self0 uint32) (result0 uint32)
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]view.move-vertically
+//go:wasmimport nib:plugin/editor@0.5.0 [method]view.move-vertically
 //go:noescape
 func wasmimport_ViewMoveVertically(self0 uint32, pos0 uint64, lines0 uint32, column0 uint32, column1 uint32, result *cm.Result[TupleOffsetU32Shape, cm.Tuple[Offset, uint32], Error])
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]view.redo
+//go:wasmimport nib:plugin/editor@0.5.0 [method]view.redo
 //go:noescape
 func wasmimport_ViewRedo(self0 uint32) (result0 uint32)
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]view.scroll
+//go:wasmimport nib:plugin/editor@0.5.0 [method]view.scroll
 //go:noescape
 func wasmimport_ViewScroll(self0 uint32, amount0 uint32, amount1 uint32) (result0 uint32)
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]view.selection
+//go:wasmimport nib:plugin/editor@0.5.0 [method]view.selection
 //go:noescape
 func wasmimport_ViewSelection(self0 uint32, result *Selection)
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]view.set-cursor-shape
+//go:wasmimport nib:plugin/editor@0.5.0 [method]view.set-cursor-shape
 //go:noescape
 func wasmimport_ViewSetCursorShape(self0 uint32, shape0 uint32)
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]view.set-selection
+//go:wasmimport nib:plugin/editor@0.5.0 [method]view.set-selection
 //go:noescape
 func wasmimport_ViewSetSelection(self0 uint32, sel0 *types.SelRange, sel1 uint32, sel2 uint32, result *cm.Result[Error, struct{}, Error])
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]view.undo
+//go:wasmimport nib:plugin/editor@0.5.0 [method]view.undo
 //go:noescape
 func wasmimport_ViewUndo(self0 uint32) (result0 uint32)
 
-//go:wasmimport nib:plugin/editor@0.4.0 [method]view.visible-range
+//go:wasmimport nib:plugin/editor@0.5.0 [method]view.visible-range
 //go:noescape
 func wasmimport_ViewVisibleRange(self0 uint32, result *[2]Offset)
 
-//go:wasmimport nib:plugin/editor@0.4.0 active-view
+//go:wasmimport nib:plugin/editor@0.5.0 active-view
 //go:noescape
 func wasmimport_ActiveView() (result0 uint32)
 
-//go:wasmimport nib:plugin/editor@0.4.0 buffers
+//go:wasmimport nib:plugin/editor@0.5.0 buffers
 //go:noescape
 func wasmimport_Buffers(result *cm.List[Buffer])
 
-//go:wasmimport nib:plugin/editor@0.4.0 working-directory
+//go:wasmimport nib:plugin/editor@0.5.0 working-directory
 //go:noescape
 func wasmimport_WorkingDirectory(result *string)
