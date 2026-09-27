@@ -188,6 +188,10 @@ pub(crate) struct BufferSyntax {
     /// started, to apply to its tree.
     job: Option<u64>,
     since_job: Vec<InputEdit>,
+    /// A parse's tree that came back after more edits, with them applied:
+    /// where the next parse starts. Not shown, as the colors kept from the
+    /// tree shown would not be painted again where it differs.
+    next_old: Option<Tree>,
     injections: Injections,
     /// The colors of the last frame, kept for the next (docs/architecture.md,
     /// "構文木"). Drawing only reads the syntax, hence the cell.
@@ -234,6 +238,8 @@ struct Layer {
     /// started.
     job: Option<u64>,
     since_job: Vec<InputEdit>,
+    /// As `BufferSyntax::next_old`: where its next parse starts.
+    next_old: Option<Tree>,
     /// Where the text changed since the layer's own injections were last
     /// looked for, to look again there once it is parsed on the thread.
     edited: Option<Range<usize>>,
@@ -268,6 +274,7 @@ fn forget_layer_jobs(injections: &mut Injections) {
             layer.since_job.clear();
             layer.touched = true;
         }
+        layer.next_old = None;
         forget_layer_jobs(&mut layer.injections);
     }
 }
@@ -541,6 +548,7 @@ impl Languages {
         // This overtakes a parse on the syntax thread; its tree is dropped.
         syntax.job = None;
         syntax.since_job.clear();
+        syntax.next_old = None;
         self.take_tree(syntax, tree, text);
         Ok(())
     }
@@ -563,7 +571,8 @@ impl Languages {
         if !syntax.dirty || syntax.job.is_some() {
             return Ok(());
         }
-        let id = self.send_job(syntax.language, Vec::new(), text, syntax.tree.clone())?;
+        let old = syntax.next_old.take().or_else(|| syntax.tree.clone());
+        let id = self.send_job(syntax.language, Vec::new(), text, old)?;
         syntax.job = Some(id);
         syntax.since_job.clear();
         Ok(())
@@ -627,7 +636,7 @@ impl Languages {
             for edit in layer.since_job.drain(..) {
                 tree.edit(&edit);
             }
-            layer.tree = Some(tree);
+            layer.next_old = Some(tree);
             layer.touched = true;
             return false;
         }
@@ -703,7 +712,7 @@ impl Languages {
         for edit in syntax.since_job.drain(..) {
             tree.edit(&edit);
         }
-        syntax.tree = Some(tree);
+        syntax.next_old = Some(tree);
         Ok(false)
     }
 
@@ -800,6 +809,7 @@ impl Languages {
         for layer in &mut injections.layers {
             if keep.is_some_and(|keep| !in_any(layer, keep)) {
                 layer.job = None;
+                layer.next_old = None;
                 if layer.tree.take().is_some() {
                     layer.injections = Injections::default();
                     self.repaint.extend(byte_ranges(&layer.ranges));
@@ -929,6 +939,7 @@ impl Languages {
                 parent: Some(host),
                 job: None,
                 since_job: Vec::new(),
+                next_old: None,
                 edited: None,
             };
             if let Some(Layer {
@@ -936,14 +947,23 @@ impl Languages {
                 ranges: old_ranges,
                 injections: mut inner,
                 edited: old_edited,
+                next_old,
                 ..
             }) = old
             {
                 mark_range_changes(&mut old_tree, &old_ranges, &layer.ranges);
                 if self.in_background() {
-                    // Shown with the old tree until the thread is done.
+                    // Shown with the old tree until the thread is done, which
+                    // starts from where a late parse got to, if there was one.
+                    let start = match next_old {
+                        Some(mut start) => {
+                            mark_range_changes(&mut start, &old_ranges, &layer.ranges);
+                            start
+                        }
+                        None => old_tree.clone(),
+                    };
                     if let Ok(job) =
-                        self.send_job(language, layer.ranges.clone(), text, Some(old_tree.clone()))
+                        self.send_job(language, layer.ranges.clone(), text, Some(start))
                     {
                         layer.job = Some(job);
                     }
@@ -1626,6 +1646,7 @@ impl BufferSyntax {
             base: None,
             job: None,
             since_job: Vec::new(),
+            next_old: None,
             injections: Injections::default(),
             painted: RefCell::new(None),
             injections_pending: true,
@@ -1643,7 +1664,10 @@ impl BufferSyntax {
             old_end_position: point(old, old_end),
             new_end_position: point(new, new_end),
         };
-        for tree in [&mut self.tree, &mut self.base].into_iter().flatten() {
+        for tree in [&mut self.tree, &mut self.base, &mut self.next_old]
+            .into_iter()
+            .flatten()
+        {
             tree.edit(&edit);
         }
         self.move_colors(new, &edit);
@@ -1734,6 +1758,7 @@ impl BufferSyntax {
         self.base = None;
         self.job = None;
         self.since_job.clear();
+        self.next_old = None;
         self.edited = None;
         self.injections = Injections::default();
         self.dirty = true;
@@ -1754,6 +1779,9 @@ fn edit_injections(injections: &mut Injections, edit: &InputEdit) {
         }
         if layer.job.is_some() {
             layer.since_job.push(*edit);
+        }
+        if let Some(tree) = &mut layer.next_old {
+            tree.edit(edit);
         }
         add_edit(&mut layer.edited, edit);
         // Touching counts: typing at the end of a range may extend it.

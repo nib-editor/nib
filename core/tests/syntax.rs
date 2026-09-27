@@ -867,3 +867,49 @@ fn edits_during_a_layer_parse_are_applied_to_its_tree() {
     fs::remove_file(&path).unwrap();
     fs::remove_file(&edited).unwrap();
 }
+
+/// Frames drawn while the syntax thread parses, with keys coming faster
+/// than parses, so parses come back after more edits: the colors kept from
+/// the frames must end up as a full paint's. CI once found them apart,
+/// with a late parse's tree shown without marking what it changed; this
+/// did not catch that here, but goes that way on every run.
+#[test]
+fn kept_colors_survive_parses_that_come_back_late() {
+    let block =
+        "/// # Title\n/// Some `code`.\nfn f(a: u8) -> u8 {\n    let s = \"x\"; // c\n    a\n}\n\n";
+    let source = block.repeat(1500);
+    let path = env::temp_dir().join(format!("nib-{}-late.rs", std::process::id()));
+    fs::write(&path, &source).unwrap();
+    let mut editor = Editor::default();
+    editor.set_background_parsing(true);
+    editor.open(&path).unwrap();
+    for plugin in ["helix", "rust", "markdown"] {
+        editor.load_plugin(&plugin_dir(plugin)).unwrap();
+    }
+    editor.resize(60, 20);
+    settle_in_background(&mut editor);
+    let colors = |editor: &Editor| {
+        let mut grid = Grid::default();
+        editor.render(&mut grid);
+        (0..grid.height() - 2)
+            .map(|y| {
+                (0..grid.width())
+                    .map(|x| grid.cell(x, y).style.fg)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+    };
+    for round in 0..20 {
+        // Keys, each drawn, taking in whatever the thread has finished.
+        for key in ["gg", "O", "/", "/", "/", " ", "#", "x", "<esc>", "j", "d"] {
+            type_keys(&mut editor, key);
+            editor.catch_up();
+            colors(&editor);
+        }
+        settle_in_background(&mut editor);
+        let kept = colors(&editor);
+        editor.repaint_all();
+        assert_eq!(kept, colors(&editor), "round {round}");
+    }
+    fs::remove_file(&path).unwrap();
+}
