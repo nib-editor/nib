@@ -114,6 +114,8 @@ impl std::str::FromStr for KeyEvent {
             "pagedown" => KeyCode::PageDown,
             "space" => KeyCode::Char(' '),
             "minus" => KeyCode::Char('-'),
+            "lt" => KeyCode::Char('<'),
+            "gt" => KeyCode::Char('>'),
             _ => {
                 let mut chars = rest.chars();
                 match (chars.next(), chars.next()) {
@@ -208,6 +210,7 @@ mod tests {
         assert_eq!(key.code, KeyCode::Enter);
         assert!(key.modifiers.ctrl && key.modifiers.alt);
         assert_eq!(parse("C--").code, KeyCode::Char('-'));
+        assert_eq!(parse("A-gt").code, KeyCode::Char('>'));
         assert!("C-nope".parse::<KeyEvent>().is_err());
         assert!("F99".parse::<KeyEvent>().is_err());
     }

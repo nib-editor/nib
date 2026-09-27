@@ -124,6 +124,7 @@ ihello<esc>       i、h、e、l、l、o、Esc
 <C-w>v            Ctrl-w、v
 <A-o><space>f     Alt-o、Space、f
 <lt>              < そのもの
+<A-gt>            Alt-> （< と > は、< > の中では lt と gt と書く）
 ```
 
 ### 待つこと、手順、設定
