@@ -107,7 +107,15 @@ fn fake(name: &str, text: &str) -> (Editor, PathBuf) {
 fn wait_until(editor: &mut Editor, what: &str, mut done: impl FnMut(&mut Editor) -> bool) {
     let deadline = Instant::now() + Duration::from_secs(20);
     while !done(editor) {
-        assert!(Instant::now() < deadline, "waited 20 seconds for {what}");
+        if Instant::now() >= deadline {
+            // Rare and on CI only so far: say what was there, to tell why.
+            let status = editor.call_command("lsp.status", "");
+            panic!(
+                "waited 20 seconds for {what}\nmessage: {:?}\nlsp.status: {status:?}\nscreen:\n{}",
+                editor.message(),
+                screen(editor).join("\n")
+            );
+        }
         editor.run_background();
         editor.run_timers();
         thread::sleep(Duration::from_millis(10));
