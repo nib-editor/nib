@@ -23,9 +23,26 @@ What works today, all as plugins on the same public API:
 
 `Ctrl-g` opens the core menu and stops a plugin that hangs; it is the one key no plugin can take.
 
+## Installing
+
+Prebuilt binaries for macOS, Linux, and Windows are on the [releases](https://github.com/nib-editor/nib/releases), with the standard plugins built in.
+
+```sh
+mise use -g github:nib-editor/nib                  # mise
+brew install nib-editor/tap/nib                    # Homebrew
+cargo binstall nib-editor                          # cargo-binstall, or build it: cargo install nib-editor
+```
+
+```powershell
+scoop bucket add nib-editor https://github.com/nib-editor/scoop-bucket
+scoop install nib                                  # Scoop
+```
+
+The crate is `nib-editor`, as `nib` is taken on crates.io; the command is `nib`. Building from source needs CMake.
+
 ## Building
 
-There are no prebuilt binaries yet. You need Rust with the `wasm32-wasip2` target, CMake, and `curl`:
+You need Rust with the `wasm32-wasip2` target, CMake, and `curl`:
 
 ```sh
 rustup target add wasm32-wasip2
