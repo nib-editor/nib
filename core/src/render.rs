@@ -42,8 +42,8 @@ impl Editor {
     /// The plugin list shown while the core menu is open, below any panels.
     fn menu_lines(&self) -> Vec<StyledLine> {
         let selected = match self.menu() {
-            Some(Menu::Main) => None,
-            Some(Menu::Plugin(id)) => Some(id),
+            Some(Menu::Main) => Some(self.state().menu_cursor),
+            Some(Menu::Plugin(id) | Menu::ConfirmUpdate(id)) => Some(id),
             Some(Menu::ConfirmQuit) | None => return Vec::new(),
         };
         let plugins = self.plugins();
@@ -407,7 +407,7 @@ impl Editor {
                 let choose = if self.plugins().is_empty() {
                     ""
                 } else {
-                    "[1-9] choose a plugin  "
+                    "[1-9] or [↑↓][enter] choose a plugin  "
                 };
                 let keys = format!(
                     "{choose}[r] restart all  [w] save all and quit  [q] quit  [any other key] back"
@@ -423,11 +423,29 @@ impl Editor {
                 } else {
                     ""
                 };
+                let update = if self.can_update(id) {
+                    "  [u] update"
+                } else {
+                    ""
+                };
                 let keys = format!(
-                    "{}: [r] restart  [d] {toggle}{reload}  [any other key] back",
+                    "{}: [r] restart  [d] {toggle}{reload}{update}  [any other key] back",
                     plugin.name
                 );
                 grid.put_str(1, y, &keys, style);
+                return;
+            }
+            Some(Menu::ConfirmUpdate(id)) => {
+                let name = &self.plugins()[id].name;
+                let prompt = match self.pending_update() {
+                    Some(pending) => format!(
+                        "{name} {} also wants: {}. [y] update  [any other key] keep it as it is",
+                        pending.version(),
+                        pending.added_capabilities().join(", ")
+                    ),
+                    None => String::new(),
+                };
+                grid.put_str(1, y, &prompt, style);
                 return;
             }
             Some(Menu::ConfirmQuit) => {

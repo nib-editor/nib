@@ -180,7 +180,10 @@ fn core_menu_manages_each_plugin() {
     let rows = screen(&editor);
     assert!(rows[4].starts_with(" 1  test-insert"), "{rows:#?}");
     assert!(rows[4].contains("running"), "{rows:#?}");
-    assert!(rows[5].contains("[1-9] choose a plugin"), "{rows:#?}");
+    assert!(
+        rows[5].contains("[1-9] or [↑↓][enter] choose a plugin"),
+        "{rows:#?}"
+    );
 
     // Choose it and disable it: keys no longer reach it.
     editor.handle_key(key('1'));
@@ -298,4 +301,157 @@ fn data_outlives_restarts() {
     let mut editor = Editor::default();
     editor.load_plugin(&plugin_dir("test-events")).unwrap();
     assert!(editor.call_command("test-events.save", "x").is_err());
+}
+
+/// Updates as a frontend would give them: the "newer release" rewrites the
+/// version in the plugin's manifest, in a copy of the plugin.
+struct FakeUpdates {
+    dir: std::path::PathBuf,
+    /// The version and added capabilities of the next check; `None` when
+    /// up to date.
+    next: std::sync::Mutex<Option<(String, Vec<String>)>>,
+}
+
+struct FakePending {
+    dir: std::path::PathBuf,
+    version: String,
+    added: Vec<String>,
+}
+
+impl nib_core::PluginUpdates for FakeUpdates {
+    fn can_update(&self, name: &str) -> bool {
+        name == "test-insert"
+    }
+
+    fn check(&self, _name: &str) -> Result<Option<Box<dyn nib_core::PendingUpdate>>, String> {
+        let next = self.next.lock().unwrap().clone();
+        Ok(next.map(|(version, added)| {
+            Box::new(FakePending {
+                dir: self.dir.clone(),
+                version,
+                added,
+            }) as Box<dyn nib_core::PendingUpdate>
+        }))
+    }
+}
+
+impl nib_core::PendingUpdate for FakePending {
+    fn version(&self) -> &str {
+        &self.version
+    }
+
+    fn added_capabilities(&self) -> &[String] {
+        &self.added
+    }
+
+    fn apply(self: Box<Self>) -> Result<(), String> {
+        let manifest = self.dir.join("plugin.toml");
+        let text = fs::read_to_string(&manifest).unwrap();
+        let text = text.replace(
+            "version = \"0.0.0\"",
+            &format!("version = \"{}\"", self.version),
+        );
+        fs::write(manifest, text).map_err(|err| err.to_string())
+    }
+}
+
+#[test]
+fn plugins_update_from_the_core_menu() {
+    let dir = env::temp_dir().join(format!("nib-{}-updating", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    for file in ["plugin.toml", "plugin.wasm"] {
+        fs::copy(plugin_dir("test-insert").join(file), dir.join(file)).unwrap();
+    }
+    let updates = std::sync::Arc::new(FakeUpdates {
+        dir: dir.clone(),
+        next: std::sync::Mutex::new(None),
+    });
+    let mut editor = Editor::default();
+    editor.resize(100, 6);
+    editor.set_plugin_updates(Some(updates.clone()));
+    editor.load_plugin(&dir).unwrap();
+    let update = |editor: &mut Editor| {
+        editor.handle_key(KeyEvent::ctrl('g'));
+        editor.handle_key(key('1'));
+        assert!(
+            screen(editor)[5].contains("[u] update"),
+            "{:#?}",
+            screen(editor)
+        );
+        editor.handle_key(key('u'));
+        // Checked on a thread; the answer comes back through the inbox.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while editor.message().is_some_and(|m| m.starts_with("checking")) {
+            assert_eq!(editor.menu(), None, "the menu closes while it checks");
+            assert!(Instant::now() < deadline, "no answer from the check");
+            editor.run_background();
+            thread::sleep(Duration::from_millis(5));
+        }
+    };
+
+    update(&mut editor);
+    assert_eq!(editor.message(), Some("test-insert is up to date"));
+
+    *updates.next.lock().unwrap() = Some(("0.1.0".into(), Vec::new()));
+    update(&mut editor);
+    assert_eq!(editor.message(), Some("test-insert updated to 0.1.0"));
+    assert_eq!(editor.plugins()[0].version, "0.1.0");
+
+    // More capabilities are asked for first; no keeps the one there.
+    fs::write(
+        dir.join("plugin.toml"),
+        fs::read_to_string(dir.join("plugin.toml"))
+            .unwrap()
+            .replace("0.1.0", "0.0.0"),
+    )
+    .unwrap();
+    *updates.next.lock().unwrap() = Some(("0.2.0".into(), vec!["process".into()]));
+    update(&mut editor);
+    assert_eq!(editor.menu(), Some(Menu::ConfirmUpdate(0)));
+    assert!(
+        screen(&editor)[5].contains("0.2.0 also wants: process"),
+        "{:#?}",
+        screen(&editor)
+    );
+    editor.handle_key(key('n'));
+    assert_eq!(editor.message(), Some("test-insert left as it was"));
+    update(&mut editor);
+    editor.handle_key(key('y'));
+    assert_eq!(editor.message(), Some("test-insert updated to 0.2.0"));
+    assert_eq!(editor.plugins()[0].version, "0.2.0");
+
+    // Without the frontend's updates, there is no [u].
+    editor.set_plugin_updates(None);
+    editor.handle_key(KeyEvent::ctrl('g'));
+    editor.handle_key(key('1'));
+    assert!(!screen(&editor)[5].contains("[u] update"));
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Arrows reach plugins past the ninth, as installed ones are.
+#[test]
+fn arrows_choose_in_the_core_menu() {
+    let mut editor = Editor::default();
+    editor.load_plugin(&plugin_dir("test-insert")).unwrap();
+    editor.load_plugin(&plugin_dir("test-events")).unwrap();
+    editor.resize(100, 8);
+    editor.handle_key(KeyEvent::ctrl('g'));
+    editor.handle_key(KeyEvent::new(KeyCode::Down));
+    editor.handle_key(KeyEvent::new(KeyCode::Down));
+    assert_eq!(
+        editor.menu(),
+        Some(Menu::Main),
+        "past the last one, it stays"
+    );
+    editor.handle_key(KeyEvent::new(KeyCode::Enter));
+    assert_eq!(editor.menu(), Some(Menu::Plugin(1)));
+
+    // Opened again, it starts at the top.
+    editor.handle_key(key('x'));
+    editor.handle_key(KeyEvent::ctrl('g'));
+    editor.handle_key(key('j'));
+    editor.handle_key(key('k'));
+    editor.handle_key(key('k'));
+    editor.handle_key(KeyEvent::new(KeyCode::Enter));
+    assert_eq!(editor.menu(), Some(Menu::Plugin(0)));
 }

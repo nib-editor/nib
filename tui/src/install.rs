@@ -23,6 +23,7 @@ const MAX_SIZE: u64 = 100 << 20;
 
 /// Where installed plugins live: `<data>/installed/<name>/`, and the
 /// record of them, `<data>/installed.toml`.
+#[derive(Clone)]
 pub struct Store {
     pub data: PathBuf,
 }
@@ -402,10 +403,11 @@ struct Work(PathBuf);
 
 impl Work {
     fn new(store: &Store) -> Result<Self, String> {
-        let dir = store
-            .data
-            .join("installed")
-            .join(format!(".work-{}", std::process::id()));
+        let dir = store.data.join("installed").join(format!(
+            ".work-{}-{}",
+            std::process::id(),
+            next_work()
+        ));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("plugin"))
             .map_err(|err| format!("{}: {err}", dir.display()))?;
@@ -415,6 +417,13 @@ impl Work {
     fn plugin(&self) -> PathBuf {
         self.0.join("plugin")
     }
+}
+
+/// Tells apart the work of checks that run at once, as from the editor.
+fn next_work() -> usize {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    NEXT.fetch_add(1, Ordering::Relaxed)
 }
 
 impl Drop for Work {
@@ -517,28 +526,81 @@ pub fn update(
     name: &str,
     confirm: &mut dyn FnMut(&str) -> bool,
 ) -> Result<Outcome, String> {
-    let records = store.records()?;
-    let record = records
-        .iter()
-        .find(|r| r.name == name)
-        .cloned()
-        .ok_or_else(|| format!("{name} is not installed"))?;
-    let source = Source::parse(&record.source)?;
+    let (record, source) = installed(store, name)?;
     if !source.follows_releases() {
         return Ok(Outcome::Pinned);
     }
     update_from(store, record, &source, confirm)
 }
 
-/// Updates `record`'s plugin from `source`.
 fn update_from(
     store: &Store,
     record: Record,
     source: &Source,
     confirm: &mut dyn FnMut(&str) -> bool,
 ) -> Result<Outcome, String> {
+    match check_from(store, record, source)? {
+        Check::Pinned => Ok(Outcome::Pinned),
+        Check::UpToDate => Ok(Outcome::UpToDate),
+        Check::Ready(pending) => {
+            if let Some(question) = pending.question()
+                && !confirm(&question)
+            {
+                return Ok(Outcome::Declined);
+            }
+            pending.apply(store)
+        }
+    }
+}
+
+/// The record of `name` and where it came from.
+fn installed(store: &Store, name: &str) -> Result<(Record, Source), String> {
+    let record = store
+        .records()?
+        .into_iter()
+        .find(|r| r.name == name)
+        .ok_or_else(|| format!("{name} is not installed"))?;
+    let source = Source::parse(&record.source)?;
+    Ok((record, source))
+}
+
+/// What a check for a newer release found.
+pub enum Check {
+    UpToDate,
+    /// Installed from a tag or an archive, so it stays as it is.
+    Pinned,
+    Ready(Box<Pending>),
+}
+
+/// A newer release of an installed plugin, fetched and unpacked, not yet
+/// in place of the old one.
+pub struct Pending {
+    work: Work,
+    record: Record,
+    fetched: Fetched,
+    manifest: PluginManifest,
+    sha256: String,
+    /// Capabilities it asks for that were not agreed to.
+    pub added: Vec<String>,
+}
+
+/// Whether `name` follows releases, so `check` can find newer ones.
+pub fn follows_releases(store: &Store, name: &str) -> bool {
+    installed(store, name).is_ok_and(|(_, source)| source.follows_releases())
+}
+
+/// Looks for a newer release of `name` and gets it ready. Downloads, so
+/// the editor runs it on a thread.
+pub fn check(store: &Store, name: &str) -> Result<Check, String> {
+    let (record, source) = installed(store, name)?;
+    if !source.follows_releases() {
+        return Ok(Check::Pinned);
+    }
+    check_from(store, record, &source)
+}
+
+fn check_from(store: &Store, record: Record, source: &Source) -> Result<Check, String> {
     let name = record.name.as_str();
-    let mut records = store.records()?;
     let work = Work::new(store)?;
     let (fetched, manifest) = prepare(source, &work)?;
     if manifest.name != name {
@@ -549,43 +611,106 @@ fn update_from(
     }
     let sha256 = sha256(&fetched.archive)?;
     if sha256 == record.sha256 {
-        return Ok(Outcome::UpToDate);
+        return Ok(Check::UpToDate);
     }
-    let added: Vec<String> = manifest
+    let added = manifest
         .capabilities
         .iter()
         .filter(|c| !record.capabilities.contains(c))
         .cloned()
         .collect();
-    if !added.is_empty() {
-        let question = format!(
-            "{}It now also wants: {}. Update it?",
-            describe(&manifest, &record.source),
-            added.join(", ")
-        );
-        if !confirm(&question) {
-            return Ok(Outcome::Declined);
-        }
+    Ok(Check::Ready(Box::new(Pending {
+        work,
+        record,
+        fetched,
+        manifest,
+        sha256,
+        added,
+    })))
+}
+
+impl Pending {
+    pub fn version(&self) -> &str {
+        &self.manifest.version
     }
-    put_in_place(store, &work, name)?;
-    for r in &mut records {
-        if r.name == name {
-            r.url = fetched.url.clone();
-            r.tag = fetched.tag.clone();
-            r.version = manifest.version.clone();
-            r.sha256 = sha256.clone();
-            r.capabilities = manifest.capabilities.clone();
-        }
+
+    /// What to ask before it goes in, if it wants more capabilities.
+    pub fn question(&self) -> Option<String> {
+        (!self.added.is_empty()).then(|| {
+            format!(
+                "{}It now also wants: {}. Update it?",
+                describe(&self.manifest, &self.record.source),
+                self.added.join(", ")
+            )
+        })
     }
-    store.save(records)?;
-    Ok(Outcome::Updated {
-        from: record.version,
-        to: manifest.version,
-    })
+
+    /// Puts it in place of the old version and records it.
+    pub fn apply(self, store: &Store) -> Result<Outcome, String> {
+        let name = self.record.name.as_str();
+        let mut records = store.records()?;
+        put_in_place(store, &self.work, name)?;
+        for r in &mut records {
+            if r.name == name {
+                r.url = self.fetched.url.clone();
+                r.tag = self.fetched.tag.clone();
+                r.version = self.manifest.version.clone();
+                r.sha256 = self.sha256.clone();
+                r.capabilities = self.manifest.capabilities.clone();
+            }
+        }
+        store.save(records)?;
+        Ok(Outcome::Updated {
+            from: self.record.version,
+            to: self.manifest.version,
+        })
+    }
 }
 
 /// `nib plugin remove`: the installed files and the record go; settings and
 /// data the plugin kept stay.
+/// Updates from the core menu, for the plugins nib loaded from the store:
+/// one loaded from a `path` would not change when the store's copy does.
+pub struct StoreUpdates {
+    pub store: Store,
+    pub loaded: Vec<String>,
+}
+
+struct StorePending {
+    store: Store,
+    pending: Pending,
+}
+
+impl nib_core::PluginUpdates for StoreUpdates {
+    fn can_update(&self, name: &str) -> bool {
+        self.loaded.iter().any(|n| n == name) && follows_releases(&self.store, name)
+    }
+
+    fn check(&self, name: &str) -> Result<Option<Box<dyn nib_core::PendingUpdate>>, String> {
+        Ok(match check(&self.store, name)? {
+            Check::Ready(pending) => Some(Box::new(StorePending {
+                store: self.store.clone(),
+                pending: *pending,
+            })),
+            Check::UpToDate | Check::Pinned => None,
+        })
+    }
+}
+
+impl nib_core::PendingUpdate for StorePending {
+    fn version(&self) -> &str {
+        self.pending.version()
+    }
+
+    fn added_capabilities(&self) -> &[String] {
+        &self.pending.added
+    }
+
+    fn apply(self: Box<Self>) -> Result<(), String> {
+        self.pending.apply(&self.store).map(|_| ())
+    }
+}
+
 pub fn remove(store: &Store, name: &str) -> Result<(), String> {
     let mut records = store.records()?;
     if !records.iter().any(|r| r.name == name) {

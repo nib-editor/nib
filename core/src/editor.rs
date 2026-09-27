@@ -17,6 +17,7 @@ use crate::plugin::{PluginId, Plugins};
 use crate::process::Processes;
 use crate::syntax::{BufferSyntax, Languages};
 use crate::ui::{Panel, Popup, StatusItem, Theme};
+use crate::updates::{Checked, PendingUpdate, PluginUpdates};
 use crate::view::View;
 use crate::windows::{self, Direction, Rect, Separator, Splits};
 use std::sync::Arc;
@@ -67,6 +68,8 @@ pub(crate) struct State {
     pub clipboard: Box<dyn Clipboard>,
     /// Views of buffers not shown, so switching back restores the selection
     /// and scroll position.
+    /// The plugin the arrows point at in the core menu's list.
+    pub menu_cursor: usize,
     pub hidden_views: HashMap<usize, View>,
     pub languages: Languages,
     pub theme: Theme,
@@ -801,6 +804,8 @@ pub enum Menu {
     Plugin(PluginId),
     /// Quitting would drop unsaved changes.
     ConfirmQuit,
+    /// A newer release of the plugin wants more capabilities.
+    ConfirmUpdate(PluginId),
 }
 
 pub struct Editor {
@@ -810,6 +815,10 @@ pub struct Editor {
     pub(crate) plugins: Plugins,
     /// From `plugins/<name>.toml`, by plugin name.
     plugin_configs: BTreeMap<String, PluginConfig>,
+    /// From the frontend, for `[u] update` in the core menu.
+    updates: Option<Arc<dyn PluginUpdates>>,
+    /// A newer release that wants more capabilities, waiting for a yes.
+    pending_update: Option<(PluginId, Box<dyn PendingUpdate>)>,
 }
 
 const LENT: &str = "editor state is only lent during plugin calls";
@@ -877,12 +886,15 @@ impl Default for Editor {
                 files: FileJobs::new(inbox.clone()),
                 clipboard: Box::new(clipboard::Internal::default()),
                 inbox,
+                menu_cursor: 0,
                 hidden_views: HashMap::new(),
                 languages: Languages::default(),
                 theme: Theme::default(),
             }),
             plugins: Plugins::default(),
             plugin_configs: BTreeMap::new(),
+            updates: None,
+            pending_update: None,
         }
     }
 }
@@ -1027,7 +1039,9 @@ impl Editor {
         if let Some(menu) = self.state_mut().menu.take() {
             self.handle_menu_key(menu, key);
         } else if key == self.settings().menu_key {
-            self.state_mut().menu = Some(Menu::Main);
+            let state = self.state_mut();
+            state.menu = Some(Menu::Main);
+            state.menu_cursor = 0;
         } else {
             self.send_to_plugins(key);
         }
@@ -1038,6 +1052,78 @@ impl Editor {
     /// the editor.
     pub fn set_clipboard(&mut self, clipboard: Box<dyn Clipboard>) {
         self.state_mut().clipboard = clipboard;
+    }
+
+    /// How the core menu updates installed plugins. Without it, the menu
+    /// offers no updates.
+    pub fn set_plugin_updates(&mut self, updates: Option<Arc<dyn PluginUpdates>>) {
+        self.updates = updates;
+    }
+
+    /// Whether plugin `id` can be updated from the core menu.
+    pub(crate) fn can_update(&self, id: PluginId) -> bool {
+        let name = &self.plugins()[id].name;
+        self.updates.as_ref().is_some_and(|u| u.can_update(name))
+    }
+
+    /// Checks for a newer release of plugin `id` on a thread; what it found
+    /// comes back through the inbox.
+    fn start_update(&mut self, id: PluginId) {
+        let Some(updates) = self.updates.clone() else {
+            return;
+        };
+        let name = self.plugins()[id].name.clone();
+        let inbox = self.state().inbox.clone();
+        self.state_mut().message = Some(format!("checking {name} for a newer release..."));
+        std::thread::spawn(move || {
+            let result = updates.check(&name);
+            inbox.push(Message::Update(Checked {
+                plugin: id,
+                name,
+                result,
+            }));
+        });
+    }
+
+    /// Takes in a check for a newer release: puts it in and loads it again,
+    /// or asks first if it wants more capabilities.
+    fn finish_update(&mut self, checked: Checked) {
+        let Checked {
+            plugin,
+            name,
+            result,
+        } = checked;
+        let message = match result {
+            Err(err) => format!("{name}: updating failed: {err}"),
+            Ok(None) => format!("{name} is up to date"),
+            Ok(Some(pending)) if !pending.added_capabilities().is_empty() => {
+                self.pending_update = Some((plugin, pending));
+                // The menu asks now, in place of "checking...".
+                let state = self.state_mut();
+                state.menu = Some(Menu::ConfirmUpdate(plugin));
+                state.message = None;
+                return;
+            }
+            Ok(Some(pending)) => self.apply_update(plugin, pending),
+        };
+        self.state_mut().message = Some(message);
+    }
+
+    fn apply_update(&mut self, id: PluginId, pending: Box<dyn PendingUpdate>) -> String {
+        let name = self.plugins()[id].name.clone();
+        let version = pending.version().to_string();
+        if let Err(err) = pending.apply() {
+            return format!("{name}: updating failed: {err}");
+        }
+        match self.reload_plugin(id) {
+            Ok(()) => format!("{name} updated to {version}"),
+            Err(err) => format!("{name} updated to {version}, but loading it failed: {err}"),
+        }
+    }
+
+    /// The update waiting for a yes, for the menu to show.
+    pub(crate) fn pending_update(&self) -> Option<&dyn PendingUpdate> {
+        self.pending_update.as_ref().map(|(_, p)| p.as_ref())
     }
 
     /// Sets what background threads call after queueing work, such as a
@@ -1073,6 +1159,10 @@ impl Editor {
                     state.files.owner(job, done),
                     Event::FilesListed { job, paths, done },
                 ),
+                Message::Update(checked) => {
+                    self.finish_update(checked);
+                    continue;
+                }
             };
             // Messages of what was cancelled or stopped are dropped.
             if let Some(owner) = owner {
@@ -1166,15 +1256,46 @@ impl Editor {
                 }
             }
             Menu::Main => {
+                // Arrows reach past the ninth plugin: installed ones come
+                // after a dozen standard ones.
+                let count = self.plugins().len();
+                let state = self.state_mut();
+                let step = match key.code {
+                    KeyCode::Down => Some(1),
+                    KeyCode::Up => Some(-1),
+                    KeyCode::Char('j') if key.modifiers == Default::default() => Some(1),
+                    KeyCode::Char('k') if key.modifiers == Default::default() => Some(-1),
+                    _ => None,
+                };
+                if let Some(step) = step {
+                    let last = count.saturating_sub(1);
+                    state.menu_cursor = state.menu_cursor.saturating_add_signed(step).min(last);
+                    state.menu = Some(Menu::Main);
+                    return;
+                }
                 let chosen = match key.code {
+                    KeyCode::Enter => Some(state.menu_cursor),
                     KeyCode::Char(c @ '1'..='9') if key.modifiers == Default::default() => {
                         Some(c as usize - '1' as usize)
                     }
                     _ => None,
                 };
-                if let Some(id) = chosen.filter(|&id| id < self.plugins().len()) {
-                    self.state_mut().menu = Some(Menu::Plugin(id));
+                if let Some(id) = chosen.filter(|&id| id < count) {
+                    state.menu = Some(Menu::Plugin(id));
                 }
+            }
+            Menu::Plugin(id) if plain('u') && self.can_update(id) => self.start_update(id),
+            Menu::ConfirmUpdate(id) => {
+                let Some((_, pending)) = self.pending_update.take() else {
+                    return;
+                };
+                let name = self.plugins()[id].name.clone();
+                let message = if plain('y') {
+                    self.apply_update(id, pending)
+                } else {
+                    format!("{name} left as it was")
+                };
+                self.state_mut().message = Some(message);
             }
             Menu::Plugin(id) if plain('r') || plain('d') || plain('l') => {
                 let plugin = &self.plugins()[id];

@@ -72,6 +72,20 @@ fn main() -> ExitCode {
         }
     };
     editor.apply_config(config);
+    if let Some(store) = &store {
+        let loaded = entries
+            .iter()
+            .filter(|e| {
+                e.enabled && matches!(&e.source, Source::Dir(dir) if *dir == store.dir(&e.name))
+            })
+            .map(|e| e.name.clone())
+            .collect();
+        let updates = install::StoreUpdates {
+            store: store.clone(),
+            loaded,
+        };
+        editor.set_plugin_updates(Some(std::sync::Arc::new(updates)));
+    }
     for path in &files {
         if let Err(err) = editor.open(path) {
             eprintln!("nib: {}: {err}", path.display());

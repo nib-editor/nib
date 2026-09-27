@@ -22,6 +22,7 @@ pub mod search;
 pub mod selection;
 mod syntax;
 pub mod ui;
+pub mod updates;
 pub mod view;
 mod windows;
 
@@ -43,5 +44,6 @@ pub use plugin::{
 pub use process::Stream;
 pub use selection::{Range, Selection};
 pub use ui::{Side, Span, StyledLine, Theme};
+pub use updates::{PendingUpdate, PluginUpdates};
 pub use view::View;
 pub use windows::Rect;

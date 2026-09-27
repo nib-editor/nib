@@ -6,8 +6,9 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use crate::process::Stream;
+use crate::updates::Checked;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub(crate) enum Message {
     Output {
         id: u32,
@@ -23,6 +24,8 @@ pub(crate) enum Message {
         paths: Vec<String>,
         done: bool,
     },
+    /// A plugin's check for a newer release, from the core menu.
+    Update(Checked),
 }
 
 /// Called from background threads after they queue a message, so the
