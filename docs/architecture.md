@@ -363,12 +363,22 @@ servers.rust.command = ["rust-analyzer"]
   - キーは起動のきっかけにならない。キーマップのように入力スタックに層を積むプラグインは、`init` で積むので、lazy にしない。
   - 起動するまで、そのプラグインのコマンドは `commands.all()` に出ない。
 
+#### 開くことと読み直すこと
+
+- 設定のファイルは、エディタの中から開ける。コアのコマンド `config.open` が `config.toml` を、`{"plugin": "<name>"}` で `plugins/<name>.toml` を開く。ファイルがなければ、`nib config init` と同じ既定値と説明のコメントを書いた状態で開く（保存するまでファイルはできない）。helix のコマンドラインでは `:config` と `:config <name>`。
+- 設定のディレクトリの中のファイルを nib で保存すると、読み直す（`config.reload`、helix では `:config-reload`）。
+  - その場で効くもの: `[core]` の設定、テーマ、プラグインの `[settings]`（変わったプラグインだけを起動し直し、`init` に新しい設定を渡す）。
+  - 次の起動から効くもの: 読み込むプラグインそのものが変わる設定（`enabled`、`path`、`load`）と、プラグインの上限。変わっていたら、そう知らせる。
+  - 書き間違いがあれば、今の設定のまま残し、理由を知らせる。
+- 設定のディレクトリの場所と、そこを読む処理（`Config::load`）はコアが持つ。場所はフロントエンドが決めて渡す（`~/.config/nib/`）。
+
 インストールしたプラグイン（[plugin-install.md](plugin-install.md)）は `~/.local/share/nib/installed/` に置き、標準プラグインのあとに読み込む。`plugins/<name>.toml` は設定だけを書く場所のままにする。読み込めないプラグインは飛ばして起動し、理由をメッセージで出す。
 
 #### サブコマンド
 
 | コマンド | 動き |
 |----------|------|
+| `nib config`（`nib config edit`） | `config.toml` を開いて起動する。なければ `nib config init` と同じ内容で開く |
 | `nib config path` | 読んでいる設定ファイルの場所を表示する |
 | `nib config init` | 既定値と説明をコメントで書いた `config.toml` と `plugins/helix.toml` を作る。すでにあるファイルは上書きしない |
 | `nib plugin list` | プラグインの一覧を表示する |
