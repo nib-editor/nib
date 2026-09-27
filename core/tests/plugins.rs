@@ -272,3 +272,30 @@ fn plugin_limits_come_from_config() {
     assert!(started.elapsed() < Duration::from_millis(500));
     assert!(editor.message().unwrap().contains("took too long"));
 }
+
+/// A plugin's data directory is its `/data`, and what it writes there is
+/// still there after a restart.
+#[test]
+fn data_outlives_restarts() {
+    let data = env::temp_dir().join(format!("nib-{}-data", std::process::id()));
+    let mut editor = Editor::default();
+    editor.set_plugin_data_dir(Some(data.clone()));
+    editor.load_plugin(&plugin_dir("test-events")).unwrap();
+    editor.call_command("test-events.save", "kept").unwrap();
+    assert_eq!(
+        fs::read_to_string(data.join("test-events/note")).unwrap(),
+        "kept"
+    );
+
+    editor.handle_key(KeyEvent::ctrl('g'));
+    editor.handle_key(key('1'));
+    editor.handle_key(key('l'));
+    assert_eq!(editor.message(), Some("test-events reloaded"));
+    assert_eq!(editor.call_command("test-events.load", "").unwrap(), "kept");
+    fs::remove_dir_all(&data).unwrap();
+
+    // Without a place for it, there is no /data.
+    let mut editor = Editor::default();
+    editor.load_plugin(&plugin_dir("test-events")).unwrap();
+    assert!(editor.call_command("test-events.save", "x").is_err());
+}

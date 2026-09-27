@@ -68,7 +68,7 @@ Rules every plugin lives by:
 
 - **One call at a time.** nib never calls a plugin while one of its calls is running. Events a call causes, including the plugin's own, arrive after the call returns, in the order they happened.
 - **Calls are short.** `init` may take 5 seconds and every other call 1 second, unless the user raises the limit. A call that runs over is stopped, and so is one the user interrupts with Ctrl-g. Wait for things with timers and events, not in a loop.
-- **Failure is cleaned up.** When a plugin traps, runs over, or is stopped, nib removes everything it made (commands, input layers, status items, panels, popups, decorations, timers, processes) and starts a new instance, calling `init` again. State in memory is lost. After three failures in a minute, the plugin is disabled until the user enables it again.
+- **Failure is cleaned up.** When a plugin traps, runs over, or is stopped, nib removes everything it made (commands, input layers, status items, panels, popups, decorations, timers, processes) and starts a new instance, calling `init` again. State in memory is lost; keep what must last in the plugin's data directory, `/data` (below). After three failures in a minute, the plugin is disabled until the user enables it again.
 - **Memory is limited**, to 256 MiB by default.
 
 ## The API
@@ -151,6 +151,7 @@ nib parses on a thread of its own, so an answer right after an edit waits for th
 - `files.walk`: lists files under a directory, honoring `.gitignore`, on a background thread; the names arrive as `files-listed` events. Needs `fs-read`.
 - `clipboard`: the system clipboard. Needs `clipboard`.
 - `process.spawn`: starts a program; its output and exit arrive as events, and it is killed when the plugin stops. Needs `process`.
+- `/data`: a directory of the plugin's own, through WASI's file API (`std::fs` in Rust, `os` in Go), with no capability to declare. What the plugin writes there outlives restarts and updates; other plugins cannot see it. Tests get an empty one each.
 
 ## Testing
 

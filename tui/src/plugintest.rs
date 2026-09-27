@@ -265,6 +265,8 @@ fn run_case(setup: &Setup, case: &Case) -> Result<(), Vec<String>> {
 
     let mut editor = Editor::default();
     editor.set_plugin_cache_dir(settings::cache_dir());
+    // Empty for each test, and never the user's.
+    editor.set_plugin_data_dir(Some(setup.work.with_extension("data")));
     editor.resize(SIZE.0, SIZE.1);
     if let Some(table) = setup.settings {
         let mut config = Config::default();

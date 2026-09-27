@@ -91,6 +91,9 @@ const MAX_EVENTS: usize = 1000;
 pub struct PluginOptions {
     /// Where compiled plugins are cached. `None` compiles on every load.
     pub cache_dir: Option<PathBuf>,
+    /// Where each plugin's data directory is made, as `<name>/`, seen by the
+    /// plugin as `/data`. `None` gives plugins none.
+    pub data_dir: Option<PathBuf>,
     /// A call taking longer is counted as slow.
     pub warn_after: Duration,
     /// A call taking longer is stopped.
@@ -104,6 +107,7 @@ impl Default for PluginOptions {
     fn default() -> Self {
         Self {
             cache_dir: None,
+            data_dir: None,
             warn_after: Duration::from_millis(16),
             call_timeout: Settings::default().plugin_timeout,
             init_timeout: Settings::default().plugin_init_timeout,
@@ -362,6 +366,12 @@ impl Editor {
     pub fn set_plugin_cache_dir(&mut self, dir: Option<PathBuf>) {
         self.state_mut().languages.cache_dir = dir.clone();
         self.plugins.options.cache_dir = dir;
+    }
+
+    /// Where plugins' data directories are made. Takes effect for plugins
+    /// started afterwards.
+    pub fn set_plugin_data_dir(&mut self, dir: Option<PathBuf>) {
+        self.plugins.options.data_dir = dir;
     }
 
     /// Loads the plugin in `dir` and calls its `init` with its table from
@@ -994,7 +1004,12 @@ fn start_in(plugins: &mut Plugins, state: &mut Option<State>, id: PluginId) -> R
     let limits = plugin.limits;
 
     let stderr = MemoryOutputPipe::new(STDERR_CAPACITY);
-    let wasi = wasi_context(&plugin.capabilities, stderr.clone())?;
+    let data_dir = plugins
+        .options
+        .data_dir
+        .as_ref()
+        .map(|dir| dir.join(&plugin.name));
+    let wasi = wasi_context(&plugin.capabilities, data_dir.as_deref(), stderr.clone())?;
     let data = PluginData {
         state: None,
         plugins: None,
@@ -1077,12 +1092,24 @@ fn waiting_for_command(plugins: &Plugins, state: &State, name: &str) -> Option<P
         .position(|p| p.waiting && p.name == plugin)
 }
 
-/// WASI with what `capabilities` allow: the working directory for the file
-/// ones, and the host's network for "network". Nothing else.
-fn wasi_context(capabilities: &[String], stderr: MemoryOutputPipe) -> Result<WasiCtx, String> {
+/// WASI with the plugin's data directory as `/data`, and what
+/// `capabilities` allow: the working directory for the file ones, and the
+/// host's network for "network". Nothing else.
+fn wasi_context(
+    capabilities: &[String],
+    data_dir: Option<&Path>,
+    stderr: MemoryOutputPipe,
+) -> Result<WasiCtx, String> {
     let has = |name: &str| capabilities.iter().any(|c| c == name);
     let mut builder = WasiCtx::builder();
     builder.stderr(stderr);
+    if let Some(dir) = data_dir {
+        let fail = |err: &dyn std::fmt::Display| format!("{}: {err}", dir.display());
+        std::fs::create_dir_all(dir).map_err(|err| fail(&err))?;
+        builder
+            .preopened_dir(dir, "/data", FsPerms::ReadWrite)
+            .map_err(|err| fail(&err))?;
+    }
     let perms = if has("fs-write") {
         Some(FsPerms::ReadWrite)
     } else if has("fs-read") {

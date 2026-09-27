@@ -79,6 +79,7 @@ fn main() -> ExitCode {
         }
     }
     editor.set_plugin_cache_dir(settings::cache_dir());
+    editor.set_plugin_data_dir(settings::data_dir().map(|dir| dir.join("plugins")));
     let failures = match load_plugins(&mut editor, entries, &plugins) {
         Ok(failures) => failures,
         Err(err) => {

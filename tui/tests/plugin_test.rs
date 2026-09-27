@@ -133,3 +133,33 @@ expect.result = "timer 1"
     fs::remove_file(&file).unwrap();
     assert!(ok, "{out}");
 }
+
+#[test]
+fn each_test_gets_an_empty_data_directory() {
+    let file = env::temp_dir().join(format!("nib-{}-data.toml", std::process::id()));
+    fs::write(
+        &file,
+        r#"with = []
+
+[[test]]
+name = "writes to /data"
+
+[[test.step]]
+command = "test-events.save"
+args = "kept"
+
+[[test.step]]
+command = "test-events.load"
+expect.result = "kept"
+
+[[test]]
+name = "starts without what the last test wrote"
+command = "test-events.load"
+expect.error = "No such file"
+"#,
+    )
+    .unwrap();
+    let (ok, out) = nib_plugin_test(&built("test-events"), &file);
+    fs::remove_file(&file).unwrap();
+    assert!(ok, "{out}");
+}

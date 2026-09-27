@@ -22,7 +22,7 @@ thread_local! {
     static PROGRAMS: RefCell<Vec<Program>> = const { RefCell::new(Vec::new()) };
 }
 
-const COMMANDS: [&str; 14] = [
+const COMMANDS: [&str; 16] = [
     "echo",
     "call",
     "log",
@@ -37,6 +37,8 @@ const COMMANDS: [&str; 14] = [
     "kill",
     "walk",
     "stop-walk",
+    "save",
+    "load",
 ];
 
 struct Events;
@@ -56,6 +58,11 @@ impl Guest for Events {
     fn run_command(name: String, args: String) -> Result<String, String> {
         match name.as_str() {
             "echo" => Ok(args),
+            // Its data directory, which outlives restarts.
+            "save" => std::fs::write("/data/note", args)
+                .map(|()| String::new())
+                .map_err(|err| err.to_string()),
+            "load" => std::fs::read_to_string("/data/note").map_err(|err| err.to_string()),
             // "<command> <args>": the result, marked ok or err.
             "call" => {
                 let (command, args) = args.split_once(' ').unwrap_or((&args, ""));
