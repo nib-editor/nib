@@ -21,6 +21,7 @@
 - 名前に Rust のターゲットをそのまま使うのは、mise や cargo-binstall が OS と CPU を名前から読み取るため。
 - Linux は、古い glibc でも動くように、なるべく古い Ubuntu の runner でビルドする。
 - タグと workspace の `version` が違えば、ビルドの前に止める。
+- 手で動かす（`workflow_dispatch`）と、すべてのターゲットのビルドとアーカイブ作りまでを行い、リリースも公開もしない。タグを打つ前に試すため。
 
 ## 入れ方
 
