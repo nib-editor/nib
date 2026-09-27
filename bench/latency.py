@@ -242,7 +242,9 @@ def editors(path, config):
         "nvim": Editor("nvim --clean", [program("nvim"), "--clean", "-n", path]),
         "hx": Editor("helix (lsp off)", [program("hx"), "-c", hx_config, path]),
         "emacs": Editor("emacs -nw -Q", [program("emacs"), "-nw", "-Q", path], EMACS_KEYS),
-        "nib": Editor(f"nib (lsp off, {base})", [NIB, path], nib_keys, {"XDG_CONFIG_HOME": config}),
+        # The data directory holds installed plugins, which would load too.
+        "nib": Editor(f"nib (lsp off, {base})", [NIB, path], nib_keys,
+                      {"XDG_CONFIG_HOME": config, "XDG_DATA_HOME": os.path.join(config, "data")}),
     }
 
 
