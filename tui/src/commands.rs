@@ -13,6 +13,7 @@ use crate::install::{self, Outcome, Store};
 use crate::settings::{self, Source};
 
 pub const USAGE: &str = "usage: nib [--plugin DIR]... [FILE]...
+       nib --version                   show nib's version
        nib config path                 show where the settings are
        nib config init                 write commented settings files to start from
        nib plugin list                 list the plugins and their settings files

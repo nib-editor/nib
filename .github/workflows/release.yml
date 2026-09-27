@@ -90,7 +90,7 @@ jobs:
         shell: bash
         run: |
           dir="nib-$TAG-${{ matrix.target }}"
-          "$dir/nib" --help
+          test "$("$dir/nib" --version)" = "nib ${TAG#v}"
           "$dir/nib" plugin list | grep -q helix
       - uses: actions/upload-artifact@v4
         with:

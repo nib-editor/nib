@@ -29,6 +29,10 @@ fn main() -> ExitCode {
             println!("{}", commands::USAGE);
             return ExitCode::SUCCESS;
         }
+        Some("--version" | "-V") => {
+            println!("nib {}", env!("CARGO_PKG_VERSION"));
+            return ExitCode::SUCCESS;
+        }
         _ => {}
     }
 

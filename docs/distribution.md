@@ -32,7 +32,7 @@
 | Scoop | `scoop bucket add nib-editor https://github.com/nib-editor/scoop-bucket` のあと `scoop install nib` | bucket のリポジトリ `nib-editor/scoop-bucket` の manifest |
 | cargo | `cargo install nib-editor`、または `cargo binstall nib-editor` | crates.io の `nib-editor` と `nib-editor-core` |
 
-- 名前だけで入れられる公式の一覧（mise の registry、homebrew-core、Scoop の main / extras）には、審査がある。mise の一覧は、新しく載せるものに「すでに広く使われている（GitHub のスターがふつうは数千）」ことを求め、版を表示させて照らし合わせる確認（`mise test-tool`）もするので、`nib --version` を足してから、条件を満たしたときに PR を出す。homebrew-core と Scoop の公式の bucket は、知名度の条件を満たしてから申請する。それまでは、tap と bucket を一度登録すれば名前で入る。
+- 名前だけで入れられる公式の一覧（mise の registry、homebrew-core、Scoop の main / extras）には、審査がある。mise の一覧は、新しく載せるものに「すでに広く使われている（GitHub のスターがふつうは数千）」ことを求め、版を表示させて照らし合わせる確認（`mise test-tool`）もする（`nib --version` は足してある）。条件を満たしたときに PR を出す。homebrew-core と Scoop の公式の bucket は、知名度の条件を満たしてから申請する。それまでは、tap と bucket を一度登録すれば名前で入る。
 - tap と bucket の中身は、それぞれのリポジトリのワークフローが、nib の最新のリリースを見て毎日更新する（手でも動かせる）。nib のリポジトリからほかのリポジトリへ書き込むための鍵を持たずに済む。Scoop の manifest は、Scoop の `checkver` / `autoupdate` の書き方に従う。
 - Homebrew の formula は、ビルド済みの実行ファイルを入れる（tap なので、ソースからのビルドにしなくてよい）。
 
