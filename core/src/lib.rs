@@ -30,7 +30,9 @@ pub use background::Waker;
 pub use buffer::{Buffer, Change, LineEnding};
 pub use change::{Assoc, ChangeSet, Edit};
 pub use clipboard::Clipboard;
-pub use config::{Config, Indent, Load, PluginConfig, Settings, Timeout};
+pub use config::{
+    CONFIG_TEMPLATE, Config, Indent, Load, PluginConfig, Settings, Timeout, plugin_template,
+};
 pub use editor::{Editor, Menu, ScrollAmount};
 pub use error::Error;
 pub use events::TextChange;

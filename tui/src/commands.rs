@@ -14,6 +14,7 @@ use crate::settings::{self, Source};
 
 pub const USAGE: &str = "usage: nib [--plugin DIR]... [FILE]...
        nib --version                   show nib's version
+       nib config [edit]               open config.toml in nib
        nib config path                 show where the settings are
        nib config init                 write commented settings files to start from
        nib plugin list                 list the plugins and their settings files
@@ -214,7 +215,7 @@ fn show_paths(dir: &Path) {
     let state = |exists: bool| if exists { "" } else { " (not created yet)" };
     println!("config:  {}{}", config.display(), state(config.is_file()));
     let plugins = dir.join("plugins");
-    match settings::plugin_files(dir) {
+    match Config::plugin_files(dir) {
         Ok(files) if !files.is_empty() => {
             println!("plugins: {}", plugins.display());
             for (_, path) in files {
@@ -235,11 +236,11 @@ fn init(dir: &Path) -> Result<(), String> {
     let files = [
         (
             dir.join("config.toml"),
-            settings::CONFIG_TEMPLATE.to_string(),
+            nib_core::CONFIG_TEMPLATE.to_string(),
         ),
         (
             plugins.join("helix.toml"),
-            settings::plugin_template("helix"),
+            nib_core::plugin_template("helix"),
         ),
     ];
     for (path, template) in files {
@@ -256,7 +257,7 @@ fn init(dir: &Path) -> Result<(), String> {
 fn list() -> Result<(), String> {
     let dir = settings::config_dir();
     let config = match &dir {
-        Some(dir) => settings::load(dir)?,
+        Some(dir) => Config::load(dir)?,
         None => Config::default(),
     };
     let mut problems = Vec::new();

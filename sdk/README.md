@@ -100,6 +100,8 @@ The core's commands (arguments are JSON):
 | `buffer.open` | Opens `{"path": "…"}` |
 | `buffer.save` | Saves the shown buffer |
 | `buffer.next` / `buffer.previous` | Shows the next / previous buffer |
+| `config.open` | Opens config.toml, or `{"plugin": name}`'s settings file |
+| `config.reload` | Reads the settings again, as saving one of their files does |
 | `buffer.close` | Closes the shown buffer; `{"force": true}` drops unsaved changes. Its handles trap from then on |
 | `view.split` | Splits the view, `{"direction": "vertical"}` or `"horizontal"` |
 | `view.close` / `view.only` | Closes the focused view / all others |

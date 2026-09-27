@@ -22,8 +22,11 @@ use settings::{Entry, Source};
 
 fn main() -> ExitCode {
     let args: Vec<_> = env::args_os().skip(1).collect();
-    match args.first().and_then(|a| a.to_str()) {
-        Some("config") => return commands::config(&args[1..]),
+    let word = |i: usize| args.get(i).and_then(|a| a.to_str());
+    // `nib config` and `nib config edit` start nib on config.toml.
+    let open_config = word(0) == Some("config") && matches!(word(1), None | Some("edit"));
+    match word(0) {
+        Some("config") if !open_config => return commands::config(&args[1..]),
         Some("plugin") => return commands::plugin(&args[1..]),
         Some("--help" | "-h") => {
             println!("{}", commands::USAGE);
@@ -38,7 +41,8 @@ fn main() -> ExitCode {
 
     let mut files = Vec::new();
     let mut plugins = Vec::new();
-    let mut args = args.into_iter();
+    let skip = if open_config { args.len() } else { 0 };
+    let mut args = args.into_iter().skip(skip);
     while let Some(arg) = args.next() {
         if arg == "--plugin" {
             let Some(dir) = args.next() else {
@@ -61,7 +65,7 @@ fn main() -> ExitCode {
     // Broken settings should not keep the editor from starting: fall back to
     // the defaults and say why.
     let dir = settings::config_dir();
-    let (config, config_error) = match dir.as_deref().map(settings::load) {
+    let (config, config_error) = match dir.as_deref().map(Config::load) {
         Some(Ok(config)) => (config, None),
         Some(Err(err)) => (Config::default(), Some(err)),
         None => (Config::default(), None),
@@ -98,6 +102,11 @@ fn main() -> ExitCode {
         }
     }
     editor.set_plugin_cache_dir(settings::cache_dir());
+    editor.set_config_dir(dir.clone());
+    if open_config && let Err(err) = editor.call_command("config.open", "{}") {
+        eprintln!("nib: {err}");
+        return ExitCode::FAILURE;
+    }
     editor.set_plugin_data_dir(settings::data_dir().map(|dir| dir.join("plugins")));
     let failures = match load_plugins(&mut editor, entries, &plugins) {
         Ok(failures) => failures,

@@ -2,8 +2,9 @@
 //! plugin.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
+use std::{fs, io};
 
 use serde::Deserialize;
 
@@ -411,8 +412,105 @@ impl Config {
     }
 }
 
+impl Config {
+    /// Reads `config.toml` and `plugins/*.toml` in `dir`. Missing files mean
+    /// the defaults.
+    pub fn load(dir: &Path) -> Result<Config, String> {
+        let mut config = match fs::read_to_string(dir.join("config.toml")) {
+            Ok(text) => Self::parse(&text).map_err(|err| err.to_string())?,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Self::default(),
+            Err(err) => return Err(format!("config.toml: {err}")),
+        };
+        for (name, path) in Self::plugin_files(dir)? {
+            let text =
+                fs::read_to_string(&path).map_err(|err| format!("{}: {err}", path.display()))?;
+            let plugin = Self::parse_plugin(&name, &text).map_err(|err| err.to_string())?;
+            config.plugins.insert(name, plugin);
+        }
+        Ok(config)
+    }
+
+    /// The `plugins/<name>.toml` files, sorted by name.
+    pub fn plugin_files(dir: &Path) -> Result<Vec<(String, PathBuf)>, String> {
+        let dir = dir.join("plugins");
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(err) => return Err(format!("{}: {err}", dir.display())),
+        };
+        let mut files: Vec<_> = entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().is_some_and(|e| e == "toml"))
+            .filter_map(|path| Some((path.file_stem()?.to_str()?.to_string(), path)))
+            .collect();
+        files.sort();
+        Ok(files)
+    }
+}
+
+/// config.toml with every key commented out, for `nib config init` and
+/// for opening a missing one.
+pub const CONFIG_TEMPLATE: &str = r##"# nib's settings. Every line is optional; the values shown are the defaults.
+# Each plugin has its own file in plugins/<name>.toml.
+
+[core]
+# tab-width = 4
+# Spaces per indent, or "tab".
+# indent = 4
+# Lines kept visible above and below the cursor.
+# scroll-margin = 5
+# Opens the core menu to manage plugins; plugins never see this key.
+# menu-key = "C-g"
+# Limits for every plugin; plugins/<name>.toml can set its own.
+# plugin-timeout-ms = 1000
+# plugin-init-timeout-ms = 5000
+# plugin-memory-mib = 256
+
+# Styles by name: UI parts such as "ui.selection", and syntax such as
+# "keyword" or "function.method", which falls back to "function". A color
+# alone sets the text color; a table can set fg, bg, bold, italic, underline,
+# and reverse. Colors: black, red, green, yellow, blue, magenta, cyan, white,
+# bright-<color>, "#rrggbb", 0 to 255, or "default".
+[theme]
+# keyword = "magenta"
+# comment = { fg = "bright-black", italic = true }
+"##;
+
+/// A `plugins/<name>.toml` with every key commented out.
+pub fn plugin_template(name: &str) -> String {
+    format!(
+        r##"# How nib runs the {name} plugin, and the settings it gets. Every line is
+# optional.
+
+# false to not load it.
+# enabled = true
+# A directory to load it from, instead of the built-in {name}.
+# path = "~/dev/{name}"
+# Limits instead of the ones in config.toml's [core]. "none" for no time
+# limit; Ctrl-g still stops it.
+# timeout-ms = 1000
+# init-timeout-ms = 5000
+# memory-mib = 256
+# "lazy" to start it when one of its commands is called or one of its
+# events comes, rather than when nib starts.
+# load = "start"
+
+# Given to the plugin when it starts.
+[settings]
+"##
+    )
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn templates_parse_to_the_defaults() {
+        assert_eq!(Config::parse(CONFIG_TEMPLATE).unwrap(), Config::default());
+        let plugin = Config::parse_plugin("helix", &plugin_template("helix")).unwrap();
+        assert_eq!(plugin, PluginConfig::default());
+    }
+
     use super::*;
     use crate::input::KeyCode;
 

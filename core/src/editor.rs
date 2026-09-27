@@ -1,20 +1,23 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use ropey::Rope;
 
+use crate::Edit;
 use crate::Error;
 use crate::background::{Inbox, Message, Waker};
 use crate::buffer::Buffer;
 use crate::clipboard::{self, Clipboard};
-use crate::config::{Config, Indent, PluginConfig, Settings};
+use crate::config::{CONFIG_TEMPLATE, Config, Indent, PluginConfig, Settings, plugin_template};
 use crate::events::{Command, Event, Timer};
 use crate::files::FileJobs;
+use crate::history::UndoMode;
 use crate::input::{KeyCode, KeyEvent};
 use crate::layout;
 use crate::plugin::{PluginId, Plugins};
 use crate::process::Processes;
+use crate::selection::Selection;
 use crate::syntax::{BufferSyntax, Languages};
 use crate::ui::{Panel, Popup, StatusItem, Theme};
 use crate::updates::{Checked, PendingInstall, PendingUpdate, PluginStore, Prepared};
@@ -69,6 +72,11 @@ pub(crate) struct State {
     /// Views of buffers not shown, so switching back restores the selection
     /// and scroll position.
     /// The plugin the arrows point at in the core menu's list.
+    /// Where the settings are, from the frontend.
+    pub config_dir: Option<PathBuf>,
+    /// A file there was saved, or config.reload called: the editor reads
+    /// the settings again after the call.
+    pub reload_config: bool,
     pub menu_cursor: usize,
     /// What is typed into the core menu, as what to install.
     pub menu_input: String,
@@ -466,6 +474,50 @@ impl State {
     }
 
     /// Closes the focused view, focusing the one before it.
+    /// Whether buffer `index` is a file in the settings directory.
+    fn is_config(&self, index: usize) -> bool {
+        let (Some(dir), Some(path)) = (&self.config_dir, self.buffers[index].path()) else {
+            return false;
+        };
+        let canonical = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+        canonical(path).starts_with(canonical(dir))
+    }
+
+    /// Opens config.toml, or `plugins/<plugin>.toml`. A missing one opens
+    /// with the defaults commented out, unsaved, so it exists once saved.
+    fn open_config(&mut self, plugin: Option<&str>) -> Result<(), String> {
+        let dir = self
+            .config_dir
+            .clone()
+            .ok_or("nib does not know where the settings are")?;
+        let (path, template) = match plugin {
+            None => (dir.join("config.toml"), CONFIG_TEMPLATE.to_string()),
+            Some(name) => (
+                dir.join("plugins").join(format!("{name}.toml")),
+                plugin_template(name),
+            ),
+        };
+        let missing = !path.exists();
+        // So that saving it works, as plugins/ may not be there yet.
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|err| format!("{}: {err}", parent.display()))?;
+        }
+        self.open(&path)
+            .map_err(|err| format!("{}: {err}", path.display()))?;
+        let index = self.view.buffer;
+        let buffer = &mut self.buffers[index];
+        if missing && buffer.is_empty() && !buffer.is_modified() {
+            let version = buffer.version();
+            let edit = vec![Edit::new(0, 0, template)];
+            buffer
+                .apply(version, edit, &self.view.selection, None, UndoMode::NewStep)
+                .map_err(|err| err.to_string())?;
+            self.view.selection = Selection::point(0);
+        }
+        Ok(())
+    }
+
     /// The open buffer after the shown one, or before it, going round.
     /// The shown one if it is the only one.
     fn next_open(&self, forward: bool) -> usize {
@@ -611,7 +663,12 @@ impl State {
                 let index = self.view.buffer;
                 self.buffers[index].save().map_err(|err| err.to_string())?;
                 self.push_event(None, Event::BufferSaved(index));
+                if self.is_config(index) {
+                    self.reload_config = true;
+                }
             }
+            "config.open" => self.open_config(args["plugin"].as_str())?,
+            "config.reload" => self.reload_config = true,
             "buffer.open" => {
                 let path = args["path"]
                     .as_str()
@@ -845,6 +902,11 @@ pub(crate) const CORE_COMMANDS: &[(&str, &str)] = &[
     ("buffer.open", "Open a file: {\"path\": string}"),
     ("buffer.next", "Show the next buffer"),
     (
+        "config.open",
+        "Open config.toml, or plugins/<name>.toml with {\"plugin\": name}",
+    ),
+    ("config.reload", "Read the settings again"),
+    (
         "buffer.close",
         "Close the shown buffer; {\"force\": true} drops unsaved changes",
     ),
@@ -898,6 +960,8 @@ impl Default for Editor {
                 clipboard: Box::new(clipboard::Internal::default()),
                 inbox,
                 menu_cursor: 0,
+                config_dir: None,
+                reload_config: false,
                 menu_input: String::new(),
                 hidden_views: HashMap::new(),
                 languages: Languages::default(),
@@ -1071,6 +1135,69 @@ impl Editor {
     /// it, the menu offers none of that.
     pub fn set_plugin_store(&mut self, store: Option<Arc<dyn PluginStore>>) {
         self.store = store;
+    }
+
+    /// Where the settings are, for opening them from inside nib and reading
+    /// them again when they are saved.
+    pub fn set_config_dir(&mut self, dir: Option<PathBuf>) {
+        self.state_mut().config_dir = dir;
+    }
+
+    pub(crate) fn reload_config_if_asked(&mut self) {
+        if std::mem::take(&mut self.state_mut().reload_config) {
+            let message = self.reload_config();
+            self.state_mut().message = Some(message);
+        }
+    }
+
+    /// Reads the settings again: what takes effect at once does, the
+    /// plugins whose settings changed restart, and what waits for the next
+    /// start is named. Broken settings are left for the ones in use.
+    fn reload_config(&mut self) -> String {
+        let Some(dir) = self.state().config_dir.clone() else {
+            return "nib does not know where the settings are".into();
+        };
+        let config = match Config::load(&dir) {
+            Ok(config) => config,
+            Err(err) => return format!("{err}; the settings in use are kept"),
+        };
+        let old = std::mem::take(&mut self.plugin_configs);
+        let mut restart = Vec::new();
+        let mut later = Vec::new();
+        for (id, plugin) in self.plugins().iter().enumerate() {
+            let was = old.get(&plugin.name).cloned().unwrap_or_default();
+            let now = config
+                .plugins
+                .get(&plugin.name)
+                .cloned()
+                .unwrap_or_default();
+            if was.settings != now.settings && plugin.enabled {
+                restart.push(id);
+            }
+            let settings_aside = |c: &PluginConfig| PluginConfig {
+                settings: String::new(),
+                ..c.clone()
+            };
+            if settings_aside(&was) != settings_aside(&now) {
+                later.push(plugin.name.clone());
+            }
+        }
+        self.apply_config(config);
+        let mut message = String::from("settings reloaded");
+        for id in restart {
+            let name = self.plugins()[id].name.clone();
+            match self.restart_plugin(id) {
+                Ok(()) => message += &format!("; {name} restarted"),
+                Err(err) => message += &format!("; {name}: {err}"),
+            }
+        }
+        if !later.is_empty() {
+            message += &format!(
+                "; the rest of {}'s settings take effect when nib starts again",
+                later.join(", ")
+            );
+        }
+        message
     }
 
     /// Whether plugin `id` can be updated from the core menu.
@@ -1249,6 +1376,7 @@ impl Editor {
     /// Delivers the events plugins caused, then brings the syntax tree and
     /// the scroll position up to date with what they did.
     pub(crate) fn after_plugins_ran(&mut self) {
+        self.reload_config_if_asked();
         self.deliver_events();
         // Scrolled first: injected languages are parsed near the screen.
         self.scroll_to_cursor();

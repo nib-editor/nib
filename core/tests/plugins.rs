@@ -591,3 +591,76 @@ fn plugins_install_and_remove_from_the_core_menu() {
     drop(editor);
     fs::remove_dir_all(&dir).unwrap();
 }
+
+/// Settings open from inside nib, and saving them reads them again.
+#[test]
+fn settings_open_and_reload_when_saved() {
+    let dir = env::temp_dir().join(format!("nib-{}-settings", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let mut editor = Editor::default();
+    editor.set_config_dir(Some(dir.clone()));
+    editor.load_plugin(&plugin_dir("helix")).unwrap();
+    editor.load_plugin(&plugin_dir("indent")).unwrap();
+    // Replaces the text with the helix keymap, then saves.
+    let write = |editor: &mut Editor, text: &str| {
+        let keys = text.replace('\n', "<ret>");
+        common::type_keys(editor, &format!("%di{keys}<esc>"));
+        editor.call_command("buffer.save", "{}").unwrap();
+    };
+
+    // Missing, config.toml opens with the defaults commented out, unsaved.
+    editor.call_command("config.open", "{}").unwrap();
+    assert_eq!(
+        editor.buffer().path(),
+        Some(dir.join("config.toml").as_path())
+    );
+    assert_eq!(
+        editor.buffer().text().to_string(),
+        nib_core::CONFIG_TEMPLATE
+    );
+    assert!(editor.buffer().is_modified());
+    assert!(!dir.join("config.toml").exists());
+
+    // Saved, it takes effect at once.
+    write(&mut editor, "[core]\ntab-width = 3\n");
+    assert_eq!(editor.message(), Some("settings reloaded"));
+    assert_eq!(editor.settings().tab_width, 3);
+
+    // A plugin's [settings] restart it; the rest waits for the next start.
+    editor
+        .call_command("config.open", r#"{"plugin": "indent"}"#)
+        .unwrap();
+    assert!(
+        editor
+            .buffer()
+            .text()
+            .to_string()
+            .contains("How nib runs the indent plugin")
+    );
+    write(
+        &mut editor,
+        "timeout-ms = 2000\n[settings.languages.yaml]\nindent = 3\n",
+    );
+    assert_eq!(
+        editor.message(),
+        Some(
+            "settings reloaded; indent restarted; the rest of indent's settings take effect when nib starts again"
+        )
+    );
+
+    // Broken, the settings in use stay.
+    editor.call_command("config.open", "{}").unwrap();
+    write(&mut editor, "[core]\ntab-width = \"wide\"\n");
+    assert!(
+        editor
+            .message()
+            .unwrap()
+            .ends_with("the settings in use are kept"),
+        "{:?}",
+        editor.message()
+    );
+    assert_eq!(editor.settings().tab_width, 3);
+    drop(editor);
+    fs::remove_dir_all(&dir).unwrap();
+}

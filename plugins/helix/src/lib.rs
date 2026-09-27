@@ -1164,6 +1164,16 @@ fn run_command_line(input: &str) {
         "q!" | "quit!" => quit(true),
         "wq" | "x" => save().and_then(|()| quit(false)),
         "bc" | "buffer-close" => close_buffer(false),
+        "config" => {
+            let args = match arg {
+                "" => "{}".to_string(),
+                name => format!(r#"{{"plugin":{}}}"#, json_string(name)),
+            };
+            let opened = commands::call("config.open", &args).map(|_| ());
+            to_blocks(&editor::active_view());
+            opened
+        }
+        "config-reload" => commands::call("config.reload", "{}").map(|_| ()),
         "bc!" | "buffer-close!" => close_buffer(true),
         "o" | "open" | "e" | "edit" if !arg.is_empty() => {
             let args = format!(r#"{{"path":{}}}"#, json_string(arg));

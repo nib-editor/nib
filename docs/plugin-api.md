@@ -244,6 +244,8 @@ interface syntax {
 | `buffer.open` | `{"path": string}` のファイルを開く |
 | `buffer.save` | 表示中のバッファを保存する |
 | `buffer.next` / `buffer.previous` | 次 / 前のバッファを表示する |
+| `config.open` | `config.toml` を開く。`{"plugin": name}` なら `plugins/<name>.toml`。なければ既定値のコメントを書いた状態で開く |
+| `config.reload` | 設定を読み直す（設定のディレクトリのファイルを保存したときも読み直す） |
 | `buffer.close` | 表示中のバッファを閉じる。保存していない変更があれば断り、`{"force": true}` で捨てる |
 | `view.split` | `{"direction": "vertical" \| "horizontal"}` で分割する |
 | `view.close` / `view.only` | フォーカスのあるビューを閉じる / それ以外を閉じる |

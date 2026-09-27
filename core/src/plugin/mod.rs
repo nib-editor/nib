@@ -784,6 +784,7 @@ impl Editor {
                 .unwrap_or_else(|| Err(format!("{name}: the plugin is not running"))),
             None => self.state_mut().run_command(name, args),
         };
+        self.reload_config_if_asked();
         self.deliver_events();
         result
     }
