@@ -21,7 +21,7 @@ cargo xtask build-plugins
 cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-cargo run --release -p nib-tui -- FILE
+cargo run --release -p nib-editor -- FILE
 ```
 
 The plugins live in their own workspace, so check them with `--manifest-path plugins/Cargo.toml`: clippy with `--target wasm32-wasip2`, and their unit tests natively. CI runs the same checks.

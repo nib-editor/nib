@@ -39,7 +39,8 @@
 
 - パッケージの名前は `nib-editor`（`nib` は別の人のクレートが使っている）。入る実行ファイルは `nib`。コアの `nib-core` も公開する。
 - crates.io からソースでビルドするときは、標準プラグインを作る手順（`cargo xtask build-plugins`）が走らない。公開するクレートに、ビルド済みの標準プラグイン（WASM、合わせて約 5 MB）を同梱する。
-  - `cargo xtask package-plugins` が、`target/plugins/` の標準プラグインを `tui/plugins/` に写す（git には入れない）。`tui/build.rs` は、`target/plugins/` がなければ `tui/plugins/` から埋め込む。
+  - `cargo xtask package` が、`target/plugins/` の標準プラグインを `tui/plugins/` に写す（git には入れない）。`tui/build.rs` は、`target/plugins/` がなければ `tui/plugins/` から埋め込む。ライセンスのファイルも、両方のクレートの隣に写す。
+- コアは WIT を `api/wit/` から読んでいたが、crates.io のクレートは自分の外を読めない。Go の SDK と同じく写しを `core/wit/` に置き、`api/wit/` と同じであることを CI で確かめる。
 - 公開した版は消せない（使わない印を付けられるだけ）。最初の公開は持ち主が手で行い、以降はリリースのワークフローが crates.io の Trusted Publishing で公開する。
 - `nib-editor` の `[package.metadata.binstall]` に、リリースのアーカイブの場所を書く。`cargo binstall nib-editor` はソースからビルドせずに、それを取る。
 

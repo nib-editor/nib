@@ -17,7 +17,12 @@ type Template = &'static [(&'static str, &'static str)];
 
 const RUST: Template = &[
     ("plugin.toml", include_str!("../templates/rust/plugin.toml")),
-    ("Cargo.toml", include_str!("../templates/rust/Cargo.toml")),
+    // Named so cargo does not take the template for a package of its own
+    // and leave it out of nib's.
+    (
+        "Cargo.toml",
+        include_str!("../templates/rust/Cargo.toml.in"),
+    ),
     ("src/lib.rs", include_str!("../templates/rust/src/lib.rs")),
     (
         "tests/NAME.toml",

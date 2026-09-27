@@ -1,0 +1,419 @@
+package nib:plugin@0.4.0;
+
+interface types {
+    /// A UTF-8 byte offset into a buffer.
+    type offset = u64;
+
+    /// `head` is where the cursor is, so it may be before `anchor`.
+    record sel-range { anchor: offset, head: offset }
+
+    record selection { ranges: list<sel-range>, primary: u32 }
+
+    /// Replaces `start..end` of the buffer before the change with `text`.
+    record edit { start: offset, end: offset, text: string }
+
+    enum undo-mode {
+        /// Start a new undo step.
+        new-step,
+        /// Add to the last undo step, e.g. while typing in insert mode.
+        merge,
+    }
+
+    enum cursor-shape { block, bar, underline }
+
+    /// Shift is never set for chars: 'Q' already says it is shifted.
+    flags modifiers { ctrl, alt, shift, super }
+
+    variant key-code {
+        %char(char),
+        enter,
+        escape,
+        tab,
+        backspace,
+        delete,
+        up,
+        down,
+        left,
+        right,
+        home,
+        end,
+        page-up,
+        page-down,
+        f(u8),
+    }
+
+    record key-event { code: key-code, modifiers: modifiers }
+
+    /// `style` names a theme entry, e.g. "ui.mode.normal".
+    record span { text: string, style: string }
+
+    type styled-line = list<span>;
+}
+
+interface editor {
+    use types.{offset, selection, edit, undo-mode, cursor-shape};
+
+    variant error {
+        /// The change was built against an older version of the buffer.
+        stale-version,
+        /// The offset is out of bounds or not on a char boundary.
+        invalid-position,
+        /// Edits in one change overlap each other.
+        overlapping-edits,
+        /// A selection needs at least one range and a primary index in bounds.
+        invalid-selection,
+        invalid-pattern(string),
+    }
+
+    resource buffer {
+        /// Increases on every change, including undo and redo.
+        version: func() -> u64;
+        len: func() -> offset;
+        slice: func(start: offset, end: offset) -> result<string, error>;
+        /// Text ending with a line break has an empty last line.
+        line-count: func() -> u64;
+        line-start: func(line: u64) -> option<offset>;
+        line-of: func(pos: offset) -> result<u64, error>;
+        next-grapheme: func(pos: offset) -> result<offset, error>;
+        prev-grapheme: func(pos: offset) -> result<offset, error>;
+        path: func() -> option<string>;
+        /// The first match starting at or after `start`, or with `backward`,
+        /// the last match ending at or before `start`. `^` and `$` match at
+        /// every line.
+        find: func(pattern: string, start: offset, backward: bool) -> result<option<tuple<offset, offset>>, error>;
+        find-all: func(pattern: string, start: offset, end: offset) -> result<list<tuple<offset, offset>>, error>;
+    }
+
+    variant scroll-amount {
+        lines(s32),
+        half-page(s32),
+        page(s32),
+    }
+
+    resource view {
+        buffer: func() -> buffer;
+        selection: func() -> selection;
+        set-selection: func(sel: selection) -> result<_, error>;
+        /// Applies `edits` atomically. Without `after`, the selection is
+        /// mapped through the change.
+        apply: func(base-version: u64, edits: list<edit>, after: option<selection>, undo: undo-mode) -> result<_, error>;
+        /// Returns false when there is nothing to undo.
+        undo: func() -> bool;
+        redo: func() -> bool;
+        set-cursor-shape: func(shape: cursor-shape);
+        /// Moves `lines` display lines down, or up if negative, from `pos`.
+        /// Aims for display `column`, or the column of `pos` when none.
+        /// Returns the new position and the column aimed for; pass that
+        /// column back to keep it across short lines.
+        move-vertically: func(pos: offset, lines: s32, column: option<u32>) -> result<tuple<offset, u32>, error>;
+        /// Scrolls without moving the cursor, and returns how many lines
+        /// `amount` stands for, negative upward. Move the cursor as many
+        /// lines to scroll with it, as Ctrl-d does; the core keeps the
+        /// cursor in view either way.
+        scroll: func(amount: scroll-amount) -> s32;
+        /// The part of the buffer on screen: from the start of the first line
+        /// shown to the end of the last one.
+        visible-range: func() -> tuple<offset, offset>;
+    }
+
+    active-view: func() -> view;
+    /// Every open buffer, e.g. for a plugin enabled after files were opened.
+    buffers: func() -> list<buffer>;
+    /// The editor's working directory, as an absolute path. Buffer paths
+    /// are as they were opened, so they may be relative to it.
+    working-directory: func() -> string;
+}
+
+interface input {
+    /// Adds a layer for this plugin on top of the input stack. Keys go to the
+    /// top layer first.
+    push-layer: func();
+    /// Removes this plugin's topmost layer.
+    pop-layer: func();
+}
+
+interface commands {
+    /// Registers the command `<plugin>.<name>`, where `<plugin>` is this
+    /// plugin's name. Calls reach this plugin's `run-command` with `name`.
+    /// Registering a name again replaces its description.
+    register: func(name: string, description: string);
+
+    /// Runs a command by its full name and waits for its result. Arguments
+    /// and the result are JSON. Calling a plugin that is already in a call,
+    /// such as the caller itself, is an error.
+    ///
+    /// Core commands:
+    /// - `buffer.save`: saves the current buffer.
+    /// - `buffer.open` `{"path": string}`: opens a file in the view.
+    /// - `buffer.next`, `buffer.previous`: shows another buffer.
+    /// - `editor.quit` `{"force": bool}`: quits; without `force`, fails when
+    ///   buffers have unsaved changes.
+    call: func(name: string, args: string) -> result<string, string>;
+
+    /// Every command, core and registered, with its description.
+    all: func() -> list<tuple<string, string>>;
+}
+
+/// Other programs, for plugins with the "process" capability. Output is
+/// read on background threads and arrives as events, so plugins never wait
+/// for it.
+interface process {
+    enum %stream { stdout, stderr }
+
+    /// A running program. Dropping it kills the program.
+    resource child {
+        /// The id its events carry.
+        id: func() -> u64;
+        /// Writes to its standard input. A program that does not read can
+        /// make this wait, so write in pieces it answers.
+        write: func(data: list<u8>) -> result<_, string>;
+        close-stdin: func();
+        kill: func();
+    }
+
+    /// Starts `command` with `args`, in `cwd` or the editor's working
+    /// directory.
+    spawn: func(command: string, args: list<string>, cwd: option<string>) -> result<child, string>;
+}
+
+/// The system clipboard, for plugins with the "clipboard" capability.
+interface clipboard {
+    get: func() -> result<string, string>;
+    set: func(text: string) -> result<_, string>;
+}
+
+/// File lists, for plugins with the "fs-read" capability. The files are
+/// counted on a background thread, so plugins never wait for them.
+interface files {
+    /// Lists the files under `dir`, or the working directory, honoring
+    /// .gitignore and leaving out hidden files. The paths arrive as
+    /// `files-listed` events, relative to `dir` and with `/` between names.
+    /// Returns the job's id.
+    walk: func(dir: option<string>) -> result<u64, string>;
+    /// Stops a job; nothing more arrives from it.
+    cancel: func(id: u64);
+}
+
+/// Events reach `guest.on-event` after the call that caused them, in the
+/// order they happened. A plugin gets the kinds listed in `events` in its
+/// plugin.toml, and its own timers and programs.
+interface events {
+    use types.{offset};
+    use editor.{buffer};
+    use process.{%stream};
+
+    /// One change, at positions in the text as it is when the changes
+    /// before it in the list have been applied. Lines and columns count
+    /// from 0; columns are in bytes.
+    record text-change {
+        start: offset,
+        end: offset,
+        start-line: u32,
+        start-column: u32,
+        end-line: u32,
+        end-column: u32,
+        text: string,
+    }
+
+    /// Applying `changes` in order turns the text before into the text at
+    /// `version`, as LSP's `didChange` does.
+    record buffer-change {
+        buffer: buffer,
+        version: u64,
+        changes: list<text-change>,
+    }
+
+    /// An event a plugin emitted; `name` has the plugin's name in front.
+    record custom-event { name: string, data: string }
+
+    /// Output as it was read, not split into lines.
+    record process-output { process: u64, %stream: %stream, data: list<u8> }
+
+    /// `code` is missing when the program had none, e.g. when a signal
+    /// ended it.
+    record process-exit { process: u64, code: option<s32> }
+
+    /// Up to a thousand paths of a `files.walk` job; the last ones have
+    /// `done`.
+    record files-listed { job: u64, paths: list<string>, done: bool }
+
+    variant event {
+        buffer-opened(buffer),
+        buffer-saved(buffer),
+        buffer-changed(buffer-change),
+        custom(custom-event),
+        /// The id `timers.set` returned.
+        timer(u64),
+        /// Only to the plugin that started the program.
+        process-output(process-output),
+        process-exit(process-exit),
+        /// Only to the plugin that asked for the list.
+        files-listed(files-listed),
+    }
+
+    /// Emits the custom event `<plugin>.<name>` with JSON `data`.
+    emit: func(name: string, data: string);
+}
+
+interface timers {
+    /// Sends `timer(id)` once, `ms` milliseconds from now, and returns `id`.
+    /// Timers are checked between keys, never during a call.
+    set: func(ms: u32) -> u64;
+    cancel: func(id: u64);
+}
+
+interface ui {
+    use types.{offset, styled-line};
+    use editor.{buffer};
+
+    enum side { left, right }
+
+    /// Shows an item in the status line, replacing this plugin's item with
+    /// the same `id`. Items on one side are ordered by `priority`, lowest
+    /// first.
+    set-status: func(id: string, side: side, priority: s32, content: styled-line);
+    remove-status: func(id: string);
+
+    /// Shows a message until the next key.
+    show-message: func(text: string);
+
+    /// Lines at the bottom of the screen, above the status line. Dropping the
+    /// panel closes it.
+    resource panel {
+        constructor(lines: list<styled-line>);
+        update: func(lines: list<styled-line>);
+        /// A line index and a byte offset into that line's text. While set,
+        /// the cursor is drawn there instead of in the buffer.
+        set-cursor: func(cursor: option<tuple<u32, u32>>);
+    }
+
+    variant popup-anchor {
+        /// Below the line of this offset in the shown buffer, or above it
+        /// when there is no room. Hidden while the offset is off screen.
+        /// The offset does not follow edits: open a new popup to move it.
+        position(offset),
+        /// The bottom-right corner of the text, e.g. for key hints.
+        corner,
+    }
+
+    /// Lines drawn over the text. They never take the cursor. Dropping the
+    /// popup closes it.
+    resource popup {
+        constructor(anchor: popup-anchor, lines: list<styled-line>);
+        update: func(lines: list<styled-line>);
+    }
+
+    /// A style over `start..end` of a buffer, drawn over the syntax
+    /// highlighting and under the selection. It only sets what the style
+    /// sets, e.g. the text color.
+    record decoration { start: offset, end: offset, style: string }
+
+    /// Replaces this plugin's decorations in `namespace` on `buf`; an empty
+    /// list removes them. The core moves them with later edits, and drops
+    /// ones whose text is deleted. Ranges are cut to the buffer.
+    set-decorations: func(buf: borrow<buffer>, namespace: string, decorations: list<decoration>);
+
+    /// Text shown after the end of the line of `at`, such as a diagnostic's
+    /// message.
+    record note { at: offset, text: string, style: string }
+
+    /// Replaces this plugin's notes in `namespace` on `buf`, as with
+    /// decorations. Notes move with edits and stay when the text around
+    /// them is deleted.
+    set-notes: func(buf: borrow<buffer>, namespace: string, notes: list<note>);
+}
+
+interface settings {
+    use editor.{buffer};
+
+    /// An editing setting as JSON, for the shown buffer: "tab-width",
+    /// "indent" (a number of spaces or "tab"), or "scroll-margin".
+    get: func(key: string) -> option<string>;
+    /// An editing setting for `buf`.
+    get-for: func(buf: borrow<buffer>, key: string) -> option<string>;
+    /// Sets "tab-width" or "indent" for `buf` alone, over config.toml's
+    /// value; `none` goes back to it. The last plugin to set a key wins, and
+    /// what a plugin set goes away when it stops.
+    set-for: func(buf: borrow<buffer>, key: string, value: option<string>) -> result<_, string>;
+}
+
+/// The syntax trees the core keeps for buffers with a language. Every
+/// function brings the buffer's tree up to date first, so it reflects edits
+/// made earlier in the same call. Buffers without a tree give `none` or an
+/// empty list.
+interface syntax {
+    use types.{offset};
+    use editor.{buffer};
+
+    /// A node of a buffer's syntax tree, as it was when returned. Nodes are
+    /// values: `parent` and `children` find them again by `id` and range,
+    /// and after the buffer changes they may no longer find them.
+    record node {
+        /// Tells apart nodes with the same range, e.g. an expression
+        /// statement and the call it consists of.
+        id: u64,
+        /// The grammar's name for it, e.g. "function_item" or "(".
+        kind: string,
+        /// False for punctuation and keywords, which grammars name by their
+        /// text.
+        named: bool,
+        start: offset,
+        end: offset,
+    }
+
+    /// The name of the buffer's language.
+    language: func(buf: borrow<buffer>) -> option<string>;
+    /// The smallest node covering `start..end`, or with `named`, the
+    /// smallest named one.
+    node-at: func(buf: borrow<buffer>, start: offset, end: offset, named: bool) -> option<node>;
+    parent: func(buf: borrow<buffer>, of: node) -> option<node>;
+    /// All children in order, named or not.
+    children: func(buf: borrow<buffer>, of: node) -> list<node>;
+    /// Runs the language's query named `query`, e.g. "textobjects", over
+    /// `start..end`, and returns where `capture` matched, in order. When one
+    /// match captures several nodes under that name, as with
+    /// `(line_comment)+ @comment.around`, they make one range from the first
+    /// to the last. Each range appears once. Empty when the language has no
+    /// such query.
+    captures: func(buf: borrow<buffer>, query: string, capture: string, start: offset, end: offset) -> list<tuple<offset, offset>>;
+}
+
+interface guest {
+    use types.{key-event};
+    use events.{event};
+
+    enum key-result {
+        handled,
+        /// Let the layer below handle the key.
+        pass,
+    }
+
+    /// Called once after loading. `config` is the plugin's config table as JSON.
+    init: func(config: string) -> result<_, string>;
+
+    /// A key reached one of this plugin's input layers. The core's menu key
+    /// (Ctrl-g by default) never arrives.
+    handle-key: func(ev: key-event) -> key-result;
+
+    /// One of this plugin's registered commands was called, by the name it
+    /// was registered with.
+    run-command: func(name: string, args: string) -> result<string, string>;
+
+    on-event: func(ev: event);
+}
+
+world plugin {
+    import editor;
+    import input;
+    import commands;
+    import ui;
+    import settings;
+    import syntax;
+    import events;
+    import timers;
+    import process;
+    import files;
+    import clipboard;
+
+    export guest;
+}

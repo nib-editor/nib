@@ -5,7 +5,7 @@ WASM プラグインで全機能を構成するモーダルエディタ。標準
 ## 構成
 
 - `core/` — エディタ本体（crate: `nib-core`）。バッファ・選択・描画・プラグインホストだけを持つ
-- `tui/` — ターミナルのフロントエンド（crate: `nib-tui`、実行ファイル `nib`）。`nib-core` は端末に依存しない
+- `tui/` — ターミナルのフロントエンド（crate: `nib-editor`、実行ファイル `nib`。crates.io の `nib` は別の人のもの）。`nib-core` は端末に依存しない
 - `api/` — プラグイン API の WIT 定義。コアと全 SDK の唯一の正
 - `sdk/<lang>/` — 言語別プラグイン SDK
 - `plugins/` — 標準プラグイン（`plugins/test/` はテスト用）。公開 API だけで書く（コア内部に依存しない）。wasm32-wasip2 専用の別ワークスペース
@@ -31,9 +31,9 @@ cargo test --workspace
 
 プラグインは別ワークスペース（`plugins/Cargo.toml`）なので、fmt、clippy、test は `--manifest-path plugins/Cargo.toml` を付けて別に回す（clippy は `--target wasm32-wasip2`、test はネイティブで動かす）。CI も同じ内容（test は Linux / macOS / Windows）。
 
-`api/wit/` を変えたら `cargo xtask build-plugins` をやり直す。古いプラグインは読み込みで型が合わずに失敗する。Go の SDK のために、`sdk/go/wit/deps/nib-plugin/` へ写して `sdk/go` で `go generate` もする（CI が写しの一致を確かめる）。Go のテスト用プラグイン（`plugins/test/go`）は TinyGo（と、TinyGo が使う binaryen の `wasm-opt`、`wasm-tools`）があればビルドされ、なければ飛ばされる。
+`api/wit/` を変えたら `cargo xtask build-plugins` をやり直す。古いプラグインは読み込みで型が合わずに失敗する。コアは写しの `core/wit/` から読むので、そこへも写す（crates.io のクレートが自分の外を読めないため）。Go の SDK のために、`sdk/go/wit/deps/nib-plugin/` へ写して `sdk/go` で `go generate` もする（CI がどちらの写しも一致を確かめる）。Go のテスト用プラグイン（`plugins/test/go`）は TinyGo（と、TinyGo が使う binaryen の `wasm-opt`、`wasm-tools`）があればビルドされ、なければ飛ばされる。
 
-`nib` の実行ファイルは、ビルド時に `target/plugins/` にある標準プラグイン（helix と `plugins/languages/` の言語）を埋め込む（`tui/build.rs` の `STANDARD_PLUGINS`）。言語を足したら、そこにも足す。コアのビルドには cmake が要る（tree-sitter が WASM の文法を読むのに使う wasmtime の C API のため）。wasmtime のバージョンは tree-sitter が使うものにそろえる。プラグインを変えたら `cargo xtask build-plugins` のあとで `nib` をビルドし直す。
+`nib` の実行ファイルは、ビルド時に `target/plugins/` にある標準プラグイン（helix と `plugins/languages/` の言語）を埋め込む（一覧は `tui/standard-plugins.txt`）。言語を足したら、そこにも足す。crates.io に出すときは `cargo xtask package` で同梱の準備をする（docs/distribution.md）。コアのビルドには cmake が要る（tree-sitter が WASM の文法を読むのに使う wasmtime の C API のため）。wasmtime のバージョンは tree-sitter が使うものにそろえる。プラグインを変えたら `cargo xtask build-plugins` のあとで `nib` をビルドし直す。
 
 ## ライセンス
 

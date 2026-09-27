@@ -1,3 +1,7 @@
 target/
+# Copied there by `cargo xtask package` for crates.io.
+/tui/plugins/
+/core/LICENSE-*
+/tui/LICENSE-*
 .DS_Store
 __pycache__/

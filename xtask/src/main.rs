@@ -4,11 +4,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
-const USAGE: &str = "usage: cargo xtask build-plugins";
+const USAGE: &str = "usage: cargo xtask build-plugins | package";
 
 fn main() -> ExitCode {
     let result = match std::env::args().nth(1).as_deref() {
         Some("build-plugins") => build_plugins(),
+        Some("package") => package(),
         _ => Err(USAGE.into()),
     };
     match result {
@@ -18,6 +19,56 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Readies the crates for crates.io (docs/distribution.md): the built
+/// standard plugins go into `tui/plugins/`, as a source build there cannot
+/// build them, and the licenses next to each crate's manifest.
+fn package() -> Result<(), String> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask lives in the repository root");
+    for krate in ["core", "tui"] {
+        for license in ["LICENSE-MIT", "LICENSE-APACHE"] {
+            let to = root.join(krate).join(license);
+            fs::copy(root.join(license), &to).map_err(|err| format!("{}: {err}", to.display()))?;
+        }
+    }
+    let list = root.join("tui/standard-plugins.txt");
+    let list = fs::read_to_string(&list).map_err(|err| format!("{}: {err}", list.display()))?;
+    let out = root.join("tui/plugins");
+    let _ = fs::remove_dir_all(&out);
+    for name in list
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+    {
+        let built = root.join("target/plugins").join(name);
+        if !built.join("plugin.toml").is_file() {
+            return Err(format!(
+                "{} is missing; run `cargo xtask build-plugins` first",
+                built.display()
+            ));
+        }
+        copy_tree(&built, &out.join(name))?;
+    }
+    println!("copied the standard plugins to {}", out.display());
+    Ok(())
+}
+
+fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
+    fs::create_dir_all(to).map_err(|err| format!("{}: {err}", to.display()))?;
+    let entries = fs::read_dir(from).map_err(|err| format!("{}: {err}", from.display()))?;
+    for entry in entries {
+        let path = entry.map_err(|err| err.to_string())?.path();
+        let dest = to.join(path.file_name().expect("an entry has a name"));
+        if path.is_dir() {
+            copy_tree(&path, &dest)?;
+        } else {
+            fs::copy(&path, &dest).map_err(|err| format!("{}: {err}", path.display()))?;
+        }
+    }
+    Ok(())
 }
 
 /// Builds every plugin under `plugins/` for wasm32-wasip2 and lays them out

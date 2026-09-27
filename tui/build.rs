@@ -1,19 +1,21 @@
 //! Embeds the standard plugins built by `cargo xtask build-plugins`, so `nib`
-//! works without any setup. Without them, the binary still builds, with a
-//! warning, so checks do not need the wasm toolchain.
+//! works without any setup: from `target/plugins/` in the repository, or
+//! from `plugins/` next to this file in the crate on crates.io, which ships
+//! them prebuilt, copied by `cargo xtask package` (docs/distribution.md). Without them, the binary still
+//! builds, with a warning, so checks do not need the wasm toolchain.
 
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-/// Built in, in load order: the keymap first, so it is at the bottom of the
-/// input stack.
-const STANDARD_PLUGINS: &[&str] = &[
-    "helix", "picker", "lsp", "indent", "bash", "go", "json", "markdown", "python", "rust", "toml",
-    "yaml",
-];
-
 fn main() {
-    let root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("..");
+    let here = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let list = here.join("standard-plugins.txt");
+    println!("cargo::rerun-if-changed={}", list.display());
+    let list = fs::read_to_string(&list).unwrap();
+    let standard = list
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'));
     // A static, not a const: a const's data is copied into every place that
     // uses it, which doubled the grammars in the binary.
     let mut code = String::from(
@@ -21,8 +23,14 @@ fn main() {
          pub type Files = &'static [(&'static str, &'static [u8])];\n\
          pub static PLUGINS: &[(&str, &str, Files)] = &[\n",
     );
-    for name in STANDARD_PLUGINS {
-        let dir = root.join("target/plugins").join(name);
+    for name in standard {
+        let built = here.join("../target/plugins").join(name);
+        let shipped = here.join("plugins").join(name);
+        let dir = if built.join("plugin.toml").is_file() {
+            built
+        } else {
+            shipped
+        };
         let manifest = dir.join("plugin.toml");
         println!("cargo::rerun-if-changed={}", dir.display());
         if !manifest.is_file() {

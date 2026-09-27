@@ -1,0 +1,15 @@
+# The plugins built into nib, in load order: the keymap first, so it is at
+# the bottom of the input stack. Read by build.rs and `cargo xtask
+# package`.
+helix
+picker
+lsp
+indent
+bash
+go
+json
+markdown
+python
+rust
+toml
+yaml

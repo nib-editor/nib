@@ -1,11 +1,25 @@
 [package]
-name = "nib-tui"
-description = "Terminal frontend of the nib editor"
+# nib is taken on crates.io; the binary is still nib.
+name = "nib-editor"
+description = "A modal editor made of WebAssembly plugins, the Helix-style keymap included"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
+readme = "../README.md"
+keywords = ["editor", "modal", "wasm", "plugins", "tree-sitter"]
+categories = ["text-editors", "command-line-utilities"]
+# The standard plugins in plugins/ are ignored by git but shipped.
+include = [
+    "src/**",
+    "templates/**",
+    "build.rs",
+    "standard-plugins.txt",
+    "plugins/**",
+    "LICENSE-*",
+]
 
 [[bin]]
 name = "nib"
@@ -22,4 +36,13 @@ serde_json = "1"
 sha2 = "0.10"
 toml = "1"
 crossterm = "0.29"
-nib-core = { path = "../core" }
+nib-core.workspace = true
+
+# `cargo binstall nib-editor` takes the release's archive.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/nib-v{ version }-{ target }{ archive-suffix }"
+bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"

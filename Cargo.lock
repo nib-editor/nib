@@ -1294,14 +1294,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "nib-plugin"
-version = "0.4.2"
-dependencies = [
- "wit-bindgen",
-]
-
-[[package]]
-name = "nib-tui"
+name = "nib-editor"
 version = "0.9.9"
 dependencies = [
  "arboard",
@@ -1313,6 +1306,13 @@ dependencies = [
  "sha2",
  "tar",
  "toml 1.1.6+spec-1.1.0",
+]
+
+[[package]]
+name = "nib-plugin"
+version = "0.4.2"
+dependencies = [
+ "wit-bindgen",
 ]
 
 [[package]]

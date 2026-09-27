@@ -8,4 +8,9 @@ version = "0.9.9"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 authors = ["Q0tzly <contact@q0tzly.dev>"]
-repository = "https://github.com/Q0tzly/nib"
+repository = "https://github.com/nib-editor/nib"
+homepage = "https://github.com/nib-editor/nib"
+
+[workspace.dependencies]
+# The same version as the workspace's, which crates.io needs.
+nib-core = { path = "core", version = "0.9.9" }

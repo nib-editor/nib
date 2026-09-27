@@ -6,6 +6,11 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
+readme = "../README.md"
+keywords = ["editor", "wasm", "plugins", "tree-sitter"]
+categories = ["text-editors"]
+include = ["src/**", "wit/**", "LICENSE-*"]
 
 [dependencies]
 # Line endings are normalized to LF on load, so only LF counts as a line break.

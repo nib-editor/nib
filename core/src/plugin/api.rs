@@ -23,7 +23,9 @@ use crate::{Edit, Error};
 
 pub(crate) mod bindings {
     wasmtime::component::bindgen!({
-        path: "../api/wit",
+        // A copy of api/wit, which CI checks, as the crate on crates.io
+        // cannot reach outside itself.
+        path: "wit",
         world: "plugin",
         // Host functions trap when a plugin misuses the API, e.g. with a
         // handle to a buffer that no longer exists.

@@ -27,6 +27,8 @@ jobs:
       - run: cargo test --manifest-path plugins/Cargo.toml --workspace --locked
       # The Go SDK carries a copy of the WIT, which has to match.
       - run: diff api/wit/plugin.wit sdk/go/wit/deps/nib-plugin/plugin.wit
+      # So does the core, whose crate on crates.io cannot read api/.
+      - run: diff api/wit/plugin.wit core/wit/plugin.wit
       - run: test -z "$(gofmt -l sdk/go plugins/test/go)"
 
   test:
