@@ -254,6 +254,29 @@ impl editor::HostBuffer for PluginData {
         )
     }
 
+    fn set_marks(
+        &mut self,
+        buffer: Resource<BufferHandle>,
+        namespace: String,
+        marks: Vec<u64>,
+    ) -> HostResult<()> {
+        let owner = self.plugin;
+        let offset = |o: u64| usize::try_from(o).unwrap_or(usize::MAX);
+        self.buffer(&buffer)?
+            .set_marks(owner, &namespace, marks.into_iter().map(offset).collect());
+        Ok(())
+    }
+
+    fn marks(&mut self, buffer: Resource<BufferHandle>, namespace: String) -> HostResult<Vec<u64>> {
+        let owner = self.plugin;
+        let buffer = self.buffer(&buffer)?;
+        Ok(buffer
+            .marks(owner, &namespace)
+            .iter()
+            .map(|&p| p as u64)
+            .collect())
+    }
+
     fn drop(&mut self, _buffer: Resource<BufferHandle>) -> HostResult<()> {
         Ok(())
     }

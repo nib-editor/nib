@@ -258,7 +258,7 @@ To make it findable by name, add it to [nib-editor/plugins](https://github.com/n
 crate-type = ["cdylib"]
 
 [dependencies]
-nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.5.2" }
+nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.5.3" }
 ```
 
 Implement `nib_plugin::exports::nib::plugin::guest::Guest` and export it with `nib_plugin::export!(YourType)`. The API is under `nib_plugin::nib::plugin::<interface>`. Build for `wasm32-wasip2`; `nib plugin build` does it.
@@ -269,4 +269,4 @@ Built with [TinyGo](https://tinygo.org/) 0.42 or later, since Go itself cannot m
 
 ### Versions
 
-SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.5.2`, `sdk/go/v0.5.2`.
+SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.5.3`, `sdk/go/v0.5.3`.

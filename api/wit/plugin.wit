@@ -1,4 +1,4 @@
-package nib:plugin@0.5.2;
+package nib:plugin@0.5.3;
 
 interface types {
     /// A UTF-8 byte offset into a buffer.
@@ -82,6 +82,14 @@ interface editor {
         /// every line.
         find: func(pattern: string, start: offset, backward: bool) -> result<option<tuple<offset, offset>>, error>;
         find-all: func(pattern: string, start: offset, end: offset) -> result<list<tuple<offset, offset>>, error>;
+        /// Replaces the positions this plugin keeps in `namespace` of this
+        /// buffer, such as vim's marks or Emacs's mark ring; an empty list
+        /// removes them. The core moves them with every edit, whoever makes
+        /// it: they stay before text inserted where they are, and go where
+        /// deleted text was. Positions past the end go to the end.
+        set-marks: func(namespace: string, marks: list<offset>);
+        /// The positions this plugin keeps in `namespace`, in the order set.
+        marks: func(namespace: string) -> list<offset>;
     }
 
     variant scroll-amount {

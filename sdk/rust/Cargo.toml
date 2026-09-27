@@ -2,7 +2,7 @@
 name = "nib-plugin"
 description = "SDK for writing nib plugins in Rust"
 # Versioned apart from the editor: bumped only when api/ changes.
-version = "0.5.2"
+version = "0.5.3"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true

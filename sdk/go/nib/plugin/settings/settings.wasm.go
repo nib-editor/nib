@@ -6,16 +6,16 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.2".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.3".
 
-//go:wasmimport nib:plugin/settings@0.5.2 get
+//go:wasmimport nib:plugin/settings@0.5.3 get
 //go:noescape
 func wasmimport_Get(key0 *uint8, key1 uint32, result *cm.Option[string])
 
-//go:wasmimport nib:plugin/settings@0.5.2 get-for
+//go:wasmimport nib:plugin/settings@0.5.3 get-for
 //go:noescape
 func wasmimport_GetFor(buf0 uint32, key0 *uint8, key1 uint32, result *cm.Option[string])
 
-//go:wasmimport nib:plugin/settings@0.5.2 set-for
+//go:wasmimport nib:plugin/settings@0.5.3 set-for
 //go:noescape
 func wasmimport_SetFor(buf0 uint32, key0 *uint8, key1 uint32, value0 uint32, value1 *uint8, value2 uint32, result *cm.Result[string, struct{}, string])

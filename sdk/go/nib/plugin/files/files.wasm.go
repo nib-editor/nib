@@ -6,12 +6,12 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.2".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.3".
 
-//go:wasmimport nib:plugin/files@0.5.2 walk
+//go:wasmimport nib:plugin/files@0.5.3 walk
 //go:noescape
 func wasmimport_Walk(dir0 uint32, dir1 *uint8, dir2 uint32, result *cm.Result[string, uint64, string])
 
-//go:wasmimport nib:plugin/files@0.5.2 cancel
+//go:wasmimport nib:plugin/files@0.5.3 cancel
 //go:noescape
 func wasmimport_Cancel(id0 uint64)

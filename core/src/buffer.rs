@@ -53,6 +53,8 @@ pub struct Buffer {
     pub(crate) decorations: Vec<Decoration>,
     /// Sorted by position.
     pub(crate) notes: Vec<Note>,
+    /// Positions plugins keep, such as vim's marks, by owner and namespace.
+    marks: Vec<Marks>,
     /// Settings plugins changed for this buffer alone, with who changed them.
     pub(crate) overrides: Overrides,
     /// Changes not yet turned into events: the version after each, and
@@ -91,6 +93,7 @@ impl Buffer {
             syntax: None,
             decorations: Vec::new(),
             notes: Vec::new(),
+            marks: Vec::new(),
             overrides: Overrides::default(),
             change_log: Vec::new(),
             closed: false,
@@ -389,6 +392,7 @@ impl Buffer {
     pub(crate) fn remove_decorations(&mut self, owner: PluginId) {
         self.decorations.retain(|d| d.owner != owner);
         self.notes.retain(|n| n.owner != owner);
+        self.marks.retain(|m| m.owner != owner);
         let overrides = &mut self.overrides;
         overrides.tab_width = overrides.tab_width.filter(|(o, _)| *o != owner);
         overrides.indent = overrides.indent.filter(|(o, _)| *o != owner);
@@ -415,12 +419,43 @@ impl Buffer {
         self.notes.sort_by_key(|n| n.at);
     }
 
-    /// Moves decorations with the text. Text inserted at either end stays
-    /// outside, and decorations whose text is gone are dropped.
+    /// Replaces the positions `owner` keeps in `namespace`, in their order.
+    /// Positions past the end go to the end; none removes the namespace.
+    pub(crate) fn set_marks(&mut self, owner: PluginId, namespace: &str, positions: Vec<usize>) {
+        self.marks
+            .retain(|m| !(m.owner == owner && m.namespace == namespace));
+        if positions.is_empty() {
+            return;
+        }
+        let len = self.len();
+        self.marks.push(Marks {
+            owner,
+            namespace: namespace.to_string(),
+            positions: positions.into_iter().map(|p| p.min(len)).collect(),
+        });
+    }
+
+    /// The positions `owner` keeps in `namespace`, where edits moved them.
+    pub(crate) fn marks(&self, owner: PluginId, namespace: &str) -> &[usize] {
+        self.marks
+            .iter()
+            .find(|m| m.owner == owner && m.namespace == namespace)
+            .map_or(&[], |m| &m.positions)
+    }
+
+    /// Moves decorations, notes, and marks with the text. Text inserted at
+    /// either end of a decoration stays outside, and decorations whose text
+    /// is gone are dropped. Notes and marks stay before text inserted where
+    /// they are, as Emacs's markers do, and go where their text went.
     fn map_decorations(&mut self, changes: &[ChangeSet]) {
-        for note in &mut self.notes {
+        let positions = self.notes.iter_mut().map(|note| &mut note.at).chain(
+            self.marks
+                .iter_mut()
+                .flat_map(|marks| marks.positions.iter_mut()),
+        );
+        for pos in positions {
             for change in changes {
-                note.at = change.map_pos(note.at, Assoc::Before);
+                *pos = change.map_pos(*pos, Assoc::Before);
             }
         }
         if self.decorations.is_empty() {
@@ -441,9 +476,55 @@ impl Buffer {
     }
 }
 
+/// Positions a plugin keeps in one namespace.
+struct Marks {
+    owner: PluginId,
+    namespace: String,
+    positions: Vec<usize>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn marks_follow_edits_and_undo() {
+        let mut buffer = Buffer::with_text("one two three");
+        buffer.set_marks(1, "a", vec![4, 8, 99]);
+        buffer.set_marks(2, "a", vec![0]);
+        assert_eq!(buffer.marks(1, "a"), [4, 8, 13]);
+        let edit = |buffer: &mut Buffer, edits| {
+            let version = buffer.version();
+            buffer
+                .apply(
+                    version,
+                    edits,
+                    &Selection::point(0),
+                    None,
+                    UndoMode::NewStep,
+                )
+                .unwrap();
+        };
+        edit(&mut buffer, vec![Edit::insert(0, "zero ")]);
+        assert_eq!(buffer.marks(1, "a"), [9, 13, 18]);
+        // Text typed where a mark is goes after it; deleted text takes its
+        // marks to where it was.
+        edit(
+            &mut buffer,
+            vec![Edit::insert(9, "2"), Edit::delete(12, 18)],
+        );
+        assert_eq!(buffer.text().to_string(), "zero one 2two");
+        assert_eq!(buffer.marks(1, "a"), [9, 13, 13]);
+        // Undo puts the text back after the marks, as it is inserted
+        // where they are.
+        buffer.undo();
+        assert_eq!(buffer.marks(1, "a"), [9, 12, 12]);
+        assert_eq!(buffer.marks(2, "a"), [0]);
+        buffer.remove_decorations(2);
+        assert!(buffer.marks(2, "a").is_empty());
+        buffer.set_marks(1, "a", Vec::new());
+        assert!(buffer.marks(1, "a").is_empty());
+    }
 
     #[test]
     fn finds_what_differs() {

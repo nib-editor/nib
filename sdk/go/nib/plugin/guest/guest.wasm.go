@@ -6,10 +6,10 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.2".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.3".
 
-//go:wasmexport nib:plugin/guest@0.5.2#init
-//export nib:plugin/guest@0.5.2#init
+//go:wasmexport nib:plugin/guest@0.5.3#init
+//export nib:plugin/guest@0.5.3#init
 func wasmexport_Init(config0 *uint8, config1 uint32) (result *cm.Result[string, struct{}, string]) {
 	config := cm.LiftString[string]((*uint8)(config0), (uint32)(config1))
 	result_ := Exports.Init(config)
@@ -17,8 +17,8 @@ func wasmexport_Init(config0 *uint8, config1 uint32) (result *cm.Result[string, 
 	return
 }
 
-//go:wasmexport nib:plugin/guest@0.5.2#handle-key
-//export nib:plugin/guest@0.5.2#handle-key
+//go:wasmexport nib:plugin/guest@0.5.3#handle-key
+//export nib:plugin/guest@0.5.3#handle-key
 func wasmexport_HandleKey(ev0 uint32, ev1 uint32, ev2 uint32) (result0 uint32) {
 	ev := lift_KeyEvent((uint32)(ev0), (uint32)(ev1), (uint32)(ev2))
 	result := Exports.HandleKey(ev)
@@ -26,8 +26,8 @@ func wasmexport_HandleKey(ev0 uint32, ev1 uint32, ev2 uint32) (result0 uint32) {
 	return
 }
 
-//go:wasmexport nib:plugin/guest@0.5.2#run-command
-//export nib:plugin/guest@0.5.2#run-command
+//go:wasmexport nib:plugin/guest@0.5.3#run-command
+//export nib:plugin/guest@0.5.3#run-command
 func wasmexport_RunCommand(name0 *uint8, name1 uint32, args0 *uint8, args1 uint32) (result *cm.Result[string, string, string]) {
 	name := cm.LiftString[string]((*uint8)(name0), (uint32)(name1))
 	args := cm.LiftString[string]((*uint8)(args0), (uint32)(args1))
@@ -36,8 +36,8 @@ func wasmexport_RunCommand(name0 *uint8, name1 uint32, args0 *uint8, args1 uint3
 	return
 }
 
-//go:wasmexport nib:plugin/guest@0.5.2#on-event
-//export nib:plugin/guest@0.5.2#on-event
+//go:wasmexport nib:plugin/guest@0.5.3#on-event
+//export nib:plugin/guest@0.5.3#on-event
 func wasmexport_OnEvent(ev0 uint32, ev1 uint64, ev2 uint64, ev3 uint32, ev4 uint32) {
 	ev := lift_Event((uint32)(ev0), (uint64)(ev1), (uint64)(ev2), (uint32)(ev3), (uint32)(ev4))
 	Exports.OnEvent(ev)

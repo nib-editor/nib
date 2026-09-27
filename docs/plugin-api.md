@@ -143,6 +143,10 @@ interface editor {
         /// 正規表現で検索する。見つかった範囲を返す
         find: func(pattern: string, start: offset, backward: bool) -> result<option<tuple<offset, offset>>, error>;
         find-all: func(pattern: string, start: offset, end: offset) -> result<list<tuple<offset, offset>>, error>;
+        /// 編集に合わせて動く位置（位置の印）を、名前空間ごとに置き換える。空のリストで消える
+        set-marks: func(namespace: string, marks: list<offset>);
+        /// 名前空間の位置の印を、置いた順に返す
+        marks: func(namespace: string) -> list<offset>;
     }
 
     variant scroll-amount { lines(s32), half-page(s32), page(s32) }
@@ -185,6 +189,11 @@ interface editor {
 - 閉じたバッファやビューの handle を使うと、プラグインはトラップする。プラグインのバグとして扱い、再起動の対象にする。
 - 書記素の境界は、コアが `next-grapheme` / `prev-grapheme` として提供する。プラグインごとに Unicode の表を持たなくて済み、描画とも結果が食い違わない。
 - 正規表現の検索は、コアが `find` / `find-all` として提供する。プラグインが自前で検索すると、大きなバッファの全文を毎回コピーすることになるため。
+- 位置の印（`set-marks` / `marks`）は、vim のマークとジャンプリスト、Emacs のマークとマークリングのように、編集されても同じ場所を指し続けたい位置に使う（[base.md](base.md) の「コアに足すもの」）。
+  - どのプラグインの編集でも、コアが動かす。ベースが自分で持つと、LSP の整形のような他のプラグインの編集でずれるため。
+  - 動かし方は注記と同じ。印の位置に挿入された文字は印の後ろに入り（Emacs のマーカーの既定と同じ）、消された範囲の印は消えた場所へ動く。undo で文字が戻っても、印は戻らない。
+  - 名前空間はプラグインごとに別で、ほかのプラグインの印は読めない。順番は置いたとおりに保つので、リストをそのままリング（マークリング）やジャンプリストに使える。
+  - プラグインが止まると消える。ベースを切り替えると、前のベースの印も消える。
 - 縦移動（`j` / `k`）、スクロール、表示範囲は、画面の配置を知っているコアが計算する。プラグインは画面の行と列を知らないまま、これらの操作を書ける。
 
 ## 構文木

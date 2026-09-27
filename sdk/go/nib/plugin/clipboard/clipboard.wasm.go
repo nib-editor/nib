@@ -6,12 +6,12 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.2".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.3".
 
-//go:wasmimport nib:plugin/clipboard@0.5.2 get
+//go:wasmimport nib:plugin/clipboard@0.5.3 get
 //go:noescape
 func wasmimport_Get(result *cm.Result[string, string, string])
 
-//go:wasmimport nib:plugin/clipboard@0.5.2 set
+//go:wasmimport nib:plugin/clipboard@0.5.3 set
 //go:noescape
 func wasmimport_Set(text0 *uint8, text1 uint32, result *cm.Result[string, struct{}, string])
