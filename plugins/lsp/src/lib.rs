@@ -248,6 +248,9 @@ impl Guest for Plugin {
                 });
                 lsp.failed.insert(server.language);
             }
+            Event::Custom(custom) if custom.name == "editor.buffer_closed" => {
+                lsp.closed(&custom.data);
+            }
             Event::Custom(custom) => {
                 if custom.name == "helix.mode_changed" {
                     lsp.inserting = custom.data == "\"insert\"";
@@ -351,6 +354,29 @@ impl Lsp {
         } else if !server.waiting.contains(&uri) {
             server.waiting.push(uri);
         }
+    }
+
+    /// A buffer closed: servers that have it open close it too, and what
+    /// was known of it goes. `data` is the core's `{"path": ...}`.
+    fn closed(&mut self, data: &str) {
+        let data: Value = serde_json::from_str(data).unwrap_or_default();
+        let Some(path) = data["path"].as_str() else {
+            return;
+        };
+        let uri = self.uri_of(path);
+        for server in &mut self.servers {
+            server.waiting.retain(|u| *u != uri);
+            if server.opened.remove(&uri) {
+                server.notify(
+                    "textDocument/didClose",
+                    json!({"textDocument": {"uri": uri}}),
+                );
+            }
+        }
+        self.pushed.remove(&uri);
+        self.pulled.remove(&uri);
+        self.counts.remove(&uri);
+        self.pull_waiting.remove(&uri);
     }
 
     fn changed(&mut self, change: &BufferChange) {
@@ -898,14 +924,17 @@ impl Lsp {
     }
 
     fn uri(&self, buffer: &Buffer) -> Option<String> {
-        let path = buffer.path()?;
-        let absolute = if is_absolute(&path) {
-            path
+        Some(self.uri_of(&buffer.path()?))
+    }
+
+    fn uri_of(&self, path: &str) -> String {
+        let absolute = if is_absolute(path) {
+            path.to_string()
         } else {
-            let relative = path.strip_prefix("./").unwrap_or(&path);
+            let relative = path.strip_prefix("./").unwrap_or(path);
             format!("{}/{relative}", self.cwd)
         };
-        Some(path_to_uri(&absolute))
+        path_to_uri(&absolute)
     }
 
     /// The open buffer with URI `uri`.

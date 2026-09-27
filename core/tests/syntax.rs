@@ -532,7 +532,8 @@ fn code_blocks_with_no_language_are_in_their_host_language() {
     assert_ne!(fg(&editor, 4, 4), KEYWORD);
     fs::remove_file(&path).unwrap();
 
-    let text = "```\nfn main() {}\n```\n\n```rust\nfn main() {}\n```\n\n```ignore\nfn main() {}\n```\n";
+    let text =
+        "```\nfn main() {}\n```\n\n```rust\nfn main() {}\n```\n\n```ignore\nfn main() {}\n```\n";
     let (editor, path) = editor_with(&["markdown", "rust"], "bare.md", text);
     assert_eq!(fg(&editor, 0, 1), LITERAL);
     // One with a language is only in that language.

@@ -8,7 +8,7 @@ LSP（Language Server Protocol）のクライアントを、標準プラグイ�
 
 M3.4 で作るもの:
 
-- サーバーの起動と初期化、ファイルの同期（`didOpen` / `didChange` / `didSave`）
+- サーバーの起動と初期化、ファイルの同期（`didOpen` / `didChange` / `didSave` / `didClose`。`didClose` は、コアの `editor.buffer_closed` を受けて送り、そのファイルの診断も忘れる）
 - 診断: 範囲に下線を引き、行末にメッセージを出し、ステータスラインに件数を出す
 - ホバー: helix の `Space k` で、カーソル位置の説明をポップアップに出す
 - 定義へ移動: helix の `gd`

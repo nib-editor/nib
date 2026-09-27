@@ -34,7 +34,7 @@ fn main() {
         eprintln!("\nerror: not installed\nmore detail");
         process::exit(1);
     }
-    let tests: [(&str, fn()); 8] = [
+    let tests: [(&str, fn()); 9] = [
         ("diagnostics_follow_edits", diagnostics_follow_edits),
         (
             "diagnostics_asked_for_follow_edits",
@@ -51,6 +51,10 @@ fn main() {
         (
             "completes_on_its_own_and_narrows",
             completes_on_its_own_and_narrows,
+        ),
+        (
+            "closed_buffers_close_on_the_server",
+            closed_buffers_close_on_the_server,
         ),
     ];
     let mut failed = 0;
@@ -240,7 +244,21 @@ fn fake_server(pull: bool) {
             .as_str()
             .unwrap_or_default()
             .to_string();
-        match message["method"].as_str().unwrap_or_default() {
+        let method = message["method"].as_str().unwrap_or_default();
+        // What documents it was told about, for tests to read.
+        if let Ok(log) = env::var("NIB_FAKE_LSP_LOG")
+            && method.starts_with("textDocument/did")
+            && method != "textDocument/didChange"
+        {
+            let name = uri.rsplit('/').next().unwrap_or_default();
+            let mut file = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(log)
+                .unwrap();
+            writeln!(file, "{method} {name}").unwrap();
+        }
+        match method {
             "initialize" => reply(
                 &message,
                 json!({"capabilities": {
@@ -382,4 +400,38 @@ fn offset(text: &str, position: &Value) -> usize {
     let character = position["character"].as_u64().unwrap() as usize;
     let line_start: usize = text.split_inclusive('\n').take(line).map(str::len).sum();
     line_start + character
+}
+
+fn closed_buffers_close_on_the_server() {
+    let log = env::temp_dir().join(format!("nib-lsp-{}-closing.log", process::id()));
+    // The server is started by the plugin, and inherits this.
+    // SAFETY: the tests here run one after another, on this thread.
+    unsafe { env::set_var("NIB_FAKE_LSP_LOG", &log) };
+    let (mut editor, dir) = fake("closing", "fn main() {}\n");
+    wait_for_server(&mut editor);
+    let other = dir.join("other.rs");
+    fs::write(&other, "fn other() {}\n").unwrap();
+    let lines = || fs::read_to_string(&log).unwrap_or_default();
+    editor.open(&other).unwrap();
+    wait_until(&mut editor, "the server to open it", |_| {
+        lines().contains("didOpen other.rs")
+    });
+    editor.call_command("buffer.close", "").unwrap();
+    // Opened again, it is opened again on the server.
+    editor.open(&other).unwrap();
+    wait_until(&mut editor, "the server to hear of it", |_| {
+        lines().matches("didOpen other.rs").count() == 2
+    });
+    assert_eq!(
+        lines().lines().collect::<Vec<_>>(),
+        [
+            "textDocument/didOpen main.rs",
+            "textDocument/didOpen other.rs",
+            "textDocument/didClose other.rs",
+            "textDocument/didOpen other.rs",
+        ]
+    );
+    unsafe { env::remove_var("NIB_FAKE_LSP_LOG") };
+    fs::remove_file(&log).unwrap();
+    fs::remove_dir_all(dir).unwrap();
 }

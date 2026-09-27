@@ -1,6 +1,12 @@
 name = "lsp"
-version = "0.1.1"
+version = "0.1.2"
 api = "0.4"
 # Runs the language servers.
 capabilities = ["process"]
-events = ["buffer-opened", "buffer-changed", "buffer-saved", "helix.mode_changed"]
+events = [
+    "buffer-opened",
+    "buffer-changed",
+    "buffer-saved",
+    "editor.buffer_closed",
+    "helix.mode_changed",
+]
