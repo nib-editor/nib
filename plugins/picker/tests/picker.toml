@@ -1,0 +1,39 @@
+# Run with `nib plugin test target/plugins/picker plugins/picker/tests/picker.toml`
+# after `cargo xtask build-plugins`; tui/tests/plugin_test.rs does.
+#
+# Each test runs in a directory of its own, holding the test's file and
+# `files`, so the picker lists only those.
+
+with = ["helix"]
+
+[[test]]
+name = "picks a file by a fuzzy name"
+file = "notes.md"
+files = { "Cargo.toml" = "[package]\n", "src/main.rs" = "fn main() {}\n", "src/lib.rs" = "" }
+
+[[test.step]]
+keys = "<space>f"
+wait = 5000
+expect.screen = ["files> ", "src/main.rs"]
+
+[[test.step]]
+keys = "smain"
+expect.screen = ["files> smain"]
+
+[[test.step]]
+keys = "<ret>"
+expect.text = "fn main() {}\n"
+
+[[test]]
+name = "escape closes it and gives the keys back"
+file = "notes.md"
+files = { "a.txt" = "" }
+
+[[test.step]]
+keys = "<space>f"
+wait = 5000
+expect.screen = ["files> ", "a.txt"]
+
+[[test.step]]
+keys = "<esc>ihello<esc>"
+expect.text = "hello"

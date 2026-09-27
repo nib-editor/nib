@@ -1,0 +1,48 @@
+# Run with `nib plugin test target/plugins/indent plugins/indent/tests/indent.toml`
+# after `cargo xtask build-plugins`; tui/tests/plugin_test.rs does.
+
+[[test]]
+name = "Go indents with tabs"
+file = "a.go"
+text = "package a\n"
+keys = "ggO<tab>x<esc>"
+
+[test.expect]
+text = "\tx\npackage a\n"
+
+[[test]]
+name = "YAML indents with two spaces"
+file = "a.yaml"
+text = "a: 1\n"
+keys = "ggO<tab>x<esc>"
+
+[test.expect]
+text = "  x\na: 1\n"
+
+[[test]]
+name = "languages without defaults use the core's four spaces"
+file = "a.rs"
+text = "fn a() {}\n"
+keys = "ggO<tab>x<esc>"
+
+[test.expect]
+text = "    x\nfn a() {}\n"
+
+[[test]]
+name = "settings replace the defaults"
+file = "b.yaml"
+text = "a: 1\n"
+settings = { languages.yaml.indent = 3 }
+keys = "ggO<tab>x<esc>"
+
+[test.expect]
+text = "   x\na: 1\n"
+
+[[test]]
+name = "a tab is drawn as wide as the tab width"
+file = "b.go"
+text = "\tx\n"
+settings = { languages.go.tab-width = 8 }
+
+[test.expect]
+screen = ["        x"]

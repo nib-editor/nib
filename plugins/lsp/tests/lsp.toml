@@ -1,0 +1,52 @@
+# Run with `nib plugin test target/plugins/lsp plugins/lsp/tests/lsp.toml`
+# after `cargo xtask build-plugins`; tui/tests/plugin_test.rs does, when
+# python3 is there. The server is fake_server.py next to this file.
+
+with = ["helix", "rust"]
+settings = { servers.rust.command = ["python3", "{dir}/fake_server.py"] }
+
+[[test]]
+name = "shows diagnostics and follows edits"
+file = "main.rs"
+text = "fn main() {}\nlet error = 1;\n"
+
+[[test.step]]
+wait = 10000
+expect.screen = ["let error = 1;  found error"]
+
+# The server gets the deletion as an edit and finds nothing left.
+[[test.step]]
+keys = "jxd"
+wait = 10000
+expect.text = "fn main() {}\n"
+expect.absent = ["found error", "E1"]
+
+[[test]]
+name = "hover shows where the cursor is"
+file = "main.rs"
+text = "f#[n|]# main() {}\n"
+
+[[test.step]]
+command = "lsp.status"
+wait = 10000
+expect.result = "rust ready"
+
+[[test.step]]
+keys = "<space>k"
+wait = 10000
+expect.screen = ["hover at 0:1"]
+
+[[test]]
+name = "goes to the definition"
+file = "main.rs"
+text = "fn main() {}\nlet a = #[m|]#ain;\n"
+
+[[test.step]]
+command = "lsp.status"
+wait = 10000
+expect.result = "rust ready"
+
+[[test.step]]
+keys = "gd"
+wait = 10000
+expect.selections = "fn #[m|]#ain() {}\nlet a = main;\n"
