@@ -77,6 +77,11 @@ fn the_vim_plugin_passes_its_tests() {
 }
 
 #[test]
+fn the_emacs_plugin_passes_its_tests() {
+    passes_its_tests("emacs", "emacs", 29);
+}
+
+#[test]
 fn the_picker_plugin_passes_its_tests() {
     passes_its_tests("picker", "picker", 4);
 }

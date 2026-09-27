@@ -7,7 +7,8 @@ use serde_json::Value;
 
 #[derive(Clone)]
 pub enum Binding {
-    /// A command of the core or another plugin, by its dotted name.
+    /// A command by its name: dotted for the core's and other plugins',
+    /// and plain for the base's own, where the base has names.
     Command(String),
     /// The keys that do one of the base's actions.
     Keys(Vec<KeyEvent>),
@@ -24,6 +25,16 @@ pub fn keymap(
     settings: &Value,
     mode: &str,
     action: &dyn Fn(&str) -> Option<Vec<KeyEvent>>,
+) -> (Keymap, Vec<String>) {
+    keymap_of(settings, mode, &|name| action(name).map(Binding::Keys))
+}
+
+/// As `keymap`, for a base whose actions have names of their own: `action`
+/// gives what a name without a dot binds to.
+pub fn keymap_of(
+    settings: &Value,
+    mode: &str,
+    action: &dyn Fn(&str) -> Option<Binding>,
 ) -> (Keymap, Vec<String>) {
     let mut keymap = Keymap::new();
     let mut errors = Vec::new();
@@ -42,7 +53,7 @@ pub fn keymap(
 fn parse_table(
     entries: &serde_json::Map<String, Value>,
     at: &str,
-    action: &dyn Fn(&str) -> Option<Vec<KeyEvent>>,
+    action: &dyn Fn(&str) -> Option<Binding>,
     keymap: &mut Keymap,
     errors: &mut Vec<String>,
 ) {
@@ -58,7 +69,7 @@ fn parse_table(
         let binding = match value {
             Value::String(name) if name.contains('.') => Binding::Command(name.clone()),
             Value::String(name) => match action(name) {
-                Some(keys) => Binding::Keys(keys),
+                Some(binding) => binding,
                 None => {
                     errors.push(format!("{place}: unknown command {name:?}"));
                     continue;

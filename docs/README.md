@@ -10,6 +10,7 @@
 | [keymap.md](keymap.md) | モーダルの扱い、キーマップをプラグインで実現するしくみ |
 | [nano.md](nano.md) | nano ベースのキーと、nano との違い |
 | [vim.md](vim.md) | vim ベースのキー、コマンドライン、Neovim との比べ方と違い |
+| [emacs.md](emacs.md) | Emacs ベースのキー、ミニバッファ、Emacs との比べ方と違い |
 | [base.md](base.md) | ベースプラグイン（helix、vim、Emacs、nano）の選び方、他のプラグインとのキーの分け方、共通にするもの |
 | [lsp.md](lsp.md) | LSP プラグインの範囲、サーバーの設定、位置の数え方 |
 | [plugin-dev.md](plugin-dev.md) | プラグインの開発（`nib plugin new` / `build` / `test`、テストの書き方、作者向けの文書） |

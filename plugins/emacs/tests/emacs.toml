@@ -1,0 +1,321 @@
+# Run with `nib plugin test target/plugins/emacs plugins/emacs/tests/emacs.toml`
+# after `cargo xtask build-plugins`; tui/tests/plugin_test.rs does. How the
+# keys edit is compared with Emacs in tui/tests/compare.rs; these are the
+# rest, such as keyboard macros, which Emacs cannot record in a macro.
+
+with = ["picker"]
+
+[[test]]
+name = "a keyboard macro plays back the keys, and e plays it again"
+text = "#[|]#a\nb\nc\nd\n"
+
+[[test.step]]
+keys = "<C-x>(<C-e>!<C-n>"
+expect.screen = ["Def"]
+
+[[test.step]]
+keys = "<C-x>)"
+expect.message = "Keyboard macro defined"
+expect.absent = ["Def"]
+
+[[test.step]]
+keys = "<C-x>ee"
+expect.selections = "a!\nb!\nc!\nd#[|]#\n"
+
+[[test]]
+name = "F3 and F4 record and play, with a count"
+text = "#[|]#abc\n"
+keys = "<F3>x<F4><C-u>3<F4>"
+
+[test.expect]
+text = "xxxxabc\n"
+
+[[test]]
+name = "a macro with 0 plays until a command fails"
+text = "#[|]#a\nb\nc\nd\n"
+keys = "<C-x>(<C-a>-<C-n><C-x>)<C-u>0<C-x>e"
+
+[test.expect]
+text = "-a\n-b\n-c\n-d\n-"
+
+[[test]]
+name = "a macro replays searches and the minibuffer"
+text = "#[|]#one x one x one\n"
+keys = "<C-x>(<C-s>x<ret><backspace><A-x>upcase-word<ret><C-x>)<C-x>e"
+
+[test.expect]
+text = "one  ONE  ONE\n"
+
+[[test]]
+name = "C-x ) without a macro being recorded says so"
+text = "abc\n"
+keys = "<C-x>)"
+
+[test.expect]
+message = "Not defining kbd macro"
+
+[[test]]
+name = "keys being typed show"
+text = "abc\n"
+
+[[test.step]]
+keys = "<C-u>4"
+expect.screen = ["C-u 4-"]
+
+[[test.step]]
+keys = "<C-g><C-x>r"
+expect.screen = ["C-x r-"]
+
+[[test.step]]
+keys = "<C-g>"
+expect.message = "Quit"
+expect.absent = ["C-x r-"]
+
+[[test]]
+name = "an undefined key says so"
+text = "abc\n"
+keys = "<C-x><C-z>"
+
+[test.expect]
+message = "C-x C-z is undefined"
+
+[[test]]
+name = "C-h k says what a key runs"
+text = "abc\n"
+keys = "<C-h>k<C-x><C-s>"
+
+[test.expect]
+message = "C-x C-s runs the command save-buffer: Save the buffer"
+
+[[test]]
+name = "M-x completes names with TAB and lists them"
+text = "abc\n"
+
+[[test.step]]
+keys = "<A-x>kill-li<tab>"
+expect.screen = ["M-x kill-line"]
+
+[[test.step]]
+keys = "<C-a><C-k>kill-<tab>"
+expect.screen = ["possible completions:", "kill-region", "kill-word"]
+
+[[test]]
+name = "M-x runs nib's commands by their dotted names"
+text = "abc\n"
+keys = "<A-x>picker.commands<ret>"
+wait = 5000
+
+[test.expect]
+screen = ["commands> "]
+
+[[test]]
+name = "M-x runs a command with the argument typed before it"
+text = "#[|]#abcdef\n"
+keys = "<C-u>3<A-x>delete-char<ret>"
+
+[test.expect]
+text = "def\n"
+
+[[test]]
+name = "M-p in the minibuffer brings back what was typed before"
+text = "#[|]#one two three\n"
+keys = "<A-x>kill-word<ret><A-x><A-p><ret>"
+
+[test.expect]
+text = " three\n"
+
+[[test]]
+name = "C-x C-s saves"
+file = "notes.txt"
+text = "hi\n"
+keys = "x<C-x><C-s>"
+
+[test.expect]
+screen = ["Wrote /", "/notes.txt"]
+
+[[test]]
+name = "C-x C-f opens a file, completing its name"
+text = "abc\n"
+files = { "notes.txt" = "hello\n" }
+
+[[test.step]]
+keys = "<C-x><C-f>no<tab>"
+expect.screen = ["Find file: notes.txt"]
+
+[[test.step]]
+keys = "<ret>"
+expect.text = "hello\n"
+
+[[test]]
+name = "C-x b goes back to the buffer before"
+file = "one.txt"
+text = "one\n"
+files = { "two.txt" = "two\n" }
+
+[[test.step]]
+keys = "<C-x><C-f>two.txt<ret>"
+expect.text = "two\n"
+
+[[test.step]]
+keys = "<C-x>b"
+expect.screen = ["Switch to buffer (default one.txt): "]
+
+[[test.step]]
+keys = "<ret>"
+expect.text = "one\n"
+
+[[test]]
+name = "C-x C-c with changes asks to save, then whether to quit anyway"
+file = "notes.txt"
+text = "hi\n"
+
+[[test.step]]
+keys = "x<C-x><C-c>"
+expect.screen = ["Save file /"]
+
+[[test.step]]
+keys = "n"
+expect.screen = ["Modified buffers exist; exit anyway? (yes or no) "]
+
+[[test.step]]
+keys = "<C-g>"
+expect.message = "Quit"
+
+[[test]]
+name = "C-x k with changes asks before closing"
+file = "notes.txt"
+text = "hi\n"
+
+[[test.step]]
+keys = "x<C-x>k<ret>"
+expect.screen = ["Buffer notes.txt modified; kill anyway? (yes or no) "]
+
+[[test.step]]
+keys = "maybe<ret>"
+expect.screen = ["Please answer yes or no."]
+
+[[test]]
+name = "plugins' keys are under C-c"
+text = "abc\n"
+keys = "<C-c>f"
+wait = 5000
+
+[test.expect]
+screen = ["files> "]
+
+[[test]]
+name = "settings bind keys to Emacs's commands, and add to C-x"
+text = "#[|]#abc\n"
+settings.keys.global = { "C-z" = "undo", "C-x" = { "C-r" = "picker.commands" } }
+
+[[test.step]]
+keys = "x<C-z>"
+expect.text = "abc\n"
+
+[[test.step]]
+keys = "<C-x><C-r>"
+wait = 5000
+expect.screen = ["commands> "]
+
+[[test]]
+name = "a wrong setting is left out and said so"
+text = "abc\n"
+settings.keys.global = { "C-z" = "no-such-command" }
+
+[test.expect]
+message = "emacs.toml: keys.global.C-z: unknown command \"no-such-command\"; left out"
+
+[[test]]
+name = "isearch shows what it searches for, and when it fails"
+text = "#[|]#one two\n"
+
+[[test.step]]
+keys = "<C-s>tw"
+expect.screen = ["I-search: tw"]
+expect.selections = "one #[tw|]#o\n"
+
+[[test.step]]
+keys = "x"
+expect.screen = ["Failing I-search: twx"]
+
+[[test.step]]
+keys = "<C-g><ret>"
+expect.message = "Mark saved where search started"
+expect.selections = "one tw#[|]#o\n"
+
+[[test]]
+name = "M-% asks at each match and counts what it replaced"
+text = "#[|]#a a a\n"
+
+[[test.step]]
+keys = "<A-%>a<ret>b<ret>"
+expect.message = "Query replacing a with b: (? for help)"
+expect.selections = "#[a|]# a a\n"
+
+[[test.step]]
+keys = "yn!"
+expect.message = "Replaced 2 occurrences"
+expect.text = "b a b\n"
+
+[[test]]
+name = "C-x TAB without an argument moves the lines with arrows"
+text = "#[|]#a\nb\n"
+keys = "<C-x>h<C-x><tab><right><right><S-right><left>x"
+
+[test.expect]
+text = "x     a\n     b\n"
+
+[[test]]
+name = "a register keeps a position in another file"
+file = "one.txt"
+text = "#[|]#one\n"
+files = { "two.txt" = "two\n" }
+keys = "<C-f><C-x>r<space>a<C-x><C-f>two.txt<ret><C-x>rja"
+
+[test.expect]
+selections = "o#[|]#ne\n"
+
+[[test]]
+name = "M-/ says when no expansion is left"
+text = "foo fox\n#[|]#"
+keys = "fo<A-/><A-/><A-/>"
+
+[test.expect]
+message = "No further dynamic expansions for ‘fo’ found"
+text = "foo fox\nfo"
+
+[[test]]
+name = "undo says when there is nothing to undo"
+text = "abc\n"
+keys = "<C-/>"
+
+[test.expect]
+message = "No further undo information"
+
+[[test]]
+name = "C-x = says what the char is and where"
+text = "a#[|]#bc\n"
+keys = "<C-x>="
+
+[test.expect]
+message = "Char: b (98, #o142, #x62) point=2 of 4 (25%) column=1"
+
+[[test]]
+name = "a region is drawn from the mark to the point"
+text = "#[|]#one two\n"
+
+[[test.step]]
+keys = "<C-space>"
+expect.message = "Mark set"
+
+[[test.step]]
+keys = "<A-f>"
+expect.selections = "#[one|]# two\n"
+
+[[test]]
+name = "C-x SPC draws a rectangle as a range on each line"
+text = "a#[|]#bcd\nefgh\n"
+keys = "<C-x><space><C-n><C-f>"
+
+[test.expect]
+selections = "a#(b|)#cd\ne#[f|]#gh\n"

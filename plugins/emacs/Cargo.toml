@@ -1,0 +1,15 @@
+[package]
+name = "nib-plugin-emacs"
+description = "GNU Emacs's way of editing for nib"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+base-kit = { package = "nib-base-kit", path = "../base-kit" }
+nib-plugin.workspace = true
+serde_json = "1"

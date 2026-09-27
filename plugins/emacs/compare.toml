@@ -1,0 +1,1057 @@
+# Cases for tui/tests/compare.rs: the same keys go to `emacs --batch -Q`
+# and to nib's emacs base, and the text, the point, and the active region
+# must match. A case nib does differently says why in `differs`
+# (docs/emacs.md).
+#
+# `text` ends with a line break and marks the point with #[|]#.
+
+[[case]]
+text = "#[|]#one two\n"
+keys = "<C-f><C-f>"
+[[case]]
+text = "one two#[|]#\n"
+keys = "<C-b><C-b><C-b>"
+[[case]]
+text = "one two#[|]#\n"
+keys = "<C-f><C-f>x"
+[[case]]
+text = "#[|]#one\n"
+keys = "<C-b>x"
+[[case]]
+text = "#[|]#one\ntwo\nthree\n"
+keys = "<C-n><C-n>"
+[[case]]
+text = "one\ntwo\nthr#[|]#ee\n"
+keys = "<C-p><C-p>"
+[[case]]
+text = "#[|]#one\ntwo\n"
+keys = "<C-n><C-n><C-n><C-n><C-p>x"
+[[case]]
+text = "one\ntw#[|]#o\n"
+keys = "<C-p><C-p><C-p>x"
+[[case]]
+text = "#[|]#one\ntwo"
+keys = "<C-n><C-n>x"
+[[case]]
+text = "abcde#[|]#f\nab\nabcdef\n"
+keys = "<C-n><C-n>"
+[[case]]
+text = "abcdef\nab\nabcdef#[|]#\n"
+keys = "<C-p><C-p>"
+[[case]]
+text = "abcdef#[|]#\nab\nabcdef\n"
+keys = "<C-n><C-f><C-n>"
+[[case]]
+text = "ab#[|]#cdef\n"
+keys = "<C-e>"
+[[case]]
+text = "abc#[|]#def\n"
+keys = "<C-a>"
+[[case]]
+text = "  abc#[|]#\n"
+keys = "<A-m>"
+[[case]]
+text = "one\n  two#[|]# three\n"
+keys = "<A-m>x"
+[[case]]
+text = "#[|]#one\ntwo\nthree\n"
+keys = "<C-u>2<C-e>"
+[[case]]
+text = "#[|]#one\ntwo\nthree\n"
+keys = "<A-3><C-a>x"
+[[case]]
+text = "#[|]#one\ntwo\nthree\n"
+keys = "<down><down><right>"
+[[case]]
+text = "#[|]#one\ntwo\nthree\n"
+keys = "<A-gt>"
+[[case]]
+text = "one\ntwo\nth#[|]#ree\n"
+keys = "<A-lt>"
+[[case]]
+text = "one\ntwo\nth#[|]#ree\n"
+keys = "<A-lt><C-x><C-x>"
+[[case]]
+text = "#[|]#one\ntwo\n"
+keys = "<A-gt><C-x><C-x>"
+[[case]]
+text = "#[|]#a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n"
+keys = "<A-3><A-lt>"
+[[case]]
+text = "#[|]#a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n"
+keys = "<A-3><A-gt>"
+[[case]]
+text = "#[|]#one\ntwo\nthree\n"
+keys = "<A-g>g3<ret>"
+[[case]]
+text = "#[|]#one\ntwo\nthree\n"
+keys = "<A-g><A-g>2<ret>x"
+[[case]]
+text = "#[|]#one\ntwo\nthree\n"
+keys = "<A-3><A-g>g"
+[[case]]
+text = "#[|]#one\ntwo\nthree\n"
+keys = "<A-g>g9<ret>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<A-g>c5<ret>"
+[[case]]
+text = "ab#[|]#cdefgh\n"
+keys = "<A-6><A-g><tab>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<A-f>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<A-f><A-f>"
+[[case]]
+text = "one tw#[|]#o three\n"
+keys = "<A-f>"
+[[case]]
+text = "#[|]#foo_bar baz\n"
+keys = "<A-f>"
+[[case]]
+text = "#[|]#foo-bar.baz qux\n"
+keys = "<A-f><A-f>"
+[[case]]
+text = "#[|]#$x 50% y\n"
+keys = "<A-f><A-f>"
+[[case]]
+text = "foo #[|]# bar\n"
+keys = "<A-f>"
+[[case]]
+text = "foo  b#[|]#ar\n"
+keys = "<A-b>"
+[[case]]
+text = "one two thr#[|]#ee\n"
+keys = "<A-b><A-b>"
+[[case]]
+text = "#[|]#one\n\ntwo\n"
+keys = "<A-f><A-f>"
+[[case]]
+text = "#[|]#日本語 テスト\n"
+keys = "<A-f>"
+[[case]]
+text = "#[|]#one two three four\n"
+keys = "<A-2><A-f>"
+[[case]]
+text = "one two three fou#[|]#r\n"
+keys = "<A-2><A-b>"
+[[case]]
+text = "#[|]#one two three four\n"
+keys = "<A-->2<A-b>"
+[[case]]
+text = "one two three four#[|]#\n"
+keys = "<C-u><C-u><A-b>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-right><C-right><C-left>"
+[[case]]
+text = "one two#[|]#\n"
+keys = "<A-f>x"
+[[case]]
+text = "#[|]#Hello.  World is big.  Yes\n"
+keys = "<A-e>"
+[[case]]
+text = "#[|]#Hello.  World is big.  Yes\n"
+keys = "<A-e><A-e>"
+[[case]]
+text = "#[|]#Hello. World is big.  Yes\n"
+keys = "<A-e>"
+[[case]]
+text = "Hello.  World is big.  Yes#[|]#\n"
+keys = "<A-a>"
+[[case]]
+text = "Hello.  World is big.  Yes#[|]#\n"
+keys = "<A-a><A-a>"
+[[case]]
+text = "#[|]#one.\ntwo.\n"
+keys = "<A-e><A-e>"
+[[case]]
+text = "#[|]#one\n\ntwo three.\n"
+keys = "<A-e><A-e>"
+[[case]]
+text = "Is it?  Yes!  \"Quoted.\"  End#[|]#\n"
+keys = "<A-a><A-a>"
+[[case]]
+text = "#[|]#Is it?  Yes!  \"Quoted.\"  End\n"
+keys = "<A-e><A-e><A-e>"
+[[case]]
+text = "#[|]#one\ntwo\n\nthree\nfour\n"
+keys = "<A-}>"
+[[case]]
+text = "#[|]#one\ntwo\n\nthree\nfour\n"
+keys = "<A-}><A-}>"
+[[case]]
+text = "one\ntwo\n\nthree\nfour\n#[|]#"
+keys = "<A-{>"
+[[case]]
+text = "one\ntwo\n\nthree\nfour\n#[|]#"
+keys = "<A-{><A-{>"
+[[case]]
+text = "one\nt#[|]#wo\n\n\nthree\n"
+keys = "<A-}><A-}>"
+[[case]]
+text = "one\n\n\nthr#[|]#ee\n"
+keys = "<A-{><A-{>"
+[[case]]
+text = "#[|]#one\n  \ntwo\n"
+keys = "<A-}>"
+[[case]]
+text = "#[|]#one\ntwo\n\nthree\n"
+keys = "<C-down>x"
+[[case]]
+text = "#[|]#foo-bar baz_qux (a b) \"s t\" 1.5\n"
+keys = "<C-A-f><C-A-f><C-A-f><C-A-f><C-A-f><C-A-f>"
+[[case]]
+text = "#[|]#a+b*c<=d $x %y @z #w !v ,u 'q\n"
+keys = "<C-A-f><C-A-f><C-A-f><C-A-f><C-A-f><C-A-f><C-A-f><C-A-f>"
+[[case]]
+text = "(a (b) c) d#[|]#\n"
+keys = "<C-A-b><C-A-b>"
+[[case]]
+text = "#[|]#(a [b {c}] \"d)\" e) f\n"
+keys = "<C-A-f>"
+[[case]]
+text = "(a (b c) d)#[|]#\n"
+keys = "<C-A-b>"
+[[case]]
+text = "(a (b #[|]#c) d)\n"
+keys = "<C-A-u>"
+[[case]]
+text = "(a (b #[|]#c) d)\n"
+keys = "<C-A-u><C-A-u>"
+[[case]]
+text = "(#[|]#a (b c) d)\n"
+keys = "<C-A-d>"
+[[case]]
+text = "x #[|]#(a (b c) d)\n"
+keys = "<C-A-d><C-A-d>"
+[[case]]
+text = "#[|]#(a (b) c) d\n"
+keys = "<C-A-k>"
+[[case]]
+text = "(a b#[|]#) c\n"
+keys = "<C-A-f>x"
+[[case]]
+text = "#[|]#\"a \\\" b\" c\n"
+keys = "<C-A-f>"
+[[case]]
+text = "#[|]#abc\n"
+keys = "xyz"
+[[case]]
+text = "ab#[|]#c\n"
+keys = "<C-d><C-d>"
+[[case]]
+text = "ab#[|]#c\n"
+keys = "<C-d><C-d>x"
+[[case]]
+text = "ab#[|]#c\n"
+keys = "<backspace><backspace><backspace>x"
+[[case]]
+text = "abc#[|]#\n"
+keys = "<A-2><backspace>"
+[[case]]
+text = "#[|]#abc\n"
+keys = "<A-2><C-d>"
+[[case]]
+text = "#[|]#abc\n"
+keys = "<del>"
+[[case]]
+text = "#[|]#abc\n"
+keys = "<C-u>x"
+[[case]]
+text = "#[|]#abc\n"
+keys = "<C-u>3x"
+[[case]]
+text = "#[|]#abc\n"
+keys = "<C-u>3<C-u>4x"
+[[case]]
+text = "#[|]#abc\n"
+keys = "<A-3>1x"
+[[case]]
+text = "#[|]#abc\n"
+keys = "<C-3><C-1>x"
+[[case]]
+text = "#[|]#abc\n"
+keys = "<C-u><C-u>x"
+[[case]]
+text = "#[|]#abc\n"
+keys = "<C-u>-3<C-f>x"
+[[case]]
+text = "#[|]#one\n"
+keys = "<C-q><C-a>"
+[[case]]
+text = "#[|]#one\n"
+keys = "<C-q><C-j>"
+[[case]]
+text = "#[|]#one\n"
+keys = "<C-q><tab>"
+[[case]]
+text = "one#[|]#\n  two\n"
+keys = "<ret>"
+[[case]]
+text = "  one#[|]#\n"
+keys = "<ret>x"
+[[case]]
+text = "  one#[|]#\n"
+keys = "<C-j>x"
+[[case]]
+text = "one  #[|]#\n"
+keys = "<ret>x"
+[[case]]
+text = "  one  #[|]#\n"
+keys = "<ret>"
+[[case]]
+text = "#[|]#  one\n"
+keys = "<ret>"
+[[case]]
+text = "  one#[|]# two\n"
+keys = "<ret>"
+[[case]]
+text = "   #[|]#\n"
+keys = "<ret>x"
+[[case]]
+text = "a#[|]#\n"
+keys = "<C-u>3<ret>"
+[[case]]
+text = "  a\n\n#[|]#\n"
+keys = "<ret>x"
+[[case]]
+text = "one#[|]#\ntwo\n"
+keys = "<C-o>"
+[[case]]
+text = "one#[|]#\ntwo\n"
+keys = "<A-3><C-o>x"
+[[case]]
+text = "    one two\n#[|]#x\n"
+keys = "<tab>"
+[[case]]
+text = "    one two\nx#[|]#\n"
+keys = "<tab>"
+[[case]]
+text = "    one two\n  #[|]#x\n"
+keys = "<tab>"
+[[case]]
+text = "    one two\n      #[|]#x\n"
+keys = "<tab>"
+[[case]]
+text = "one\n#[|]#x\n"
+keys = "<tab>"
+[[case]]
+text = "one\nab#[|]#\n"
+keys = "<tab>"
+[[case]]
+text = "    one\n\n#[|]#x\n"
+keys = "<tab>"
+[[case]]
+text = "    one two\n#[|]#x\n"
+keys = "<tab><tab>"
+[[case]]
+text = "#[|]#a\nb\n"
+keys = "<C-space><C-n><C-n><C-u>3<C-x><tab>"
+[[case]]
+text = "#[|]#    a\n    b\nc\n"
+keys = "<C-space><C-n><C-n><A--><C-x><tab>"
+[[case]]
+text = "#[|]#a\n\nb\n"
+keys = "<C-x>h<C-u>2<C-x><tab>"
+[[case]]
+text = "#[|]#one\ntwo\nthree\n"
+keys = "<C-k>"
+[[case]]
+text = "#[|]#one\ntwo\nthree\n"
+keys = "<C-k><C-k>"
+[[case]]
+text = "#[|]#one\ntwo\nthree\n"
+keys = "<C-k><C-k><C-k><C-e><C-y>"
+[[case]]
+text = "one#[|]#\ntwo\n"
+keys = "<C-k>"
+[[case]]
+text = "one#[|]#  \ntwo\n"
+keys = "<C-k>"
+[[case]]
+text = "one#[|]#\n  two\n"
+keys = "<C-k>"
+[[case]]
+text = "#[|]#one\ntwo\nthree\nfour\n"
+keys = "<C-u>2<C-k>"
+[[case]]
+text = "one\nt#[|]#wo\nthree\nfour\n"
+keys = "<C-u>0<C-k>"
+[[case]]
+text = "one\ntwo\nt#[|]#hree\nfour\n"
+keys = "<A--><C-k>"
+[[case]]
+text = "one\ntwo\nt#[|]#hree\nfour\n"
+keys = "<A--><C-k><C-y><C-y>"
+[[case]]
+text = "one\ntwo#[|]#"
+keys = "<C-k><C-k>x"
+[[case]]
+text = "one\nt#[|]#wo\nthree\n"
+keys = "<C-S-backspace>"
+[[case]]
+text = "one\nt#[|]#wo\nthree\n"
+keys = "<C-S-backspace><C-y>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<A-d>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<A-d><A-d><C-y>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<A-d><C-f><A-d><C-y>"
+[[case]]
+text = "one two three#[|]#\n"
+keys = "<A-backspace><A-backspace><C-y>"
+[[case]]
+text = "one two three#[|]#\n"
+keys = "<A-backspace><C-f><A-backspace><C-y>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<A-f><A-f><A-backspace><C-f><A-backspace><C-y>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<A-2><A-d><C-e><C-y>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-k><C-_>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><C-w>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><C-w><A-f><C-y>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<A-f><A-f><C-b><C-space><C-a><C-w>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><A-w><C-e><C-y>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><A-w><C-k><C-y>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><C-w><C-g><C-k><C-y>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><C-w><C-k><C-y>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<A-f><C-space><A-f><A-w><C-e><A-w><C-y>"
+[[case]]
+text = "#[|]#one two\n"
+keys = "<A-f><C-space><C-e><C-w><C-a><C-y>"
+[[case]]
+text = "#[|]#one two\n"
+keys = "<A-f><C-space><C-e><C-w><C-a><C-u><C-y>"
+[[case]]
+text = "#[|]#one two\n"
+keys = "<A-f><C-space><C-e><C-w><C-a><C-y><C-x><C-x>"
+[[case]]
+text = "#[|]#a b c\n"
+keys = "<A-d><C-f><A-d><C-f><A-d><C-y><A-y>"
+[[case]]
+text = "#[|]#a b c\n"
+keys = "<A-d><C-f><A-d><C-f><A-d><C-y><A-y><A-y>"
+[[case]]
+text = "#[|]#a b c\n"
+keys = "<A-d><C-f><A-d><C-f><A-d><C-y><A-y><A-y><A-y>"
+[[case]]
+text = "#[|]#a b c\n"
+keys = "<A-d><C-f><A-d><C-f><A-d><C-u>2<C-y>"
+[[case]]
+text = "#[|]#a b c\n"
+keys = "<A-d><C-f><A-d><C-f><A-d><C-y><A-2><A-y>"
+[[case]]
+text = "#[|]#a b c\n"
+keys = "<A-d><C-f><A-d><C-f><A-d><C-y><A--><A-y>"
+[[case]]
+text = "#[|]#a b c\n"
+keys = "<A-d><C-f><A-d><C-f><A-d><C-u><C-y><A-y>"
+[[case]]
+text = "#[|]#hello world\n"
+keys = "<A-z>o"
+[[case]]
+text = "#[|]#hello world\n"
+keys = "<A-2><A-z>o"
+[[case]]
+text = "hello world#[|]#\n"
+keys = "<A--><A-z>o"
+[[case]]
+text = "#[|]#hello world\n"
+keys = "<A-z>o<C-e><C-y>"
+[[case]]
+text = "Hello.  #[|]#World is big.  Yes\n"
+keys = "<A-k>"
+[[case]]
+text = "#[|]#Hello.  World is big.  Yes\n"
+keys = "<A-k><A-k><C-y>"
+[[case]]
+text = "hello#[|]# world\n"
+keys = "<C-t>"
+[[case]]
+text = "#[|]#hello world\n"
+keys = "<C-t>x"
+[[case]]
+text = "hello world#[|]#\n"
+keys = "<C-t>"
+[[case]]
+text = "h#[|]#ello world\n"
+keys = "<C-t><C-t><C-t>"
+[[case]]
+text = "h#[|]#ello world\n"
+keys = "<A-3><C-t>"
+[[case]]
+text = "one#[|]# two three\n"
+keys = "<A-t>"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "<A-t>"
+[[case]]
+text = "one two three#[|]#\n"
+keys = "<A-t>"
+[[case]]
+text = "o#[|]#ne two three\n"
+keys = "<A-t>"
+[[case]]
+text = "one two#[|]# three four\n"
+keys = "<A-t><A-t>"
+[[case]]
+text = "one\ntwo\nth#[|]#ree\n"
+keys = "<C-x><C-t>"
+[[case]]
+text = "one\nt#[|]#wo\nthree\n"
+keys = "<C-x><C-t>"
+[[case]]
+text = "one\nt#[|]#wo\nthree"
+keys = "<C-x><C-t><C-x><C-t>"
+[[case]]
+text = "#[|]#hello world foo\n"
+keys = "<A-u><A-c><A-l>"
+[[case]]
+text = "hel#[|]#lo world foo\n"
+keys = "<A-c>"
+[[case]]
+text = "hel#[|]#lo world foo\n"
+keys = "<A--><A-u>"
+[[case]]
+text = "#[|]#hello wORLD foo\n"
+keys = "<A-3><A-c>"
+[[case]]
+text = "hello world#[|]# foo\n"
+keys = "<A--><A-2><A-l>"
+[[case]]
+text = "#[|]#hello world\n"
+keys = "<C-space><A-f><A-f><C-x><C-u>"
+differs = "upcase-region is disabled in emacs -Q; nib runs it"
+[[case]]
+text = "#[|]#HELLO WORLD\n"
+keys = "<C-space><A-f><C-x><C-l>"
+differs = "downcase-region is disabled in emacs -Q; nib runs it"
+[[case]]
+text = "#[|]#hello wORLD\n"
+keys = "<C-x>h<A-x>capitalize-region<ret>"
+[[case]]
+text = "a  #[|]#  b\n"
+keys = "<A-\\>"
+[[case]]
+text = "a  #[|]#  b\n"
+keys = "<C-u><A-\\>"
+[[case]]
+text = "a    #[|]#b\n"
+keys = "<A-space>"
+[[case]]
+text = "a  #[|]#  b\n"
+keys = "<A-space><A-space>"
+[[case]]
+text = "a  #[|]#  b\n"
+keys = "<A-space><A-space><A-space>"
+[[case]]
+text = "a#[|]#b\n"
+keys = "<A-space>"
+[[case]]
+text = "a  #[|]#  b\n"
+keys = "<A-3><A-space>"
+[[case]]
+text = "a  #[|]#  b\n"
+keys = "<A-x>just-one-space<ret>"
+[[case]]
+text = "one\n   tw#[|]#o\n"
+keys = "<A-^>"
+[[case]]
+text = "one\n#[|]#two\n"
+keys = "<A-^>x"
+[[case]]
+text = "one  \n   two#[|]#\n"
+keys = "<A-^>"
+[[case]]
+text = "(one\n   two)#[|]#\n"
+keys = "<A-^>"
+[[case]]
+text = "(one\n   #[|]#)\n"
+keys = "<A-^>"
+[[case]]
+text = "one\n\n#[|]#two\n"
+keys = "<A-^>"
+[[case]]
+text = "a\nb#[|]#\nc\n"
+keys = "<C-u><A-^>"
+[[case]]
+text = "#[|]#one\n"
+keys = "<A-^>"
+[[case]]
+text = "one\n\n#[|]#\n\ntwo\n"
+keys = "<C-x><C-o>"
+[[case]]
+text = "one\n#[|]#\n\n\ntwo\n"
+keys = "<C-x><C-o>"
+[[case]]
+text = "one\n\n#[|]#\ntwo\n"
+keys = "<C-x><C-o>"
+[[case]]
+text = "one\n#[|]#\ntwo\n"
+keys = "<C-x><C-o>"
+[[case]]
+text = "o#[|]#ne\n\n\n\ntwo\n"
+keys = "<C-x><C-o>"
+[[case]]
+text = "one  \ntwo \t\nthree\n#[|]#"
+keys = "<A-x>delete-trailing-whitespace<ret>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><C-x><C-x>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><C-g><C-x><C-x>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><C-g><C-u><C-x><C-x>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><C-g>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><C-space><A-f>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><C-space><C-e><C-x><C-x>"
+[[case]]
+text = "a#[|]#\n"
+keys = "<C-space><C-a><C-space>"
+[[case]]
+text = "a#[|]#bc\n"
+keys = "<C-space><C-f><C-space>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><C-space><A-f><C-space><A-f><C-u><C-space>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><C-space><A-f><C-space><A-f><C-u><C-space><C-u><C-space>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><C-space><A-f><C-space><A-f><C-u><C-space><C-u><C-space><C-u><C-space>"
+[[case]]
+text = "one two#[|]# three\n"
+keys = "<C-x>h"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<A-@>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<A-@><A-@>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<A-2><A-@>"
+[[case]]
+text = "one\nt#[|]#wo\n\nthree\nfour\n"
+keys = "<A-h>"
+[[case]]
+text = "one\ntwo\n\nth#[|]#ree\nfour\n"
+keys = "<A-h>"
+[[case]]
+text = "#[|]#(a b) (c d) e\n"
+keys = "<C-A-space>"
+[[case]]
+text = "#[|]#(a b) (c d) e\n"
+keys = "<C-A-space><C-A-space>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><backspace>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><del>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><C-d>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f>x"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><C-w><C-y><C-y>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-w>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<S-right><S-right>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<S-right><S-right><right>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><S-right>"
+[[case]]
+text = "#[|]#one\ntwo three\n"
+keys = "<S-down><S-end>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-space><A-f><C-/>"
+[[case]]
+text = "#[|]#abc\n"
+keys = "xyz<C-/>"
+[[case]]
+text = "#[|]#abc\n"
+keys = "x<C-f>y<C-/>"
+[[case]]
+text = "#[|]#abc\n"
+keys = "x<C-f>y<C-/><C-/>"
+[[case]]
+text = "#[|]#abc\n"
+keys = "xy<C-/><C-?>"
+differs = "redo leaves the point where the edit left it; Emacs's at the start of the change"
+[[case]]
+text = "#[|]#abc\n"
+keys = "xy<C-/><C-A-_>"
+differs = "redo leaves the point where the edit left it; Emacs's at the start of the change"
+[[case]]
+text = "#[|]#abc\n"
+keys = "x<C-f>y<C-/><C-/><C-A-_>"
+differs = "redo leaves the point where the edit left it; Emacs's at the start of the change"
+[[case]]
+text = "#[|]#abc\n"
+keys = "x<C-x>u"
+[[case]]
+text = "#[|]#abc def\n"
+keys = "<C-d><C-d><C-d><C-/>"
+[[case]]
+text = "#[|]#abc\n"
+keys = "<C-d><C-/><C-d>"
+[[case]]
+text = "#[|]#abc\n"
+keys = "xyz<C-g><C-/><C-g><C-/>"
+differs = "nib's undo does not undo an undo; C-? redoes"
+[[case]]
+text = "#[|]#abc\n"
+keys = "abcdefghijklmnopqrstuvwxyz<C-/>"
+[[case]]
+text = "#[|]#abc\n"
+keys = "<C-u>2<C-d><C-_>"
+[[case]]
+text = "#[|]#one two\n"
+keys = "<A-d><A-d><C-/>"
+[[case]]
+text = "#[|]#one two\n"
+keys = "<A-2><C-/>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>one<C-s><ret>"
+[[case]]
+text = "#[|]#one two One two\n"
+keys = "<C-s>one<C-s><ret>"
+[[case]]
+text = "#[|]#one two One two\n"
+keys = "<C-s>One<ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>onx<backspace>e<C-s><ret>"
+[[case]]
+text = "one two one two#[|]#\n"
+keys = "<C-r>one<C-r><ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>two<ret><C-s><C-s><ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>two<ret><C-a><C-s><C-s><ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>two<ret><C-x><C-x>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>one<C-w><ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>one<C-s><C-s><C-s><ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>one<C-s><C-s><C-s><C-s><ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>two<C-r><ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>two<C-g><C-f>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>twx<C-g><ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>twx<C-g><C-g>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>two<C-s><backspace><ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>two<C-e>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>o<C-a>x"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>one two<ret>"
+[[case]]
+text = "#[|]#one\ntwo one\n"
+keys = "<C-s>one<C-s><C-s><ret>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-A-s>t.o<ret>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-A-s>t\\(w\\|h\\)<ret>"
+[[case]]
+text = "#[|]#foo(bar) baz\n"
+keys = "<C-A-s>(b[a-z]+)<ret>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "<C-A-s>\\<lt>t<C-s><ret>"
+[[case]]
+text = "one two one#[|]#\n"
+keys = "<C-A-r>o.e<ret>"
+[[case]]
+text = "#[|]#ab x abc ab\n"
+keys = "<C-space><A-f><A-w><C-s><C-y><C-s><ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>one<ret><C-s><C-s><ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-s>one<ret><C-r><C-r><ret>"
+[[case]]
+text = "#[|]#one\ntwo\n"
+keys = "<C-s>o<C-j><ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<A-%>one<ret>1<ret>yn"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<A-%>one<ret>1<ret>!"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<A-%>one<ret>1<ret>ny"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<A-%>one<ret>1<ret>yq"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<A-%>one<ret>1<ret>."
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<A-%>one<ret>1<ret> <backspace>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<A-%>one<ret>1<ret>,yq"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<A-%>one<ret>1<ret>y<ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<A-%>one<ret>1<ret>y<C-g>x"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<A-%>one<ret>1<ret>y<C-a>"
+[[case]]
+text = "#[|]#One two one two ONE\n"
+keys = "<A-%>one<ret>xyz<ret>!"
+[[case]]
+text = "#[|]#One two one two\n"
+keys = "<A-%>One<ret>xyz<ret>!"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<A-%>one<ret>Xyz<ret>!"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<A-%>one<ret>1<ret>!<A-%><ret>!"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<A-%>zzz<ret>1<ret>"
+[[case]]
+text = "one two #[|]#one two\n"
+keys = "<A-x>replace-string<ret>one<ret>1<ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<A-x>replace-string<ret>o<ret><ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-A-%>t\\(w\\|h\\)o<ret>[\\&]<ret>!"
+[[case]]
+text = "#[|]#aXbXc\n"
+keys = "<A-x>replace-regexp<ret>X\\|b<ret>-<ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "<C-space><A-f><A-f><A-%>o<ret>0<ret>!"
+[[case]]
+text = "#[|]#one two\none two\n"
+keys = "<C-x>h<A-x>replace-string<ret>two<ret>2<ret>"
+[[case]]
+text = "#[|]#a.b.c\n"
+keys = "<A-%>.<ret>,<ret>!"
+[[case]]
+text = "a#[|]#bcd\nefgh\nijkl\n"
+keys = "<C-space><C-n><C-n><C-f><C-f><C-x>rk"
+[[case]]
+text = "a#[|]#bcd\nefgh\nijkl\n"
+keys = "<C-space><C-n><C-n><C-f><C-f><C-x>rk<C-e><C-x>ry"
+[[case]]
+text = "a#[|]#bcd\nefgh\nijkl\n"
+keys = "<C-space><C-n><C-f><C-x>ro"
+[[case]]
+text = "a#[|]#bcd\nefgh\nijkl\n"
+keys = "<C-space><C-n><C-f><C-x>rc"
+[[case]]
+text = "a#[|]#bcd\nefgh\nijkl\n"
+keys = "<C-space><C-n><C-f><C-x>rd"
+[[case]]
+text = "a#[|]#bcd\nefgh\nijkl\n"
+keys = "<C-space><C-n><C-f><C-x>rtxy<ret>"
+[[case]]
+text = "a#[|]#bcd\nefgh\nijkl\n"
+keys = "<C-space><C-n><C-f><C-x>r<A-w><C-a><C-x>ry"
+[[case]]
+text = "a#[|]#bcd\nefgh\nijkl\n"
+keys = "<C-x><space><C-n><C-f><C-w>"
+[[case]]
+text = "a#[|]#bcd\nefgh\nijkl\n"
+keys = "<C-x><space><C-n><C-f><A-w><C-e><C-y>"
+[[case]]
+text = "a#[|]#bcd\nefgh\nijkl\n"
+keys = "<C-x><space><C-n><C-f><C-x><space>"
+[[case]]
+text = "a#[|]#bcd\nefgh\nijkl\n"
+keys = "<C-x><space><C-n><C-f><C-g>"
+[[case]]
+text = "abcd\nef#[|]#\nijkl\n"
+keys = "<C-space><C-p><C-f><C-n><C-n><C-x>rk"
+[[case]]
+text = "ab#[|]#cd\nx\nijkl\n"
+keys = "<C-space><C-n><C-n><C-f><C-x>rtZ<ret>"
+[[case]]
+text = "ab#[|]#cd\nx\nijkl\n"
+keys = "<C-space><C-n><C-n><C-f><C-x>ro"
+[[case]]
+text = "ab#[|]#cd\nx\nijkl\n"
+keys = "<C-space><C-n><C-n><C-f><C-x>rc"
+[[case]]
+text = "ab#[|]#cd\nx\nijkl\n"
+keys = "<C-space><C-n><C-n><C-f><C-x>rk<C-x>ry"
+[[case]]
+text = "a#[|]#bcd\nefgh\nijkl\n"
+keys = "<C-space><C-n><C-n><C-x>rN"
+[[case]]
+text = "abcd#[|]#\nefgh\n"
+keys = "<C-space><C-n><C-b><C-b><C-x>rk<C-e><C-x>ry"
+[[case]]
+text = "a#[|]#bcd\nefgh\n"
+keys = "<C-space><C-f><C-f><C-x>rsa<C-e><C-x>ria"
+[[case]]
+text = "a#[|]#bcd\nefgh\n"
+keys = "<C-space><C-f><C-f><C-x>rsa<C-e><C-u><C-x>ria"
+[[case]]
+text = "a#[|]#bcd\nefgh\n"
+keys = "<C-space><C-f><C-f><C-u><C-x>rsa<C-e><C-x>rga"
+[[case]]
+text = "a#[|]#bcd\nefgh\n"
+keys = "<C-x>r<space>a<C-n><C-x>rja"
+[[case]]
+text = "a#[|]#bcd\nefgh\n"
+keys = "<C-x>r<space>a<C-e>xyz<C-x>rja"
+[[case]]
+text = "a#[|]#bcd\nefgh\n"
+keys = "<C-space><C-f><C-f><C-x>rxa<C-x>ria"
+[[case]]
+text = "a#[|]#bcd\nefgh\nijkl\n"
+keys = "<C-space><C-n><C-f><C-x>rra<C-e><C-x>ria"
+[[case]]
+text = "#[|]#x\n"
+keys = "<C-u>5<C-x>rna<C-x>r+a<C-x>ria"
+[[case]]
+text = "#[|]#x\n"
+keys = "<C-x>rna<C-u>3<C-x>r+a<C-x>ria"
+[[case]]
+text = "#[|]#abc def\n"
+keys = "<C-u>2<C-f><C-x>z"
+[[case]]
+text = "#[|]#abc def\n"
+keys = "<C-f><C-x>zzz"
+[[case]]
+text = "#[|]#abc def\n"
+keys = "x<C-x>zz"
+[[case]]
+text = "#[|]#one two three four\n"
+keys = "<A-d><C-x>z"
+[[case]]
+text = "#[|]#abc def\n"
+keys = "<A-x>kill-word<ret>"
+[[case]]
+text = "#[|]#abc def\n"
+keys = "<C-u>2<A-x>forward-char<ret>x"
+[[case]]
+text = "#[|]#abc def\n"
+keys = "<A-x>kill-wo<tab><ret>"
+[[case]]
+text = "#[|]#abc def\n"
+keys = "<A-x>kill-wo<C-g>x"
+[[case]]
+text = "#[|]#abc def\n"
+keys = "<C-x>="
+[[case]]
+text = "#[|]#abc def\n"
+keys = "<C-x><C-g>x"
+[[case]]
+text = "#[|]#abc def\n"
+keys = "<C-u><C-g>x"
+[[case]]
+text = "#[|]#abc def\n"
+keys = "<esc>f<esc>fx"
+[[case]]
+text = "#[|]#abc def\n"
+keys = "<esc><esc><esc>x"
+[[case]]
+text = "#[|]#foobar fox\n"
+keys = "<C-e><ret>fo<A-/>"
+[[case]]
+text = "foobar fox foo\n#[|]#"
+keys = "fo<A-/>"
+[[case]]
+text = "foobar fox foo\n#[|]#"
+keys = "fo<A-/><A-/>"
+[[case]]
+text = "foobar fox foo\n#[|]#"
+keys = "fo<A-/><A-/><A-/>"
+[[case]]
+text = "foobar fox foo\n#[|]#"
+keys = "fo<A-/><A-/><A-/><A-/>"
+[[case]]
+text = "#[|]#fo\nfoobar fox\n"
+keys = "<C-e><A-/>"
+[[case]]
+text = "#[|]#a b\n"
+keys = "<C-x>h<C-x>h<C-w>"

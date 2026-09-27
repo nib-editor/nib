@@ -1,0 +1,9 @@
+name = "emacs"
+version = "0.1.0"
+api = "0.5"
+# The whole way of editing (docs/base.md); only one base runs.
+base = true
+# The menu bar in Emacs, the core menu here.
+menu-key = "F10"
+# Kills go to the system clipboard, and C-x C-f completes file names.
+capabilities = ["clipboard", "fs-read"]

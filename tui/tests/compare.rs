@@ -8,7 +8,8 @@
 //! set, as on CI. Build the plugins first with `cargo xtask build-plugins`.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 use std::{env, fs, thread};
 
 use nib_core::selection::{Range, Selection};
@@ -41,6 +42,9 @@ struct Outcome {
     cursor: usize,
     mark: Option<usize>,
 }
+
+/// How long one case may take in the real editor.
+const TIME_LIMIT: Duration = Duration::from_secs(20);
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
@@ -93,27 +97,42 @@ vim.cmd("qa!")
 
 const EMACS_SCRIPT: &str = r#";;; -*- lexical-binding: t -*-
 (require 'json)
+(defvar compare-index 0)
+(defun compare-run-keys (keys)
+  "Run KEYS as if typed. An error or C-g ends a keyboard macro, but typed
+keys go on after it, so the keys after the failed command run again as a
+macro of their own; `signal-hook-function' sees how far the macro got
+before the error unwinds it."
+  (let ((events (append (kbd keys) nil)))
+    (while events
+      (setq compare-index 0)
+      (condition-case nil
+          (let ((signal-hook-function
+                 (lambda (&rest _) (setq compare-index executing-kbd-macro-index))))
+            (execute-kbd-macro (vconcat events))
+            (setq events nil))
+        ((error quit)
+         (setq events (nthcdr (max 1 compare-index) events)))))))
 (let* ((case (json-read-file (getenv "CASE")))
        (out (getenv "OUT")))
   (with-current-buffer (get-buffer-create "compare")
     (switch-to-buffer (current-buffer))
     (fundamental-mode)
     (transient-mark-mode 1)
+    ;; nib's defaults: spaces, and tabs 4 columns wide.
     (setq indent-tabs-mode nil)
+    (setq tab-width 4)
     (insert (alist-get 'text case))
     (goto-char (1+ (alist-get 'point case)))
     (setq buffer-undo-list nil)
-    (let ((err (condition-case e
-                   (progn (execute-kbd-macro (kbd (alist-get 'keys case))) nil)
-                 (error (error-message-string e)))))
-      (with-temp-file out
-        (insert (json-encode
-                 `((text . ,(with-current-buffer "compare"
-                              (buffer-substring-no-properties (point-min) (point-max))))
-                   (point . ,(with-current-buffer "compare" (1- (point))))
-                   (mark . ,(with-current-buffer "compare"
-                              (and (region-active-p) (1- (mark)))))
-                   (error . ,err))))))))
+    (compare-run-keys (alist-get 'keys case))
+    (with-temp-file out
+      (insert (json-encode
+               `((text . ,(with-current-buffer "compare"
+                            (buffer-substring-no-properties (point-min) (point-max))))
+                 (point . ,(with-current-buffer "compare" (1- (point))))
+                 (mark . ,(with-current-buffer "compare"
+                            (and (region-active-p) (1- (mark))))))))))))
 "#;
 
 /// The keys in the notation of vim's `nvim_replace_termcodes`.
@@ -164,6 +183,13 @@ fn emacs_notation(keys: &[KeyEvent]) -> String {
                 KeyCode::Enter => "RET".into(),
                 KeyCode::Escape => "ESC".into(),
                 KeyCode::Tab => "TAB".into(),
+                // Function keys take modifiers inside the brackets.
+                KeyCode::Backspace if m.ctrl || m.shift => {
+                    return format!("<{}backspace>", emacs_modifiers(key));
+                }
+                KeyCode::Delete if m.ctrl || m.alt || m.shift => {
+                    return format!("<{}delete>", emacs_modifiers(key));
+                }
                 KeyCode::Backspace => "DEL".into(),
                 KeyCode::Delete => "<deletechar>".into(),
                 KeyCode::Up => "<up>".into(),
@@ -176,16 +202,21 @@ fn emacs_notation(keys: &[KeyEvent]) -> String {
                 KeyCode::PageDown => "<next>".into(),
                 KeyCode::F(n) => format!("<f{n}>"),
             };
-            let mut word = String::new();
-            for (on, p) in [(m.ctrl, "C-"), (m.alt, "M-"), (m.shift, "S-")] {
-                if on {
-                    word.push_str(p);
-                }
-            }
-            word + &name
+            emacs_modifiers(key) + &name
         })
         .collect();
     words.join(" ")
+}
+
+fn emacs_modifiers(key: &KeyEvent) -> String {
+    let m = key.modifiers;
+    let mut prefix = String::new();
+    for (on, p) in [(m.ctrl, "C-"), (m.alt, "M-"), (m.shift, "S-")] {
+        if on {
+            prefix.push_str(p);
+        }
+    }
+    prefix
 }
 
 /// The case's text and where its cursor is, in bytes.
@@ -208,12 +239,28 @@ fn run_real(
     let output = dir.join(format!("out-{n}.json"));
     let _ = fs::remove_file(&output);
     fs::write(&input, case.to_string()).map_err(|e| e.to_string())?;
-    let status = Command::new(program)
+    let mut child = Command::new(program)
         .args(args)
         .env("CASE", &input)
         .env("OUT", &output)
-        .output()
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|e| e.to_string())?;
+    // Keys that end waiting for more input would keep the editor waiting.
+    let started = Instant::now();
+    while child.try_wait().map_err(|e| e.to_string())?.is_none() {
+        if started.elapsed() > TIME_LIMIT {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!(
+                "{program} still ran after {TIME_LIMIT:?}; do the keys end waiting for input?"
+            ));
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    let status = child.wait_with_output().map_err(|e| e.to_string())?;
     let text = fs::read_to_string(&output).map_err(|_| {
         format!(
             "{program} left no result: {}",
@@ -290,9 +337,6 @@ fn emacs(dir: &Path, case: &Case) -> Result<Outcome, String> {
         dir,
         &input,
     )?;
-    if let Some(err) = out["error"].as_str() {
-        return Err(format!("emacs: {err}"));
-    }
     let result = out["text"].as_str().unwrap_or_default().to_string();
     let point = out["point"].as_u64().unwrap_or(0) as usize;
     let mark = out["mark"]
@@ -426,4 +470,9 @@ fn keys_are_written_for_each_editor() {
     let keys = parse_keys("d<C-w>x<lt><ret><A-f> <esc>").unwrap();
     assert_eq!(vim_notation(&keys), "d<C-w>x<lt><CR><M-f> <Esc>");
     assert_eq!(emacs_notation(&keys), "d C-w x < RET M-f SPC ESC");
+    let keys = parse_keys("<C-S-backspace><A-backspace><C-del><del><C-up>").unwrap();
+    assert_eq!(
+        emacs_notation(&keys),
+        "<C-S-backspace> M-DEL <C-delete> <deletechar> C-<up>"
+    );
 }

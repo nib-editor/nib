@@ -4,6 +4,7 @@
 helix
 nano
 vim
+emacs
 picker
 lsp
 indent
