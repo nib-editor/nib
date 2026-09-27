@@ -189,8 +189,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 
 ### M2.5 以降
 
-- 構文木の API（`maf` など）を injection の中でも使えるようにする。今は元の言語の構文木だけを見る
-- Rust のドキュメントコメントの、言語名のないコードブロックを Rust として色を付ける（rustdoc の決まり）。今のクエリでは書けない
+どちらも M6 で済ませた。
 
 ## M1 のあと
 
@@ -374,6 +373,8 @@ M3 を終えた時点で、git のエディタ（`core.editor`）を hx から n
 確かめ方: `nib plugin new` で作った雛形が、`nib plugin build` と `nib plugin test` をそのまま通ること。
 
 ### M5.3 テストの書式を広げる
+
+> 完了（2026-09-28）。作業中に、テストごとの作業ディレクトリと `files`、`expect.absent` も足した。
 
 設計は [plugin-dev.md](plugin-dev.md) の「待つこと、手順、設定」。
 
