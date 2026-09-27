@@ -1,0 +1,1023 @@
+# Cases for tui/tests/compare.rs: the same keys go to `nvim --headless
+# --clean` and to nib's vim base, and the text and cursor must match. A
+# case nib does differently says why in `differs` (docs/vim.md).
+#
+# `text` ends with a line break and marks the cursor with #[|]#. `keys`
+# end in normal mode.
+
+# Motions
+[[case]]
+text = "#[|]#one two three\n"
+keys = "w"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "2w"
+[[case]]
+text = "#[|]#foo.bar(baz) qux\n"
+keys = "3w"
+[[case]]
+text = "#[|]#foo.bar(baz) qux\n"
+keys = "W"
+[[case]]
+text = "one\n\n#[|]#two\n"
+keys = "b"
+[[case]]
+text = "one\n#[|]#\ntwo three\n"
+keys = "w"
+[[case]]
+text = "one two#[|]#\nthree\n"
+keys = "w"
+[[case]]
+text = "one #[|]#two\n"
+keys = "w"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "e"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "ee"
+[[case]]
+text = "one two thr#[|]#ee\n"
+keys = "b"
+[[case]]
+text = "one two thr#[|]#ee\n"
+keys = "2b"
+[[case]]
+text = "one two thr#[|]#ee\n"
+keys = "ge"
+[[case]]
+text = "foo.bar #[|]#baz\n"
+keys = "B"
+[[case]]
+text = "foo.bar #[|]#baz\n"
+keys = "gE"
+[[case]]
+text = "    in#[|]#dented\n"
+keys = "0"
+[[case]]
+text = "    in#[|]#dented\n"
+keys = "^"
+[[case]]
+text = "#[|]#one two\n"
+keys = "$"
+[[case]]
+text = "#[|]#one  \n"
+keys = "g_"
+[[case]]
+text = "#[|]#a long line\nshort\nanother long line\n"
+keys = "$jj"
+[[case]]
+text = "abc#[|]#def\nxy\nabcdefgh\n"
+keys = "jj"
+[[case]]
+text = "a\nb\nc#[|]#\n"
+keys = "gg"
+[[case]]
+text = "abc#[|]#\nb\ncdef\n"
+keys = "G"
+[[case]]
+text = "#[|]#a\nb\nc\nd\n"
+keys = "3G"
+[[case]]
+text = "#[|]#a\n  b\nc\n"
+keys = "+"
+[[case]]
+text = "a\n  #[|]#b\nc\n"
+keys = "-"
+[[case]]
+text = "#[|]#a(b)c\n"
+keys = "fc"
+[[case]]
+text = "#[|]#a,b,c,d\n"
+keys = "2f,"
+[[case]]
+text = "#[|]#a,b,c,d\n"
+keys = "t,;"
+[[case]]
+text = "#[|]#a,b,c,d\n"
+keys = "f,;,"
+[[case]]
+text = "a,b,c,#[|]#d\n"
+keys = "F,"
+[[case]]
+text = "a,b,c,#[|]#d\n"
+keys = "T,"
+[[case]]
+text = "#[|]#if (a[1] == b) {\n}\n"
+keys = "%"
+[[case]]
+text = "if (a[1] == b) {\n#[|]#}\n"
+keys = "%"
+[[case]]
+text = "#[|]#one\ntwo\n\nthree\n\nfour\n"
+keys = "}"
+[[case]]
+text = "#[|]#one\ntwo\n\nthree\n\nfour\n"
+keys = "2}"
+[[case]]
+text = "one\ntwo\n\nthree\nfo#[|]#ur\n"
+keys = "{"
+[[case]]
+text = "#[|]#abcdef\n"
+keys = "4|"
+[[case]]
+text = "#[|]#abc\n"
+keys = "l"
+[[case]]
+text = "a#[|]#bc\n"
+keys = "5l"
+[[case]]
+text = "ab#[|]#c\n"
+keys = "5h"
+
+# Operators with motions
+[[case]]
+text = "#[|]#one two three\n"
+keys = "dw"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "d2w"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "2dw"
+[[case]]
+text = "one #[|]#two\nthree\n"
+keys = "dw"
+[[case]]
+text = "one\n#[|]#\ntwo\n"
+keys = "dw"
+[[case]]
+text = "one #[|]#two  \n  three\n"
+keys = "dw"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "de"
+[[case]]
+text = "one two thr#[|]#ee\n"
+keys = "db"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "d$"
+[[case]]
+text = "one two #[|]#three\n"
+keys = "d0"
+[[case]]
+text = "    one #[|]#two\n"
+keys = "d^"
+[[case]]
+text = "#[|]#a(b)c\n"
+keys = "dfc"
+[[case]]
+text = "#[|]#a(b)c\n"
+keys = "dt)"
+[[case]]
+text = "a\n#[|]#b\nc\nd\n"
+keys = "dj"
+[[case]]
+text = "a\nb\n#[|]#c\nd\n"
+keys = "dk"
+[[case]]
+text = "a\nb\n#[|]#c\nd\n"
+keys = "dG"
+[[case]]
+text = "a\nb\n#[|]#c\nd\n"
+keys = "dgg"
+[[case]]
+text = "#[|]#one\ntwo\n\nthree\n"
+keys = "d}"
+[[case]]
+text = "o#[|]#ne\ntwo\n\nthree\n"
+keys = "d}"
+[[case]]
+text = "#[|]#f(a, b) + 1\n"
+keys = "d%"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "cwX<esc>"
+[[case]]
+text = "one tw#[|]#o three\n"
+keys = "cwX<esc>"
+[[case]]
+text = "abc  #[|]# def\n"
+keys = "cwX<esc>"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "c2wX<esc>"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "ceX<esc>"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "c$X<esc>"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "ywP"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "y$$p"
+[[case]]
+text = "one two #[|]#three\n"
+keys = "yb"
+[[case]]
+text = "abc\n#[|]#def\nghi\n"
+keys = "yjP"
+[[case]]
+text = "abc\nd#[|]#ef\nghi\n"
+keys = "ykp"
+[[case]]
+text = "#[|]#one Two\n"
+keys = "g~w"
+[[case]]
+text = "#[|]#one Two\n"
+keys = "gUe"
+[[case]]
+text = "ONE #[|]#TWO\n"
+keys = "gu$"
+[[case]]
+text = "o#[|]#ne two\n"
+keys = "g~~"
+
+# Linewise
+[[case]]
+text = "a\n#[|]#b\nc\n"
+keys = "dd"
+[[case]]
+text = "a\n  b#[|]#b\n  c\n"
+keys = "dd"
+[[case]]
+text = "a\nb\n#[|]#c\n"
+keys = "dd"
+[[case]]
+text = "#[|]#a\nb\nc\nd\n"
+keys = "2dd"
+[[case]]
+text = "a\nb\n#[|]#c\n"
+keys = "3dd"
+[[case]]
+text = "#[|]#a\n"
+keys = "dd"
+[[case]]
+text = "a\n  b#[|]#b\nc\n"
+keys = "ccX<esc>"
+[[case]]
+text = "a\n  b#[|]#b\nc\n"
+keys = "SX<esc>"
+[[case]]
+text = "a\n#[|]#b\nc\n"
+keys = "yyp"
+[[case]]
+text = "a\n#[|]#b\nc\n"
+keys = "yyP"
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = "yyGp"
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = "2yyjp"
+[[case]]
+text = "#[|]#a\nb\n"
+keys = "3p"
+[[case]]
+text = "#[|]#one two\n"
+keys = "yw3P"
+
+# Simple changes
+[[case]]
+text = "a#[|]#bc\n"
+keys = "x"
+[[case]]
+text = "abc#[|]#\n"
+keys = "x"
+[[case]]
+text = "a#[|]#bcdef\n"
+keys = "3x"
+[[case]]
+text = "a#[|]#bcdef\n"
+keys = "10x"
+[[case]]
+text = "ab#[|]#c\n"
+keys = "X"
+[[case]]
+text = "a#[|]#bc\n"
+keys = "xp"
+[[case]]
+text = "a#[|]#bcdef\n"
+keys = "D"
+[[case]]
+text = "a#[|]#bcdef\n"
+keys = "CX<esc>"
+[[case]]
+text = "a#[|]#bcdef\n"
+keys = "sX<esc>"
+[[case]]
+text = "a#[|]#bcdef\n"
+keys = "3sX<esc>"
+[[case]]
+text = "a#[|]#bcdef\n"
+keys = "Y$p"
+[[case]]
+text = "a#[|]#bcd\n"
+keys = "rx"
+[[case]]
+text = "a#[|]#bcd\n"
+keys = "3rx"
+[[case]]
+text = "a#[|]#bcd\n"
+keys = "5rx"
+[[case]]
+text = "a#[|]#b cd\n"
+keys = "r<ret>"
+[[case]]
+text = "#[|]#aBc\n"
+keys = "~~"
+[[case]]
+text = "#[|]#aBc\n"
+keys = "5~"
+[[case]]
+text = "  a#[|]#bc\n  def\n"
+keys = "J"
+[[case]]
+text = "abc #[|]#\ndef\n"
+keys = "J"
+[[case]]
+text = "#[|]#f(\n)\n"
+keys = "J"
+[[case]]
+text = "#[|]#a\nb\nc\nd\n"
+keys = "3J"
+[[case]]
+text = "#[|]#a\n  b\n"
+keys = "gJ"
+[[case]]
+text = "abc\n#[|]#\ndef\n"
+keys = "J"
+[[case]]
+text = "x = #[|]#41;\n"
+keys = "<C-a>"
+[[case]]
+text = "#[|]#x = 41;\n"
+keys = "5<C-x>"
+[[case]]
+text = "#[|]#x = -3\n"
+keys = "<C-a><C-a><C-a><C-a>"
+[[case]]
+text = "#[|]#0x0f\n"
+keys = "<C-a>"
+
+# Insert mode
+[[case]]
+text = "a#[|]#c\n"
+keys = "ib<esc>"
+[[case]]
+text = "a#[|]#c\n"
+keys = "ab<esc>"
+[[case]]
+text = "  a#[|]#c\n"
+keys = "Ix<esc>"
+[[case]]
+text = "  a#[|]#c\n"
+keys = "Ax<esc>"
+[[case]]
+text = "  a#[|]#c\n"
+keys = "gIx<esc>"
+[[case]]
+text = "  a#[|]#c\nd\n"
+keys = "ox<esc>"
+[[case]]
+text = "  a#[|]#c\nd\n"
+keys = "Ox<esc>"
+[[case]]
+text = "  a#[|]#c\nd\n"
+keys = "o<esc>"
+[[case]]
+text = "  a#[|]#c\n"
+keys = "A<ret>x<ret><ret>y<esc>"
+[[case]]
+text = "a#[|]#c\n"
+keys = "3ib<esc>"
+[[case]]
+text = "a#[|]#c\n"
+keys = "3ox<esc>"
+[[case]]
+text = "ab#[|]#c\n"
+keys = "ix<backspace><backspace><esc>"
+[[case]]
+text = "one two#[|]#\n"
+keys = "a three<C-w><C-w>x<esc>"
+[[case]]
+text = "  one two#[|]#\n"
+keys = "a three<C-u><esc>"
+[[case]]
+text = "#[|]#one\n"
+keys = "A two<C-u><esc>"
+[[case]]
+text = "a#[|]#bc\n"
+keys = "i<ret><esc>"
+[[case]]
+text = "a#[|]#bcd\n"
+keys = "Rxy<esc>"
+[[case]]
+text = "a#[|]#bcd\n"
+keys = "Rxyz12<esc>"
+[[case]]
+text = "a#[|]#bcd\n"
+keys = "Rxy<backspace><esc>"
+[[case]]
+text = "one #[|]#two\n"
+keys = "yiwA <C-r>\"<esc>"
+
+# Text objects
+[[case]]
+text = "one tw#[|]#o three\n"
+keys = "diw"
+[[case]]
+text = "one tw#[|]#o three\n"
+keys = "daw"
+[[case]]
+text = "one two thr#[|]#ee\n"
+keys = "daw"
+[[case]]
+text = "one tw#[|]#o three four\n"
+keys = "d3iw"
+[[case]]
+text = "one tw#[|]#o three four\n"
+keys = "d2aw"
+[[case]]
+text = "a foo.b#[|]#ar c\n"
+keys = "diW"
+[[case]]
+text = "f(a, #[|]#b)\n"
+keys = "di("
+[[case]]
+text = "f(a, #[|]#b)\n"
+keys = "da("
+[[case]]
+text = "f(g(#[|]#x), y)\n"
+keys = "d2i("
+[[case]]
+text = "fn() {\n    a#[|]#;\n    b;\n}\n"
+keys = "di{"
+[[case]]
+text = "fn() {\n    a#[|]#;\n}\n"
+keys = "ci{x<esc>"
+[[case]]
+text = "x = [1, #[|]#2]\n"
+keys = "ci]9<esc>"
+[[case]]
+text = "say \"hel#[|]#lo\" now\n"
+keys = "di\""
+[[case]]
+text = "say \"hel#[|]#lo\" now\n"
+keys = "da\""
+[[case]]
+text = "#[|]#say 'hi' now\n"
+keys = "ci'x<esc>"
+[[case]]
+text = "one\ntw#[|]#o\n\nthree\n"
+keys = "dip"
+[[case]]
+text = "one\ntw#[|]#o\n\nthree\n"
+keys = "dap"
+[[case]]
+text = "one\n\nthr#[|]#ee\nfour\n"
+keys = "dap"
+[[case]]
+text = "one tw#[|]#o three\n"
+keys = "yiwP"
+
+# Visual mode
+[[case]]
+text = "one #[|]#two three\n"
+keys = "vld"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "vey"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "vbd"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "veU"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "viwcX<esc>"
+[[case]]
+text = "a\n#[|]#b\nc\nd\n"
+keys = "Vjd"
+[[case]]
+text = "a\n#[|]#b\nc\nd\n"
+keys = "Vjy"
+[[case]]
+text = "a\n#[|]#b\nc\nd\n"
+keys = "VjJ"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "vexp"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "yiwwviwp"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "vlrx"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "vllohd"
+[[case]]
+text = "abc\n#[|]#def\nghi\n"
+keys = "vjd"
+[[case]]
+text = "#[|]#abc\ndef\nghi\n"
+keys = "<C-v>jld"
+[[case]]
+text = "#[|]#abc\ndef\nghi\n"
+keys = "<C-v>jjIx<esc>"
+[[case]]
+text = "#[|]#abc\ndef\nghi\n"
+keys = "l<C-v>jcX<esc>"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "viw<esc>"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "vee<esc>gvd"
+
+# Repeat, undo, redo
+[[case]]
+text = "#[|]#one two three four\n"
+keys = "dw.."
+[[case]]
+text = "#[|]#a\nb\nc\nd\ne\n"
+keys = "dd2."
+[[case]]
+text = "#[|]#one two three\n"
+keys = "cwX<esc>w."
+[[case]]
+text = "#[|]#a\nb\n"
+keys = "Ax<esc>j."
+[[case]]
+text = "#[|]#a\nb\n"
+keys = "3Ax<esc>j."
+[[case]]
+text = "#[|]#one two three\n"
+keys = "dwu"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "dwdwuu<C-r>"
+[[case]]
+text = "one #[|]#two\n"
+keys = "ixyz<esc>u"
+[[case]]
+text = "#[|]#a b c\n"
+keys = "x..u"
+[[case]]
+text = "#[|]#a\nb\n"
+keys = "ddpu"
+
+# Registers
+[[case]]
+text = "#[|]#one two\n"
+keys = "\"ayw$\"ap"
+[[case]]
+text = "#[|]#one two\n"
+keys = "\"ayww\"Ayw$\"ap"
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = "dddd\"2p"
+[[case]]
+text = "#[|]#one two\n"
+keys = "ywdw\"0P"
+[[case]]
+text = "#[|]#one two\n"
+keys = "yw\"_dwP"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "dwdw\"-P"
+
+# Macros
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = "qqA!<esc>jq2@q"
+[[case]]
+text = "#[|]#1\n2\n3\n"
+keys = "qaI- <esc>jq@a@@"
+[[case]]
+text = "#[|]#x 1\nx 2\n"
+keys = "qq0<C-a>jq@q"
+
+# Marks and jumps
+[[case]]
+text = "one #[|]#two\nthree\nfour\n"
+keys = "majj`a"
+[[case]]
+text = "one #[|]#two\nthree\nfour\n"
+keys = "majj'a"
+[[case]]
+text = "one #[|]#two\nthree\nfour\n"
+keys = "majjd'a"
+[[case]]
+text = "one #[|]#two\nthree\nfour\n"
+keys = "majjld`a"
+[[case]]
+text = "#[|]#a\nb\nc\nd\n"
+keys = "G''"
+[[case]]
+text = "#[|]#a\nb\nc\nd\n"
+keys = "3GG<C-o>"
+[[case]]
+text = "#[|]#a\nb\nc\nd\n"
+keys = "3GG<C-o><C-o><C-i>"
+[[case]]
+text = "one #[|]#two\nthree\n"
+keys = "maggOnew<esc>`a"
+
+# Searching
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "/two<ret>"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "/two<ret>n"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "/two<ret>nn"
+[[case]]
+text = "one two one #[|]#two\n"
+keys = "?one<ret>"
+[[case]]
+text = "one two one #[|]#two\n"
+keys = "?one<ret>n"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "/two<ret>N"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "d/one<ret>"
+[[case]]
+text = "#[|]#foo bar foo\n"
+keys = "*"
+[[case]]
+text = "foo bar #[|]#foo\n"
+keys = "#"
+[[case]]
+text = "#[|]#foo foobar foo\n"
+keys = "*"
+[[case]]
+text = "#[|]#a1 b22 c333\n"
+keys = "/\\d\\{2}<ret>"
+[[case]]
+text = "#[|]#foo(bar) baz\n"
+keys = "/\\(bar\\|baz\\)<ret>n"
+
+# The command line
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = ":3<ret>"
+[[case]]
+text = "#[|]#foo foo\nfoo\n"
+keys = ":s/foo/bar/<ret>"
+[[case]]
+text = "#[|]#foo foo\nfoo\n"
+keys = ":s/foo/bar/g<ret>"
+[[case]]
+text = "#[|]#foo foo\nfoo\n  foo\n"
+keys = ":%s/foo/bar/g<ret>"
+[[case]]
+text = "#[|]#a b\nc d\n"
+keys = ":%s/ /-/<ret>"
+[[case]]
+text = "#[|]#foo\nbar\n"
+keys = ":%s/o/<&>/g<ret>"
+[[case]]
+text = "#[|]#a\nb\n"
+keys = ":%s/^/# /<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\nd\n"
+keys = ":2,3d<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\nd\n"
+keys = ":2d<ret>"
+[[case]]
+text = "a\n#[|]#b\nc\nd\n"
+keys = ":.,+1d<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = ":$d<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\nd\n"
+keys = ":1m3<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\nd\n"
+keys = ":3m0<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = ":1t$<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = ":1,2j<ret>"
+[[case]]
+text = "#[|]#foo\nbar\nfoo\n"
+keys = ":g/foo/d<ret>"
+[[case]]
+text = "#[|]#foo\nbar\nfoo\n"
+keys = ":v/foo/d<ret>"
+[[case]]
+text = "#[|]#foo 1\nbar\nfoo 2\n"
+keys = ":g/foo/s/\\d/N/<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = ":%normal Ax<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = ":2,3normal I- <ret>"
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = "Vj:s/$/!/<ret>"
+[[case]]
+text = "#[|]#foo foo\nfoo foo\n"
+keys = ":s/foo/bar/<ret>j:&&<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\nd\n"
+keys = "2:d<ret>"
+
+# More insert mode
+[[case]]
+text = "    #[|]#a\n"
+keys = "o<esc>"
+[[case]]
+text = "    a#[|]#\n"
+keys = "A  <ret>b<esc>"
+[[case]]
+text = "    a#[|]#\n"
+keys = "o<ret>b<esc>"
+[[case]]
+text = "a#[|]#bc\n"
+keys = "i<C-v><tab><esc>"
+[[case]]
+text = "a#[|]#bc def\n"
+keys = "i<C-o>dwX<esc>"
+[[case]]
+text = "abc#[|]#\n"
+keys = "A<C-o>0X<esc>"
+[[case]]
+text = "one tw#[|]#o\n"
+keys = "ciwX<esc>w."
+[[case]]
+text = "#[|]#one two three\n"
+keys = "ciwX<esc>ww."
+[[case]]
+text = "#[|]#abc\n"
+keys = "Rx<ret>y<esc>"
+[[case]]
+text = "#[|]#abcdef\n"
+keys = "2Rxy<esc>"
+[[case]]
+text = "one#[|]#\n"
+keys = "a<ret><C-w><esc>"
+[[case]]
+text = "a#[|]#b\n"
+keys = "i<del><esc>"
+
+# More motions and operators
+[[case]]
+text = "#[|]#a,b,c,d\n"
+keys = "3f,,"
+[[case]]
+text = "a,b,c,#[|]#d\n"
+keys = "F,;"
+[[case]]
+text = "a,b,c,#[|]#d\n"
+keys = "T,;"
+[[case]]
+text = "#[|]#abc(def)\n"
+keys = "ct(X<esc>"
+[[case]]
+text = "abc(def)#[|]#\n"
+keys = "dT("
+[[case]]
+text = "abc(def)#[|]#\n"
+keys = "dF("
+[[case]]
+text = "#[|]#a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n"
+keys = "50%"
+[[case]]
+text = "one tw#[|]#o three\n"
+keys = "yiw"
+[[case]]
+text = "f(a, #[|]#b)\n"
+keys = "ya(P"
+[[case]]
+text = "a\nb#[|]#c\nd\n"
+keys = "yyp"
+[[case]]
+text = "a\nb#[|]#c\nd\n"
+keys = "yj"
+[[case]]
+text = "one\ntw#[|]#o\n\nthree\n"
+keys = "gUip"
+[[case]]
+text = "#[|]#a\nb\n"
+keys = "5J"
+[[case]]
+text = "a\n#[|]#\nb\n"
+keys = "x"
+[[case]]
+text = "#[|]#abc\n"
+keys = "X"
+[[case]]
+text = "ab#[|]#c\n"
+keys = "~"
+[[case]]
+text = "#[|]#abcdef\n"
+keys = "x3."
+[[case]]
+text = "#[|]#abcdef\n"
+keys = "2x."
+[[case]]
+text = "#[|]#one two three\n"
+keys = "dwdwuu"
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = "jddu"
+[[case]]
+text = "#[|]#one two three\n"
+keys = "wcwX<esc>u"
+[[case]]
+text = "#[|]#a b\n"
+keys = "A c<esc>0u"
+[[case]]
+text = "#[|]#one\ntwo\n"
+keys = "Otop<esc>u"
+[[case]]
+text = "#[|]#abc\n"
+keys = "3rxu"
+[[case]]
+text = "#[|]#abc def\n"
+keys = "wd0"
+[[case]]
+text = "  abc #[|]#def\n"
+keys = "d0"
+[[case]]
+text = "#[|]#abc def\n"
+keys = "wy0P"
+[[case]]
+text = "a b #[|]#c\n"
+keys = "dge"
+[[case]]
+text = "abc\n  #[|]#def\n"
+keys = "db"
+[[case]]
+text = "abc\n#[|]#def\n"
+keys = "dh"
+[[case]]
+text = "abc#[|]#\ndef\n"
+keys = "dl"
+[[case]]
+text = "#[|]#abc\ndef\nghi\n"
+keys = "d2j"
+[[case]]
+text = "#[|]#abc\ndef\n"
+keys = "d5j"
+[[case]]
+text = "#[|]#abc\n"
+keys = "dj"
+
+# Blocks and visual
+[[case]]
+text = "#[|]#abc\ndef\nghi\n"
+keys = "<C-v>jly$p"
+[[case]]
+text = "#[|]#abc\ndef\nghi\n"
+keys = "<C-v>jlyP"
+[[case]]
+text = "#[|]#abcd\nef\nghij\n"
+keys = "l<C-v>jjlAX<esc>"
+[[case]]
+text = "#[|]#abc\ndef\nghi\n"
+keys = "<C-v>jjrx"
+[[case]]
+text = "#[|]#abc\ndef\nghi\n"
+keys = "<C-v>jjlU"
+[[case]]
+text = "a\n#[|]#b\nc\nd\n"
+keys = "Vjojd"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "vwwbd"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "v$d"
+[[case]]
+text = "f(a, #[|]#b)\n"
+keys = "vi(d"
+[[case]]
+text = "f(a, #[|]#b)\n"
+keys = "va(y$p"
+[[case]]
+text = "one tw#[|]#o three\n"
+keys = "vawd"
+[[case]]
+text = "a\n#[|]#b\nc\n"
+keys = "VcX<esc>"
+[[case]]
+text = "a\n#[|]#b\nc\n"
+keys = "VjrX"
+[[case]]
+text = "abc #[|]#def ghi\n"
+keys = "vlll~"
+[[case]]
+text = "#[|]#one\ntwo\n"
+keys = "yyjVp"
+[[case]]
+text = "#[|]#one two\nthree\n"
+keys = "ywjVp"
+[[case]]
+text = "#[|]#one\ntwo\n"
+keys = "yyjvlp"
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = "VjA!<esc>"
+differs = "Neovim inserts before the last char here, from state left by earlier commands; nib appends"
+[[case]]
+text = "  a\n  #[|]#b\nc\n"
+keys = "VjI!<esc>"
+[[case]]
+text = "  a\n  #[|]#b\nc\n"
+keys = "kVjA!<esc>"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "vllA!<esc>"
+[[case]]
+text = "one #[|]#two three\n"
+keys = "vllI!<esc>"
+
+# More registers and macros
+[[case]]
+text = "#[|]#a\nb\nc\nd\n"
+keys = "dddddd\"1p\"2p\"3p"
+[[case]]
+text = "#[|]#a b\n"
+keys = "\"ayy\"byw\"ap\"bP"
+[[case]]
+text = "#[|]#a\n"
+keys = "qwA1<esc>q:s/a/b/<ret>@:"
+[[case]]
+text = "#[|]#one two one two\n"
+keys = "qq/two<ret>rXq@q"
+[[case]]
+text = "#[|]#1\n2\n3\n4\n"
+keys = "qqddjq3@q"
+
+# More searching and the command line
+[[case]]
+text = "#[|]#Foo foo\n"
+keys = "/\\cfoo<ret>"
+[[case]]
+text = "#[|]#foo bar\nbar foo\n"
+keys = "/bar<ret>ggn"
+[[case]]
+text = "one #[|]#two\n"
+keys = "/zzz<ret>"
+[[case]]
+text = "#[|]#Foo foo\n"
+keys = ":s/foo/x/gi<ret>"
+[[case]]
+text = "#[|]#foo\nbar\nfoo\nbaz\n"
+keys = ":g!/foo/d<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\nd\n"
+keys = ":2;+1d<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\nd\n"
+keys = ":/c/d<ret>"
+[[case]]
+text = "a\nb\nc\n#[|]#d\n"
+keys = ":?b?,.d<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\nd\n"
+keys = "jmajjmb:'a,'bd<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = ":2y<ret>P"
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = ":2y x<ret>\"xp"
+[[case]]
+text = "#[|]#one\ntwo\n"
+keys = ":%s/o/0/g<ret>u"
+[[case]]
+text = "#[|]#a b c\n"
+keys = ":s/ /\\r/g<ret>"
+[[case]]
+text = "#[|]#a.b.c\n"
+keys = ":s/\\./-/g<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = ":%j<ret>"
+[[case]]
+text = "#[|]#a\nb\nc\n"
+keys = ":2,3>\n"
+differs = "the indent is nib's setting, not shiftwidth"
+[[case]]
+text = "#[|]#abc\n"
+keys = ">>"
+differs = "the indent is nib's setting, not shiftwidth"

@@ -13,6 +13,7 @@ members = [
     "test/events",
     "test/insert",
     "test/misbehave",
+    "vim",
 ]
 
 [workspace.package]

@@ -151,6 +151,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nib-plugin-vim"
+version = "0.1.0"
+dependencies = [
+ "nib-base-kit",
+ "nib-plugin",
+ "serde_json",
+]
+
+[[package]]
 name = "nib-test-plugin-events"
 version = "0.0.0"
 dependencies = [

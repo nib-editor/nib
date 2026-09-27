@@ -3,6 +3,7 @@
 # package`.
 helix
 nano
+vim
 picker
 lsp
 indent

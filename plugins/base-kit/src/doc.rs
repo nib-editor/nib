@@ -267,7 +267,7 @@ pub fn prev_word_start(doc: &Doc, cursor: u64, long: bool) -> Option<(u64, u64)>
     })
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FindKind {
     /// `f`: through the char.
     Forward,

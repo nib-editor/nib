@@ -1,0 +1,111 @@
+# Run with `nib plugin test target/plugins/vim plugins/vim/tests/vim.toml`
+# after `cargo xtask build-plugins`; tui/tests/plugin_test.rs does. How the
+# keys edit is compared with Neovim in tui/tests/compare.rs; these are the
+# rest.
+
+with = ["picker"]
+
+[[test]]
+name = "the mode is on the status line, and the cursor is a point"
+text = "#[|]#hello\n"
+
+[[test.step]]
+expect.screen = [" NORMAL "]
+expect.selections = "#[|]#hello\n"
+
+[[test.step]]
+keys = "A world"
+expect.screen = [" INSERT "]
+expect.selections = "hello world#[|]#\n"
+
+[[test.step]]
+keys = "<esc>v"
+expect.screen = [" VISUAL "]
+expect.selections = "hello worl#[d|]#\n"
+
+[[test]]
+name = "a block selects the same columns on each line"
+text = "#[|]#abc\ndef\n"
+keys = "<C-v>jl"
+
+[test.expect]
+screen = [" V-BLOCK "]
+selections = "#(ab|)#c\n#[de|]#f\n"
+
+[[test]]
+name = "keys being typed show, and so does recording"
+text = "#[|]#abc\n"
+
+[[test.step]]
+keys = "2d"
+expect.screen = ["2d"]
+
+[[test.step]]
+keys = "<esc>qa"
+expect.screen = ["recording @a"]
+
+[[test.step]]
+keys = "q"
+expect.absent = ["recording"]
+
+[[test]]
+name = ":w writes the file, so :q then quits"
+file = "notes.txt"
+text = "#[|]#hi\n"
+keys = "x:w<ret>:q<ret>"
+
+[test.expect]
+absent = ["E37"]
+
+[[test]]
+name = "a search that finds nothing says so"
+text = "#[|]#abc\n"
+keys = "/zzz<ret>"
+
+[test.expect]
+message = "E486: Pattern not found: zzz"
+selections = "#[|]#abc\n"
+
+[[test]]
+name = ":q with changes asks for !"
+text = "#[|]#abc\n"
+keys = "x:q<ret>"
+
+[test.expect]
+message = "E37: No write since last change (add ! to override)"
+
+[[test]]
+name = "settings map keys to vim's keys or to commands"
+text = "#[|]#one\ntwo\n"
+keys = "Yp"
+settings.keys.normal = { Y = "yy", "C-s" = "buffer.save" }
+
+[test.expect]
+text = "one\none\ntwo\n"
+
+[[test]]
+name = "plugins' keys are under the leader, Space"
+text = "abc\n"
+keys = " f"
+wait = 5000
+
+[test.expect]
+screen = ["files> "]
+
+[[test]]
+name = "the leader can be another key"
+text = "abc\n"
+keys = ",f"
+wait = 5000
+settings.leader = ","
+
+[test.expect]
+screen = ["files> "]
+
+[[test]]
+name = "the command line completes names with Tab"
+text = "abc\n"
+keys = ":noh<tab>"
+
+[test.expect]
+screen = [":nohlsearch"]
