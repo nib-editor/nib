@@ -68,6 +68,7 @@ cargo build --release
 R=$(echo ~/.cargo/registry/src/*/)
 python3 bench/latency.py $R/ropey-1.6.1/src/rope.rs --idle 30 vim nvim hx emacs nib
 python3 bench/latency.py $R/ratatui-0.29.0/CHANGELOG.md vim nvim hx emacs nib
+BENCH_NIB_BASE=emacs python3 bench/latency.py $R/ropey-1.6.1/src/rope.rs nib   # ベースを変えて測る
 NIB_STARTUP_FILE=$R/ropey-1.6.1/src/rope.rs cargo test --release -p nib-editor-core --test syntax startup_breakdown -- --ignored --nocapture
 cargo test --release -p nib-editor-core --test plugins key_latency -- --ignored --nocapture
 ```

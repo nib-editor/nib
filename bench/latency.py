@@ -6,7 +6,8 @@ Usage: python3 bench/latency.py FILE [--startup] [--idle SECONDS] [vim] [nvim] [
 --idle also measures CPU use and wakeups while the editor waits for keys.
 BENCH_VIM, BENCH_NVIM, BENCH_HX, and BENCH_EMACS name the programs to run
 instead of those on PATH, as launchers that do not exec would be measured
-too.
+too. BENCH_NIB_BASE picks nib's base (helix unless set): helix, vim, and
+emacs are driven with their own keys; nano is only for --startup.
 nib is run from target/release, so build it with `cargo build --release`.
 
 Memory and idle CPU come from proc_pid_rusage, so only on macOS.
@@ -228,6 +229,11 @@ def editors(path, config):
     os.makedirs(os.path.join(config, "nib", "plugins"), exist_ok=True)
     with open(os.path.join(config, "nib", "plugins", "lsp.toml"), "w") as f:
         f.write("enabled = false\n")
+    # Without a config.toml, nib's first start asks which base to use.
+    base = os.environ.get("BENCH_NIB_BASE", "helix")
+    with open(os.path.join(config, "nib", "config.toml"), "w") as f:
+        f.write(f'[core]\nbase = "{base}"\n')
+    nib_keys = EMACS_KEYS if base == "emacs" else Keys()
     program = lambda name: os.environ.get(f"BENCH_{name.upper()}", name)
     return {
         # No swap file: runs end with SIGKILL, and a swap file left behind
@@ -236,7 +242,7 @@ def editors(path, config):
         "nvim": Editor("nvim --clean", [program("nvim"), "--clean", "-n", path]),
         "hx": Editor("helix (lsp off)", [program("hx"), "-c", hx_config, path]),
         "emacs": Editor("emacs -nw -Q", [program("emacs"), "-nw", "-Q", path], EMACS_KEYS),
-        "nib": Editor("nib (lsp off)", [NIB, path], env={"XDG_CONFIG_HOME": config}),
+        "nib": Editor(f"nib (lsp off, {base})", [NIB, path], nib_keys, {"XDG_CONFIG_HOME": config}),
     }
 
 
