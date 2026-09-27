@@ -131,22 +131,17 @@ fn search(word: &str) -> Result<(), String> {
 fn add(store: &Store, text: &str, yes: bool) -> Result<(), String> {
     let builtin: Vec<&str> = builtin::PLUGINS.iter().map(|(name, _, _)| *name).collect();
     // A name is only a way to the source, which is what is kept.
-    let (source, listed) = if let Some((name, tag)) = install::name_and_tag(text) {
-        let listings = install::index()?;
-        let listing = listings
-            .into_iter()
-            .find(|l| l.name == name)
-            .ok_or_else(|| format!("no plugin named {name} in {}", install::INDEX))?;
-        println!("{name} is {} in the index", listing.source);
-        let source = match tag {
-            Some(tag) => install::at_tag(&listing.source, tag)?,
-            None => listing.source,
-        };
-        (source, Some(name))
-    } else {
-        (text.to_string(), None)
-    };
-    match install::add(store, &source, listed, &builtin, &mut confirmer(yes))? {
+    let (source, listed) = install::resolve(text)?;
+    if let Some(name) = &listed {
+        println!("{name} is {source} in the index");
+    }
+    match install::add(
+        store,
+        &source,
+        listed.as_deref(),
+        &builtin,
+        &mut confirmer(yes),
+    )? {
         Some(name) => println!(
             "installed {name} in {}; it loads the next time nib starts",
             store.dir(&name).display()

@@ -320,9 +320,28 @@ struct FakePending {
     added: Vec<String>,
 }
 
-impl nib_core::PluginUpdates for FakeUpdates {
+impl nib_core::PluginStore for FakeUpdates {
     fn can_update(&self, name: &str) -> bool {
         name == "test-insert"
+    }
+
+    fn can_remove(&self, name: &str) -> bool {
+        name == "test-insert"
+    }
+
+    fn remove(&self, _name: &str) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Installs a copy of test-insert, whatever the source.
+    fn prepare_install(&self, source: &str) -> Result<Box<dyn nib_core::PendingInstall>, String> {
+        if source == "nothing/here" {
+            return Err("no such release".into());
+        }
+        Ok(Box::new(FakeInstall {
+            dir: self.dir.join("installed"),
+            source: source.to_string(),
+        }))
     }
 
     fn check(&self, _name: &str) -> Result<Option<Box<dyn nib_core::PendingUpdate>>, String> {
@@ -334,6 +353,37 @@ impl nib_core::PluginUpdates for FakeUpdates {
                 added,
             }) as Box<dyn nib_core::PendingUpdate>
         }))
+    }
+}
+
+struct FakeInstall {
+    dir: std::path::PathBuf,
+    source: String,
+}
+
+impl nib_core::PendingInstall for FakeInstall {
+    fn name(&self) -> &str {
+        "test-insert"
+    }
+
+    fn version(&self) -> &str {
+        "0.0.0"
+    }
+
+    fn source(&self) -> &str {
+        &self.source
+    }
+
+    fn capabilities(&self) -> &[String] {
+        &[]
+    }
+
+    fn apply(self: Box<Self>) -> Result<std::path::PathBuf, String> {
+        fs::create_dir_all(&self.dir).unwrap();
+        for file in ["plugin.toml", "plugin.wasm"] {
+            fs::copy(plugin_dir("test-insert").join(file), self.dir.join(file)).unwrap();
+        }
+        Ok(self.dir)
     }
 }
 
@@ -370,7 +420,7 @@ fn plugins_update_from_the_core_menu() {
     });
     let mut editor = Editor::default();
     editor.resize(100, 6);
-    editor.set_plugin_updates(Some(updates.clone()));
+    editor.set_plugin_store(Some(updates.clone()));
     editor.load_plugin(&dir).unwrap();
     let update = |editor: &mut Editor| {
         editor.handle_key(KeyEvent::ctrl('g'));
@@ -423,7 +473,7 @@ fn plugins_update_from_the_core_menu() {
     assert_eq!(editor.plugins()[0].version, "0.2.0");
 
     // Without the frontend's updates, there is no [u].
-    editor.set_plugin_updates(None);
+    editor.set_plugin_store(None);
     editor.handle_key(KeyEvent::ctrl('g'));
     editor.handle_key(key('1'));
     assert!(!screen(&editor)[5].contains("[u] update"));
@@ -456,4 +506,88 @@ fn arrows_choose_in_the_core_menu() {
     editor.handle_key(key('k'));
     editor.handle_key(KeyEvent::new(KeyCode::Enter));
     assert_eq!(editor.menu(), Some(Menu::Plugin(0)));
+}
+
+/// Waits for what the core menu started on a thread.
+fn wait_for_menu(editor: &mut Editor, busy: &str) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while editor.message().is_some_and(|m| m.starts_with(busy)) {
+        assert!(Instant::now() < deadline, "nothing came back");
+        editor.run_background();
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[test]
+fn plugins_install_and_remove_from_the_core_menu() {
+    let dir = env::temp_dir().join(format!("nib-{}-installing", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let store = std::sync::Arc::new(FakeUpdates {
+        dir: dir.clone(),
+        next: std::sync::Mutex::new(None),
+    });
+    let mut editor = Editor::default();
+    editor.resize(120, 6);
+    editor.set_plugin_store(Some(store));
+    let type_in = |editor: &mut Editor, text: &str| {
+        for c in text.chars() {
+            editor.handle_key(key(c));
+        }
+    };
+
+    // A source that cannot be fetched says why.
+    editor.handle_key(KeyEvent::ctrl('g'));
+    assert!(
+        screen(&editor)[5].contains("[a] add"),
+        "{:#?}",
+        screen(&editor)
+    );
+    editor.handle_key(key('a'));
+    type_in(&mut editor, "nothing/her");
+    editor.handle_key(KeyEvent::new(KeyCode::Char('x')));
+    editor.handle_key(KeyEvent::new(KeyCode::Backspace));
+    type_in(&mut editor, "e");
+    assert!(
+        screen(&editor)[5].contains("nothing/here_"),
+        "{:#?}",
+        screen(&editor)
+    );
+    editor.handle_key(KeyEvent::new(KeyCode::Enter));
+    wait_for_menu(&mut editor, "fetching");
+    assert_eq!(editor.message(), Some("nothing/here: no such release"));
+
+    // One that can is asked about, then loaded at once.
+    editor.handle_key(KeyEvent::ctrl('g'));
+    editor.handle_key(key('a'));
+    type_in(&mut editor, "someone/insert");
+    editor.handle_key(KeyEvent::new(KeyCode::Enter));
+    wait_for_menu(&mut editor, "fetching");
+    assert_eq!(editor.menu(), Some(Menu::ConfirmInstall));
+    assert!(
+        screen(&editor)[5]
+            .contains("install test-insert 0.0.0 from someone/insert? no capabilities"),
+        "{:#?}",
+        screen(&editor)
+    );
+    editor.handle_key(key('y'));
+    assert_eq!(editor.message(), Some("test-insert 0.0.0 installed"));
+    editor.handle_key(key('z'));
+    assert_eq!(editor.buffer().text().to_string(), "z");
+
+    // Removed, it stops taking keys.
+    editor.handle_key(KeyEvent::ctrl('g'));
+    editor.handle_key(key('1'));
+    assert!(screen(&editor)[5].contains("[x] remove"));
+    editor.handle_key(key('x'));
+    assert_eq!(editor.menu(), Some(Menu::ConfirmRemove(0)));
+    editor.handle_key(key('y'));
+    assert_eq!(
+        editor.message(),
+        Some("test-insert removed; its settings and data are kept")
+    );
+    editor.handle_key(key('w'));
+    assert_eq!(editor.buffer().text().to_string(), "z");
+    drop(editor);
+    fs::remove_dir_all(&dir).unwrap();
 }

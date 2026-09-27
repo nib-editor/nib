@@ -44,6 +44,6 @@ pub use plugin::{
 pub use process::Stream;
 pub use selection::{Range, Selection};
 pub use ui::{Side, Span, StyledLine, Theme};
-pub use updates::{PendingUpdate, PluginUpdates};
+pub use updates::{PendingInstall, PendingUpdate, PluginStore};
 pub use view::View;
 pub use windows::Rect;

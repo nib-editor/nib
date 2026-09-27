@@ -466,43 +466,102 @@ pub fn add(
     builtin: &[&str],
     confirm: &mut dyn FnMut(&str) -> bool,
 ) -> Result<Option<String>, String> {
-    let source = Source::parse(text)?;
+    let pending = prepare_add(store, text, listed, builtin)?;
+    if !confirm(&pending.question()) {
+        return Ok(None);
+    }
+    pending.apply(store).map(Some)
+}
+
+/// What `add` takes, as a source: a name in the index, with `@tag` or not,
+/// is looked up; anything else is a source already. Returns the source and
+/// the name it was listed under.
+pub fn resolve(text: &str) -> Result<(String, Option<String>), String> {
+    let Some((name, tag)) = name_and_tag(text) else {
+        return Ok((text.to_string(), None));
+    };
+    let listing = index()?
+        .into_iter()
+        .find(|l| l.name == name)
+        .ok_or_else(|| format!("no plugin named {name} in {INDEX}"))?;
+    let source = match tag {
+        Some(tag) => at_tag(&listing.source, tag)?,
+        None => listing.source,
+    };
+    Ok((source, Some(name.to_string())))
+}
+
+/// A plugin fetched and checked for installing, not yet in place.
+pub struct PendingAdd {
+    work: Work,
+    source: String,
+    fetched: Fetched,
+    manifest: PluginManifest,
+}
+
+/// Fetches the plugin at `source` and checks it can go in: the name it was
+/// listed under, if any, not a built-in one, not installed from elsewhere.
+/// Downloads, so the editor runs it on a thread.
+pub fn prepare_add(
+    store: &Store,
+    source: &str,
+    listed: Option<&str>,
+    builtin: &[&str],
+) -> Result<PendingAdd, String> {
+    let parsed = Source::parse(source)?;
     let work = Work::new(store)?;
-    let (fetched, manifest) = prepare(&source, &work)?;
+    let (fetched, manifest) = prepare(&parsed, &work)?;
     let name = &manifest.name;
     if let Some(listed) = listed.filter(|listed| listed != name) {
         return Err(format!(
-            "{text} is listed as {listed}, but the plugin there is {name}"
+            "{source} is listed as {listed}, but the plugin there is {name}"
         ));
     }
     if builtin.contains(&name.as_str()) {
         return Err(format!("{name} is the name of a plugin built into nib"));
     }
-    let mut records = store.records()?;
-    if let Some(other) = records.iter().find(|r| &r.name == name && r.source != text) {
+    if let Some(other) = store
+        .records()?
+        .iter()
+        .find(|r| &r.name == name && r.source != source)
+    {
         return Err(format!(
             "{name} is installed already, from {}; remove it first",
             other.source
         ));
     }
-    let question = format!("{}Install it?", describe(&manifest, text));
-    if !confirm(&question) {
-        return Ok(None);
+    Ok(PendingAdd {
+        work,
+        source: source.to_string(),
+        fetched,
+        manifest,
+    })
+}
+
+impl PendingAdd {
+    pub fn question(&self) -> String {
+        format!("{}Install it?", describe(&self.manifest, &self.source))
     }
-    put_in_place(store, &work, name)?;
-    records.retain(|r| &r.name != name);
-    records.push(Record {
-        name: name.clone(),
-        source: text.into(),
-        sha256: sha256(&fetched.archive)?,
-        url: fetched.url,
-        tag: fetched.tag,
-        version: manifest.version.clone(),
-        capabilities: manifest.capabilities.clone(),
-    });
-    records.sort_by(|a, b| a.name.cmp(&b.name));
-    store.save(records)?;
-    Ok(Some(name.clone()))
+
+    /// Puts it in the store and records it. Returns its name.
+    pub fn apply(self, store: &Store) -> Result<String, String> {
+        let name = self.manifest.name.clone();
+        let mut records = store.records()?;
+        put_in_place(store, &self.work, &name)?;
+        records.retain(|r| r.name != name);
+        records.push(Record {
+            name: name.clone(),
+            source: self.source,
+            sha256: sha256(&self.fetched.archive)?,
+            url: self.fetched.url,
+            tag: self.fetched.tag,
+            version: self.manifest.version,
+            capabilities: self.manifest.capabilities,
+        });
+        records.sort_by(|a, b| a.name.cmp(&b.name));
+        store.save(records)?;
+        Ok(name)
+    }
 }
 
 /// What `update` did to one plugin.
@@ -669,11 +728,26 @@ impl Pending {
 
 /// `nib plugin remove`: the installed files and the record go; settings and
 /// data the plugin kept stay.
-/// Updates from the core menu, for the plugins nib loaded from the store:
-/// one loaded from a `path` would not change when the store's copy does.
-pub struct StoreUpdates {
+/// The store as the core menu works with it: installing, and updating and
+/// removing the plugins nib loaded from the store, since one loaded from a
+/// `path` would not change when the store's copy does.
+pub struct StorePlugins {
     pub store: Store,
-    pub loaded: Vec<String>,
+    /// Installed plugins nib loaded from the store, including those
+    /// installed from the menu since.
+    pub loaded: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    /// Names no installed plugin may take.
+    pub builtin: Vec<&'static str>,
+}
+
+impl StorePlugins {
+    fn loaded(&self, name: &str) -> bool {
+        self.loaded
+            .lock()
+            .expect("loaded lock")
+            .iter()
+            .any(|n| n == name)
+    }
 }
 
 struct StorePending {
@@ -681,9 +755,15 @@ struct StorePending {
     pending: Pending,
 }
 
-impl nib_core::PluginUpdates for StoreUpdates {
+struct StoreInstall {
+    store: Store,
+    pending: PendingAdd,
+    loaded: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+}
+
+impl nib_core::PluginStore for StorePlugins {
     fn can_update(&self, name: &str) -> bool {
-        self.loaded.iter().any(|n| n == name) && follows_releases(&self.store, name)
+        self.loaded(name) && follows_releases(&self.store, name)
     }
 
     fn check(&self, name: &str) -> Result<Option<Box<dyn nib_core::PendingUpdate>>, String> {
@@ -694,6 +774,32 @@ impl nib_core::PluginUpdates for StoreUpdates {
             })),
             Check::UpToDate | Check::Pinned => None,
         })
+    }
+
+    fn can_remove(&self, name: &str) -> bool {
+        self.loaded(name) && installed(&self.store, name).is_ok()
+    }
+
+    fn remove(&self, name: &str) -> Result<(), String> {
+        remove(&self.store, name)?;
+        self.loaded
+            .lock()
+            .expect("loaded lock")
+            .retain(|n| n != name);
+        Ok(())
+    }
+
+    fn prepare_install(&self, text: &str) -> Result<Box<dyn nib_core::PendingInstall>, String> {
+        let (source, listed) = resolve(text)?;
+        let pending = prepare_add(&self.store, &source, listed.as_deref(), &self.builtin)?;
+        if self.loaded(&pending.manifest.name) {
+            return Err(format!("{} is loaded already", pending.manifest.name));
+        }
+        Ok(Box::new(StoreInstall {
+            store: self.store.clone(),
+            pending,
+            loaded: self.loaded.clone(),
+        }))
     }
 }
 
@@ -708,6 +814,30 @@ impl nib_core::PendingUpdate for StorePending {
 
     fn apply(self: Box<Self>) -> Result<(), String> {
         self.pending.apply(&self.store).map(|_| ())
+    }
+}
+
+impl nib_core::PendingInstall for StoreInstall {
+    fn name(&self) -> &str {
+        &self.pending.manifest.name
+    }
+
+    fn version(&self) -> &str {
+        &self.pending.manifest.version
+    }
+
+    fn source(&self) -> &str {
+        &self.pending.source
+    }
+
+    fn capabilities(&self) -> &[String] {
+        &self.pending.manifest.capabilities
+    }
+
+    fn apply(self: Box<Self>) -> Result<std::path::PathBuf, String> {
+        let name = self.pending.apply(&self.store)?;
+        self.loaded.lock().expect("loaded lock").push(name.clone());
+        Ok(self.store.dir(&name))
     }
 }
 

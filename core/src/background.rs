@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use crate::process::Stream;
-use crate::updates::Checked;
+use crate::updates::{Checked, Prepared};
 
 #[derive(Debug)]
 pub(crate) enum Message {
@@ -26,6 +26,8 @@ pub(crate) enum Message {
     },
     /// A plugin's check for a newer release, from the core menu.
     Update(Checked),
+    /// A plugin fetched for installing, from the core menu.
+    Install(Prepared),
 }
 
 /// Called from background threads after they queue a message, so the

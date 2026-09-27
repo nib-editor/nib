@@ -84,11 +84,12 @@ fn main() -> ExitCode {
             })
             .map(|e| e.name.clone())
             .collect();
-        let updates = install::StoreUpdates {
+        let plugins = install::StorePlugins {
             store: store.clone(),
-            loaded,
+            loaded: std::sync::Arc::new(std::sync::Mutex::new(loaded)),
+            builtin: builtin::PLUGINS.iter().map(|(name, _, _)| *name).collect(),
         };
-        editor.set_plugin_updates(Some(std::sync::Arc::new(updates)));
+        editor.set_plugin_store(Some(std::sync::Arc::new(plugins)));
     }
     for path in &files {
         if let Err(err) = editor.open(path) {

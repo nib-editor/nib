@@ -17,7 +17,7 @@ use crate::plugin::{PluginId, Plugins};
 use crate::process::Processes;
 use crate::syntax::{BufferSyntax, Languages};
 use crate::ui::{Panel, Popup, StatusItem, Theme};
-use crate::updates::{Checked, PendingUpdate, PluginUpdates};
+use crate::updates::{Checked, PendingInstall, PendingUpdate, PluginStore, Prepared};
 use crate::view::View;
 use crate::windows::{self, Direction, Rect, Separator, Splits};
 use std::sync::Arc;
@@ -70,6 +70,8 @@ pub(crate) struct State {
     /// and scroll position.
     /// The plugin the arrows point at in the core menu's list.
     pub menu_cursor: usize,
+    /// What is typed into the core menu, as what to install.
+    pub menu_input: String,
     pub hidden_views: HashMap<usize, View>,
     pub languages: Languages,
     pub theme: Theme,
@@ -806,6 +808,12 @@ pub enum Menu {
     ConfirmQuit,
     /// A newer release of the plugin wants more capabilities.
     ConfirmUpdate(PluginId),
+    /// What to install, typed into `menu_input`.
+    AddPlugin,
+    /// A plugin fetched, waiting for a yes.
+    ConfirmInstall,
+    /// Removing the plugin, waiting for a yes.
+    ConfirmRemove(PluginId),
 }
 
 pub struct Editor {
@@ -815,10 +823,13 @@ pub struct Editor {
     pub(crate) plugins: Plugins,
     /// From `plugins/<name>.toml`, by plugin name.
     plugin_configs: BTreeMap<String, PluginConfig>,
-    /// From the frontend, for `[u] update` in the core menu.
-    updates: Option<Arc<dyn PluginUpdates>>,
+    /// From the frontend, for installing, updating, and removing plugins
+    /// in the core menu.
+    store: Option<Arc<dyn PluginStore>>,
     /// A newer release that wants more capabilities, waiting for a yes.
     pending_update: Option<(PluginId, Box<dyn PendingUpdate>)>,
+    /// A plugin fetched for installing, waiting for a yes.
+    pending_install: Option<Box<dyn PendingInstall>>,
 }
 
 const LENT: &str = "editor state is only lent during plugin calls";
@@ -887,14 +898,16 @@ impl Default for Editor {
                 clipboard: Box::new(clipboard::Internal::default()),
                 inbox,
                 menu_cursor: 0,
+                menu_input: String::new(),
                 hidden_views: HashMap::new(),
                 languages: Languages::default(),
                 theme: Theme::default(),
             }),
             plugins: Plugins::default(),
             plugin_configs: BTreeMap::new(),
-            updates: None,
+            store: None,
             pending_update: None,
+            pending_install: None,
         }
     }
 }
@@ -1054,22 +1067,78 @@ impl Editor {
         self.state_mut().clipboard = clipboard;
     }
 
-    /// How the core menu updates installed plugins. Without it, the menu
-    /// offers no updates.
-    pub fn set_plugin_updates(&mut self, updates: Option<Arc<dyn PluginUpdates>>) {
-        self.updates = updates;
+    /// How the core menu installs, updates, and removes plugins. Without
+    /// it, the menu offers none of that.
+    pub fn set_plugin_store(&mut self, store: Option<Arc<dyn PluginStore>>) {
+        self.store = store;
     }
 
     /// Whether plugin `id` can be updated from the core menu.
     pub(crate) fn can_update(&self, id: PluginId) -> bool {
         let name = &self.plugins()[id].name;
-        self.updates.as_ref().is_some_and(|u| u.can_update(name))
+        self.store.as_ref().is_some_and(|s| s.can_update(name))
+    }
+
+    /// Whether plugin `id` can be removed from the core menu.
+    pub(crate) fn can_remove(&self, id: PluginId) -> bool {
+        let name = &self.plugins()[id].name;
+        self.store.as_ref().is_some_and(|s| s.can_remove(name))
+    }
+
+    /// Whether plugins can be installed from the core menu.
+    pub(crate) fn can_install(&self) -> bool {
+        self.store.is_some()
+    }
+
+    /// Fetches the plugin `source` names on a thread; what it found comes
+    /// back through the inbox.
+    fn start_install(&mut self, source: String) {
+        let Some(store) = self.store.clone() else {
+            return;
+        };
+        let inbox = self.state().inbox.clone();
+        self.state_mut().message = Some(format!("fetching {source}..."));
+        std::thread::spawn(move || {
+            let result = store.prepare_install(&source);
+            inbox.push(Message::Install(Prepared { source, result }));
+        });
+    }
+
+    /// Takes in a plugin fetched for installing, and asks before it goes in.
+    fn finish_install(&mut self, prepared: Prepared) {
+        let state = self.state_mut();
+        match prepared.result {
+            Err(err) => state.message = Some(format!("{}: {err}", prepared.source)),
+            Ok(pending) => {
+                self.pending_install = Some(pending);
+                let state = self.state_mut();
+                state.menu = Some(Menu::ConfirmInstall);
+                state.message = None;
+            }
+        }
+    }
+
+    fn install(&mut self, pending: Box<dyn PendingInstall>) -> String {
+        let (name, version) = (pending.name().to_string(), pending.version().to_string());
+        let dir = match pending.apply() {
+            Ok(dir) => dir,
+            Err(err) => return format!("{name}: installing failed: {err}"),
+        };
+        match self.load_plugin(&dir) {
+            Ok(()) => format!("{name} {version} installed"),
+            Err(err) => format!("{name} installed, but loading it failed: {err}"),
+        }
+    }
+
+    /// The plugin fetched for installing, for the menu to show.
+    pub(crate) fn pending_install(&self) -> Option<&dyn PendingInstall> {
+        self.pending_install.as_deref()
     }
 
     /// Checks for a newer release of plugin `id` on a thread; what it found
     /// comes back through the inbox.
     fn start_update(&mut self, id: PluginId) {
-        let Some(updates) = self.updates.clone() else {
+        let Some(updates) = self.store.clone() else {
             return;
         };
         let name = self.plugins()[id].name.clone();
@@ -1163,6 +1232,10 @@ impl Editor {
                     self.finish_update(checked);
                     continue;
                 }
+                Message::Install(prepared) => {
+                    self.finish_install(prepared);
+                    continue;
+                }
             };
             // Messages of what was cancelled or stopped are dropped.
             if let Some(owner) = owner {
@@ -1248,6 +1321,11 @@ impl Editor {
                         Some(format!("not quitting: {}", failures.join("; ")));
                 }
             },
+            Menu::Main if plain('a') && self.can_install() => {
+                let state = self.state_mut();
+                state.menu_input.clear();
+                state.menu = Some(Menu::AddPlugin);
+            }
             Menu::Main if plain('q') => {
                 if self.modified_buffers() == 0 {
                     self.state_mut().quit = true;
@@ -1285,6 +1363,52 @@ impl Editor {
                 }
             }
             Menu::Plugin(id) if plain('u') && self.can_update(id) => self.start_update(id),
+            Menu::Plugin(id) if plain('x') && self.can_remove(id) => {
+                self.state_mut().menu = Some(Menu::ConfirmRemove(id));
+            }
+            Menu::ConfirmRemove(id) if plain('y') => {
+                let name = self.plugins()[id].name.clone();
+                let store = self.store.clone().expect("offered with a store");
+                let message = match store.remove(&name) {
+                    // Loaded, it stays, disabled, until nib starts again.
+                    Ok(()) => {
+                        self.disable_plugin(id);
+                        format!("{name} removed; its settings and data are kept")
+                    }
+                    Err(err) => format!("{name}: removing failed: {err}"),
+                };
+                self.state_mut().message = Some(message);
+            }
+            Menu::AddPlugin => {
+                let state = self.state_mut();
+                match key.code {
+                    KeyCode::Char(c) if !key.modifiers.ctrl && !key.modifiers.alt => {
+                        state.menu_input.push(c);
+                    }
+                    KeyCode::Backspace => {
+                        state.menu_input.pop();
+                    }
+                    KeyCode::Escape => return,
+                    KeyCode::Enter if !state.menu_input.trim().is_empty() => {
+                        let source = state.menu_input.trim().to_string();
+                        self.start_install(source);
+                        return;
+                    }
+                    _ => {}
+                }
+                self.state_mut().menu = Some(Menu::AddPlugin);
+            }
+            Menu::ConfirmInstall => {
+                let Some(pending) = self.pending_install.take() else {
+                    return;
+                };
+                let message = if plain('y') {
+                    self.install(pending)
+                } else {
+                    format!("{} not installed", pending.name())
+                };
+                self.state_mut().message = Some(message);
+            }
             Menu::ConfirmUpdate(id) => {
                 let Some((_, pending)) = self.pending_update.take() else {
                     return;

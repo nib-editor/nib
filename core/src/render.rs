@@ -43,7 +43,8 @@ impl Editor {
     fn menu_lines(&self) -> Vec<StyledLine> {
         let selected = match self.menu() {
             Some(Menu::Main) => Some(self.state().menu_cursor),
-            Some(Menu::Plugin(id) | Menu::ConfirmUpdate(id)) => Some(id),
+            Some(Menu::Plugin(id) | Menu::ConfirmUpdate(id) | Menu::ConfirmRemove(id)) => Some(id),
+            Some(Menu::AddPlugin | Menu::ConfirmInstall) => None,
             Some(Menu::ConfirmQuit) | None => return Vec::new(),
         };
         let plugins = self.plugins();
@@ -409,8 +410,9 @@ impl Editor {
                 } else {
                     "[1-9] or [↑↓][enter] choose a plugin  "
                 };
+                let add = if self.can_install() { "[a] add  " } else { "" };
                 let keys = format!(
-                    "{choose}[r] restart all  [w] save all and quit  [q] quit  [any other key] back"
+                    "{choose}{add}[r] restart all  [w] save all and quit  [q] quit  [any other key] back"
                 );
                 grid.put_str(1, y, &keys, style);
                 return;
@@ -428,11 +430,51 @@ impl Editor {
                 } else {
                     ""
                 };
+                let remove = if self.can_remove(id) {
+                    "  [x] remove"
+                } else {
+                    ""
+                };
                 let keys = format!(
-                    "{}: [r] restart  [d] {toggle}{reload}{update}  [any other key] back",
+                    "{}: [r] restart  [d] {toggle}{reload}{update}{remove}  [any other key] back",
                     plugin.name
                 );
                 grid.put_str(1, y, &keys, style);
+                return;
+            }
+            Some(Menu::AddPlugin) => {
+                let prompt = format!(
+                    "add (a name, owner/repo, or URL): {}_  [enter] fetch  [esc] back",
+                    self.state().menu_input
+                );
+                grid.put_str(1, y, &prompt, style);
+                return;
+            }
+            Some(Menu::ConfirmInstall) => {
+                let prompt = match self.pending_install() {
+                    Some(p) => {
+                        let can = match p.capabilities() {
+                            [] => "no capabilities".to_string(),
+                            can => format!("can: {}", can.join(", ")),
+                        };
+                        format!(
+                            "install {} {} from {}? {can}  [y] install  [any other key] cancel",
+                            p.name(),
+                            p.version(),
+                            p.source()
+                        )
+                    }
+                    None => String::new(),
+                };
+                grid.put_str(1, y, &prompt, style);
+                return;
+            }
+            Some(Menu::ConfirmRemove(id)) => {
+                let prompt = format!(
+                    "remove {}? its settings and data are kept  [y] remove  [any other key] back",
+                    self.plugins()[id].name
+                );
+                grid.put_str(1, y, &prompt, style);
                 return;
             }
             Some(Menu::ConfirmUpdate(id)) => {
