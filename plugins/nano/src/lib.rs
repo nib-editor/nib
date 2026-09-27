@@ -59,6 +59,9 @@ const FUNCTIONS: &[(&str, &str)] = &[
 /// The Alt keys nano uses itself; the others hold plugins' keys.
 const OWN_ALT: &[char] = &['a', 'e', 'q', 'u', 'w', 'x', '6', ']', '\\', '/', ' '];
 
+/// Columns each item of the two lines takes, key and all.
+const HELP_ITEM: usize = 15;
+
 /// The two lines of keys nano shows at the bottom.
 const HELP: [&[(&str, &str)]; 2] = [
     &[
@@ -469,9 +472,12 @@ impl Nano {
                     .map(|row| {
                         row.iter()
                             .flat_map(|(key, what)| {
+                                // Each item as wide as the others, so they
+                                // line up whatever the key's length.
+                                let width = HELP_ITEM - key.len() - 1;
                                 [
                                     span(key, "ui.menu.selected"),
-                                    span(&format!(" {what:<12}"), ""),
+                                    span(&format!(" {what:<width$}"), ""),
                                 ]
                             })
                             .collect()

@@ -40,12 +40,35 @@ impl Editor {
         self.state().text_area_rows().saturating_sub(menu)
     }
 
+    /// The bases to choose from on the first start.
+    fn base_lines(&self) -> Vec<StyledLine> {
+        let cursor = self.state().menu_cursor;
+        let in_use = self.base_in_use();
+        self.bases()
+            .iter()
+            .enumerate()
+            .map(|(i, name)| {
+                let note = if Some(name.as_str()) == in_use {
+                    "  (in use)"
+                } else {
+                    ""
+                };
+                let style = if i == cursor { "ui.menu.selected" } else { "" };
+                vec![Span {
+                    text: format!(" {}  {name}{note}", i + 1),
+                    style: style.into(),
+                }]
+            })
+            .collect()
+    }
+
     /// The plugin list shown while the core menu is open, below any panels.
     fn menu_lines(&self) -> Vec<StyledLine> {
         let selected = match self.menu() {
             Some(Menu::Main) => Some(self.state().menu_cursor),
             Some(Menu::Plugin(id) | Menu::ConfirmUpdate(id) | Menu::ConfirmRemove(id)) => Some(id),
             Some(Menu::AddPlugin | Menu::ConfirmInstall) => None,
+            Some(Menu::ChooseBase) => return self.base_lines(),
             Some(Menu::ConfirmQuit) | None => return Vec::new(),
         };
         let plugins = self.plugins();
@@ -504,6 +527,12 @@ impl Editor {
                     None => String::new(),
                 };
                 grid.put_str(1, y, &prompt, style);
+                return;
+            }
+            Some(Menu::ChooseBase) => {
+                let keys = "which way of editing? [1-9] or [↑↓][enter] choose  \
+                            [any other key] keep this one";
+                grid.put_str(1, y, keys, style);
                 return;
             }
             Some(Menu::ConfirmQuit) => {

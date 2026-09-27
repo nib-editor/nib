@@ -894,6 +894,8 @@ pub enum Menu {
     ConfirmInstall,
     /// Removing the plugin, waiting for a yes.
     ConfirmRemove(PluginId),
+    /// The first start: which base to use, `menu_cursor` among the bases.
+    ChooseBase,
 }
 
 pub struct Editor {
@@ -1679,10 +1681,87 @@ impl Editor {
                 };
                 self.state_mut().message = Some(message);
             }
+            Menu::ChooseBase => self.choose_base_key(key),
             Menu::ConfirmQuit if plain('y') => self.state_mut().quit = true,
             // Any other key goes back, so a mistyped menu key is harmless.
             _ => {}
         }
+    }
+
+    /// The bases loaded, in load order.
+    pub(crate) fn bases(&self) -> Vec<String> {
+        self.plugins()
+            .into_iter()
+            .filter(|p| p.base)
+            .map(|p| p.name)
+            .collect()
+    }
+
+    /// Asks which base to use, as on the first start, when there is more
+    /// than one. The answer goes into a new config.toml.
+    pub fn ask_for_base(&mut self) {
+        let bases = self.bases();
+        if bases.len() < 2 {
+            return;
+        }
+        let current = self.base_in_use().map(str::to_string);
+        let state = self.state_mut();
+        state.menu_cursor = bases
+            .iter()
+            .position(|b| Some(b) == current.as_ref())
+            .unwrap_or(0);
+        state.menu = Some(Menu::ChooseBase);
+    }
+
+    fn choose_base_key(&mut self, key: KeyEvent) {
+        let bases = self.bases();
+        let state = self.state_mut();
+        let step = match key.code {
+            KeyCode::Down => 1,
+            KeyCode::Up => -1,
+            _ => 0,
+        };
+        if step != 0 {
+            let last = bases.len().saturating_sub(1);
+            state.menu_cursor = state.menu_cursor.saturating_add_signed(step).min(last);
+            state.menu = Some(Menu::ChooseBase);
+            return;
+        }
+        let chosen = match key.code {
+            KeyCode::Enter => Some(state.menu_cursor),
+            KeyCode::Char(c @ '1'..='9') if key.modifiers == Default::default() => {
+                Some(c as usize - '1' as usize)
+            }
+            _ => None,
+        };
+        // Any other key keeps the base in use, which is an answer too.
+        let name = match chosen.and_then(|i| bases.get(i)) {
+            Some(name) => name.clone(),
+            None => self.base_in_use().unwrap_or_default().to_string(),
+        };
+        let switched = match self.base_in_use() == Some(name.as_str()) {
+            true => Ok(()),
+            false => self.switch_base(&name),
+        };
+        let message = match switched.and_then(|()| self.write_base(&name)) {
+            Ok(()) => format!("{name} is the base; base in config.toml keeps it"),
+            Err(err) => err,
+        };
+        self.state_mut().message = Some(message);
+    }
+
+    /// Writes a new config.toml that uses base `name`.
+    fn write_base(&mut self, name: &str) -> Result<(), String> {
+        let dir = self
+            .state()
+            .config_dir
+            .clone()
+            .ok_or("nib does not know where the settings are")?;
+        let path = dir.join("config.toml");
+        let text = CONFIG_TEMPLATE.replace("# base = \"helix\"", &format!("base = \"{name}\""));
+        std::fs::create_dir_all(&dir)
+            .and_then(|()| std::fs::write(&path, text))
+            .map_err(|err| format!("{}: {err}", path.display()))
     }
 
     /// Saves every modified buffer. Returns what could not be saved.

@@ -122,6 +122,13 @@ fn main() -> ExitCode {
     } else if !failures.is_empty() {
         editor.show_message(failures.join("; "));
     }
+    // The first start: no settings yet, so ask which way of editing.
+    let first_start = dir
+        .as_ref()
+        .is_some_and(|dir| !dir.join("config.toml").exists());
+    if first_start && !open_config {
+        editor.ask_for_base();
+    }
     // The keymap takes every key, so nothing else tells people the menu key.
     if editor.message().is_none() {
         editor.show_message(format!("{}: plugin menu", editor.menu_key()));

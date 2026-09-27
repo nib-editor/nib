@@ -762,3 +762,42 @@ fn only_the_chosen_base_runs() {
     assert_eq!(running(&editor), ["helix"]);
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn the_first_start_asks_for_a_base_and_keeps_the_answer() {
+    let dir = env::temp_dir().join(format!("nib-{}-first-start", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let start = |key: KeyEvent| {
+        let mut editor = Editor::default();
+        editor.set_config_dir(Some(dir.clone()));
+        let (helix, nano) = (plugin_dir("helix"), plugin_dir("nano"));
+        for loaded in editor.load_plugins(&[PluginSource::Dir(&helix), PluginSource::Dir(&nano)]) {
+            loaded.unwrap();
+        }
+        editor.ask_for_base();
+        assert_eq!(editor.menu(), Some(Menu::ChooseBase));
+        editor.handle_key(key);
+        let config = Config::load(&dir).unwrap();
+        (
+            running(&editor),
+            config.core.base,
+            editor.message().map(String::from),
+        )
+    };
+
+    let (running, base, message) = start(key('2'));
+    assert_eq!((running, base.as_str()), (vec!["nano".to_string()], "nano"));
+    assert_eq!(
+        message.as_deref(),
+        Some("nano is the base; base in config.toml keeps it")
+    );
+
+    // Any other key keeps the one in use, and says so in config.toml too.
+    fs::remove_file(dir.join("config.toml")).unwrap();
+    let (running, base, _) = start(KeyEvent::new(KeyCode::Escape));
+    assert_eq!(
+        (running, base.as_str()),
+        (vec!["helix".to_string()], "helix")
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
