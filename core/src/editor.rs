@@ -673,7 +673,12 @@ impl State {
         match name {
             "buffer.save" => {
                 let index = self.view.buffer;
-                self.buffers[index].save().map_err(|err| err.to_string())?;
+                let buffer = &mut self.buffers[index];
+                let saved = match args["path"].as_str() {
+                    Some(path) => buffer.save_as(path),
+                    None => buffer.save(),
+                };
+                saved.map_err(|err| err.to_string())?;
                 self.push_event(None, Event::BufferSaved(index));
                 if self.is_config(index) {
                     self.reload_config = true;
@@ -916,7 +921,10 @@ const SYNTAX_UPDATED: &str = "editor.syntax_updated";
 const BUFFER_CLOSED: &str = "editor.buffer_closed";
 
 pub(crate) const CORE_COMMANDS: &[(&str, &str)] = &[
-    ("buffer.save", "Save the current buffer"),
+    (
+        "buffer.save",
+        "Save the current buffer, or as {\"path\": string}",
+    ),
     ("buffer.open", "Open a file: {\"path\": string}"),
     ("buffer.next", "Show the next buffer"),
     (

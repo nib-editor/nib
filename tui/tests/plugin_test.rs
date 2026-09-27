@@ -67,6 +67,11 @@ fn the_indent_plugin_passes_its_tests() {
 }
 
 #[test]
+fn the_nano_plugin_passes_its_tests() {
+    passes_its_tests("nano", "nano", 10);
+}
+
+#[test]
 fn the_picker_plugin_passes_its_tests() {
     passes_its_tests("picker", "picker", 4);
 }

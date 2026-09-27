@@ -254,7 +254,7 @@ interface syntax {
 | コマンド | 内容 |
 |----------|------|
 | `buffer.open` | `{"path": string}` のファイルを開く |
-| `buffer.save` | 表示中のバッファを保存する |
+| `buffer.save` | 表示中のバッファを保存する。`{"path": string}` ならそこへ保存し、以後そのパスにする |
 | `buffer.next` / `buffer.previous` | 次 / 前のバッファを表示する |
 | `config.open` | `config.toml` を開く。`{"plugin": name}` なら `plugins/<name>.toml`。なければ既定値のコメントを書いた状態で開く |
 | `config.reload` | 設定を読み直す（設定のディレクトリのファイルを保存したときも読み直す） |

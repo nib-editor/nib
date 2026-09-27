@@ -8,6 +8,7 @@ members = [
     "helix",
     "indent",
     "lsp",
+    "nano",
     "picker",
     "test/events",
     "test/insert",

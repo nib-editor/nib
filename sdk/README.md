@@ -110,7 +110,7 @@ The core's commands (arguments are JSON):
 | Command | Does |
 |---------|------|
 | `buffer.open` | Opens `{"path": "…"}` |
-| `buffer.save` | Saves the shown buffer |
+| `buffer.save` | Saves the shown buffer; `{"path": "…"}` saves it there, and it keeps that path |
 | `buffer.next` / `buffer.previous` | Shows the next / previous buffer |
 | `config.open` | Opens config.toml, or `{"plugin": name}`'s settings file |
 | `config.reload` | Reads the settings again, as saving one of their files does |

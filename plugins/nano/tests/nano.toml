@@ -1,0 +1,104 @@
+# Run with `nib plugin test target/plugins/nano plugins/nano/tests/nano.toml`
+# after `cargo xtask build-plugins`; tui/tests/plugin_test.rs does.
+
+with = ["picker"]
+
+[[test]]
+name = "typed chars go in at the cursor, and the keys are shown below"
+text = "#[|]#world\n"
+keys = "hello "
+
+[test.expect]
+selections = "hello #[|]#world\n"
+screen = ["^X Exit", "^O Write Out", "^K Cut"]
+
+[[test]]
+name = "^K cuts lines one after another, and ^U pastes them"
+text = "#[|]#one\ntwo\nthree\n"
+
+[[test.step]]
+keys = "<C-k><C-k>"
+expect.text = "three\n"
+
+[[test.step]]
+keys = "<C-u>"
+expect.selections = "one\ntwo\n#[|]#three\n"
+
+[[test]]
+name = "M-A marks, and ^K then cuts what is marked"
+text = "#[|]#hello world\n"
+keys = "<A-a><C-f><C-f><C-f><C-f><C-f><C-k>"
+
+[test.expect]
+text = " world\n"
+
+[[test]]
+name = "^W finds after the cursor, and M-W again, wrapping"
+text = "#[|]#one two one\n"
+
+[[test.step]]
+keys = "<C-w>one<ret>"
+expect.selections = "one two #[|]#one\n"
+
+[[test.step]]
+keys = "<A-w>"
+expect.selections = "#[|]#one two one\n"
+expect.message = "Search Wrapped"
+
+[[test]]
+name = "M-U undoes what was typed as one step"
+text = "#[|]#\n"
+keys = "abc<A-u>"
+
+[test.expect]
+text = "\n"
+
+[[test]]
+name = "^_ goes to a line"
+text = "#[|]#a\nb\nc\n"
+keys = "<C-_>3<ret>"
+
+[test.expect]
+selections = "a\nb\n#[|]#c\n"
+
+[[test]]
+name = "^X asks about unsaved changes, and ^C takes it back"
+text = "abc\n"
+
+[[test.step]]
+keys = "x<C-x>"
+expect.screen = ["Save modified buffer?"]
+
+[[test.step]]
+keys = "<C-c>"
+expect.absent = ["Save modified buffer?"]
+
+[[test]]
+name = "^O writes the file"
+file = "notes.txt"
+text = "hi\n"
+keys = "<C-o><ret>"
+
+[test.expect]
+message = "Wrote 1 line"
+
+[[test]]
+name = "Escape then a key is as with Alt"
+text = "abc\n"
+keys = "<esc>a"
+
+[test.expect]
+message = "Mark Set"
+
+[[test]]
+name = "plugins' keys are under Alt, and ^T lists the commands"
+text = "abc\n"
+
+[[test.step]]
+keys = "<A-f>"
+wait = 5000
+expect.screen = ["files> "]
+
+[[test.step]]
+keys = "<esc><C-t>"
+expect.screen = ["commands> "]

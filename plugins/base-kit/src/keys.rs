@@ -192,6 +192,68 @@ pub fn describe(binding: &Binding) -> String {
     }
 }
 
+/// Walking a table of keys one key at a time, as for a leader or a key of
+/// the settings that leads to more.
+#[derive(Default)]
+pub struct Sequence {
+    /// The table the next key is looked up in, and the keys typed so far.
+    waiting: Option<(Keymap, Vec<KeyEvent>)>,
+}
+
+/// What a key did in a sequence.
+pub enum Step {
+    /// Not waiting, and the key is not in the table: it is someone else's.
+    NotMine,
+    /// The key leads to a table; the next key goes on.
+    Wait,
+    /// The keys typed name this binding, and the keys that got there.
+    Run(Binding, Vec<KeyEvent>),
+    /// Waiting, the key was in no table: the keys typed so far, then it,
+    /// meant nothing here.
+    Dropped(Vec<KeyEvent>),
+}
+
+impl Sequence {
+    pub fn is_waiting(&self) -> bool {
+        self.waiting.is_some()
+    }
+
+    /// The table waited in and the keys that led there, for hints.
+    pub fn waiting(&self) -> Option<(&Keymap, &[KeyEvent])> {
+        self.waiting
+            .as_ref()
+            .map(|(table, typed)| (table, typed.as_slice()))
+    }
+
+    /// Starts in `table`, as when the leader was pressed.
+    pub fn enter(&mut self, table: Keymap, typed: Vec<KeyEvent>) {
+        self.waiting = Some((table, typed));
+    }
+
+    pub fn cancel(&mut self) {
+        self.waiting = None;
+    }
+
+    /// Looks `key` up in the table waited in, or else in `root`.
+    pub fn key(&mut self, root: &Keymap, key: KeyEvent) -> Step {
+        let (table, mut typed) = match self.waiting.take() {
+            Some(waiting) => waiting,
+            None => (root.clone(), Vec::new()),
+        };
+        let waited = !typed.is_empty();
+        typed.push(key);
+        match lookup(&table, &key).cloned() {
+            Some(Binding::Prefix(next)) => {
+                self.waiting = Some((next, typed));
+                Step::Wait
+            }
+            Some(binding) => Step::Run(binding, typed),
+            None if waited => Step::Dropped(typed),
+            None => Step::NotMine,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,5 +304,26 @@ mod tests {
                 "keys.normal.q: unknown command \"no_such_command\"",
             ]
         );
+    }
+
+    #[test]
+    fn sequences_walk_tables() {
+        let settings = json!({"keys": {"global": {"c": {"d": "lsp.definition"}, "x": "demo.x"}}});
+        let (root, _) = keymap(&settings, "global", &|_| None);
+        let key = |text| parse_key(text).unwrap();
+        let mut sequence = Sequence::default();
+        assert!(matches!(sequence.key(&root, key("z")), Step::NotMine));
+        assert!(matches!(
+            sequence.key(&root, key("x")),
+            Step::Run(Binding::Command(_), _)
+        ));
+        assert!(matches!(sequence.key(&root, key("c")), Step::Wait));
+        assert!(sequence.is_waiting());
+        assert!(matches!(sequence.key(&root, key("q")), Step::Dropped(typed) if typed.len() == 2));
+        sequence.key(&root, key("c"));
+        assert!(matches!(
+            sequence.key(&root, key("d")),
+            Step::Run(Binding::Command(name), typed) if name == "lsp.definition" && typed.len() == 2
+        ));
     }
 }

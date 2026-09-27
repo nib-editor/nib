@@ -33,7 +33,7 @@ cargo test --workspace
 
 `api/wit/` を変えたら `cargo xtask build-plugins` をやり直す。古いプラグインは読み込みで型が合わずに失敗する。コアは写しの `core/wit/` から読むので、そこへも写す（crates.io のクレートが自分の外を読めないため）。Go の SDK のために、`sdk/go/wit/deps/nib-plugin/` へ写して `sdk/go` で `go generate` もする（CI がどちらの写しも一致を確かめる）。Go のテスト用プラグイン（`plugins/test/go`）は TinyGo（と、TinyGo が使う binaryen の `wasm-opt`、`wasm-tools`）があればビルドされ、なければ飛ばされる。
 
-`nib` の実行ファイルは、ビルド時に `target/plugins/` にある標準プラグイン（helix と `plugins/languages/` の言語）を埋め込む（一覧は `tui/standard-plugins.txt`）。言語を足したら、そこにも足す。crates.io に出すときは `cargo xtask package` で同梱の準備をする（docs/distribution.md）。コアのビルドには cmake が要る（tree-sitter が WASM の文法を読むのに使う wasmtime の C API のため）。wasmtime のバージョンは tree-sitter が使うものにそろえる。プラグインを変えたら `cargo xtask build-plugins` のあとで `nib` をビルドし直す。
+`nib` の実行ファイルは、ビルド時に `target/plugins/` にある標準プラグイン（helix、nano などと `plugins/languages/` の言語）を埋め込む（一覧は `tui/standard-plugins.txt`）。言語を足したら、そこにも足す。crates.io に出すときは `cargo xtask package` で同梱の準備をする（docs/distribution.md）。コアのビルドには cmake が要る（tree-sitter が WASM の文法を読むのに使う wasmtime の C API のため）。wasmtime のバージョンは tree-sitter が使うものにそろえる。プラグインを変えたら `cargo xtask build-plugins` のあとで `nib` をビルドし直す。
 
 `target/debug` は、版や依存を変えるたびに古い成果物が残って膨らむ（一度 165 GB になった）。大きくなっていたら `cargo clean --profile dev` で消す（release のビルドと `target/plugins/` は残る）。
 

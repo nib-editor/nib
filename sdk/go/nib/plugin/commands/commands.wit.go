@@ -30,7 +30,8 @@ func Register(name string, description string) {
 // such as the caller itself, is an error.
 //
 // Core commands:
-// - `buffer.save`: saves the current buffer.
+// - `buffer.save`: saves the current buffer; `{"path": string}` saves
+// it there and makes that its path.
 // - `buffer.open` `{"path": string}`: opens a file in the view.
 // - `buffer.next`, `buffer.previous`: shows another buffer.
 // - `editor.quit` `{"force": bool}`: quits; without `force`, fails when

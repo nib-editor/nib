@@ -135,6 +135,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nib-plugin-nano"
+version = "0.1.0"
+dependencies = [
+ "nib-base-kit",
+ "nib-plugin",
+ "serde_json",
+]
+
+[[package]]
 name = "nib-plugin-picker"
 version = "0.1.4"
 dependencies = [
