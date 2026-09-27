@@ -37,3 +37,33 @@ expect.screen = ["files> ", "a.txt"]
 [[test.step]]
 keys = "<esc>ihello<esc>"
 expect.text = "hello"
+
+[[test]]
+name = "the command palette runs a command chosen by its name"
+file = "notes.md"
+
+[[test.step]]
+keys = "<space>?"
+expect.screen = ["commands> ", "buffer.save", "Save the current buffer"]
+
+[[test.step]]
+keys = "coremenu<ret>"
+expect.screen = ["[r] restart all"]
+
+[[test]]
+name = "the palette opens the other picker, and finds commands by what they do"
+file = "notes.md"
+files = { "a.txt" = "" }
+
+[[test.step]]
+keys = "<space>?"
+expect.screen = ["commands> "]
+
+[[test.step]]
+keys = "pick a file"
+expect.screen = ["picker.files"]
+
+[[test.step]]
+keys = "<ret>"
+wait = 5000
+expect.screen = ["files> ", "a.txt"]

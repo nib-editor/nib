@@ -70,6 +70,7 @@ pub fn lines(pending: Pending) -> Option<Vec<Vec<Span>>> {
                 ("f", "open a file"),
                 ("w", "views…"),
                 ("k", "show what it is"),
+                ("?", "run a command by name"),
                 ("y", "yank to the clipboard"),
                 ("p", "paste the clipboard after"),
                 ("P", "paste the clipboard before"),

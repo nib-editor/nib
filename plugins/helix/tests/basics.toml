@@ -55,3 +55,37 @@ expect.text = "xabc\n"
 [[test.step]]
 keys = ":bc!<ret>"
 expect.text = ""
+
+[[test]]
+name = ": completes a command's name with tab"
+text = "abc\n"
+
+[[test.step]]
+keys = ":conf"
+expect.screen = [":conf", "config-reload  Read the settings again"]
+
+[[test.step]]
+keys = "<tab><tab>"
+expect.screen = [":config-reload"]
+
+[[test.step]]
+keys = "<S-tab>"
+expect.screen = [":config"]
+
+[[test]]
+name = ": runs any command by its name, with key=value arguments"
+text = "abc\n"
+files = { "other.txt" = "from the other file\n" }
+keys = ":buffer.open path=other.txt<ret>"
+
+[test.expect]
+text = "from the other file\n"
+selections = "#[f|]#rom the other file\n"
+
+[[test]]
+name = ": says so for a name it does not know"
+text = "abc\n"
+keys = ":nope<ret>"
+
+[test.expect]
+screen = ["unknown command: nope"]

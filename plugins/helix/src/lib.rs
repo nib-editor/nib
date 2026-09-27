@@ -11,7 +11,7 @@ mod keys;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-use base_kit::cmdline::{self, Ran};
+use base_kit::cmdline;
 use base_kit::doc::{self, Doc, FindKind};
 use base_kit::edit::{
     apply_placing, delete_selections, deletion, edits_for, find, flip_selections, indent,
@@ -86,7 +86,13 @@ struct CommandLine {
     prompt: Prompt,
     panel: Panel,
     input: String,
+    /// Tab cycling through the commands that start with what was typed:
+    /// the candidates, and the one in `input`.
+    completing: Option<(Vec<(String, String)>, usize)>,
 }
+
+/// Candidates shown above the command line at once.
+const CANDIDATE_ROWS: usize = 8;
 
 struct Helix {
     mode: Mode,
@@ -621,6 +627,7 @@ impl Helix {
                 let command = match c {
                     'f' => "picker.files",
                     'k' => "lsp.hover",
+                    '?' => "picker.commands",
                     _ => return,
                 };
                 call_or_show(command);
@@ -1099,20 +1106,21 @@ impl Helix {
     }
 
     fn open_prompt(&mut self, prompt: Prompt) {
-        let label = prompt.label();
-        let panel = Panel::new(&[vec![span(label, "")]]);
-        panel.set_cursor(Some((0, label.len() as u32)));
-        self.command_line = Some(CommandLine {
+        let line = CommandLine {
             prompt,
-            panel,
+            panel: Panel::new(&[]),
             input: String::new(),
-        });
+            completing: None,
+        };
+        line.show();
+        self.command_line = Some(line);
     }
 
     fn command_line_key(&mut self, ev: KeyEvent) {
         let Some(line) = self.command_line.as_mut() else {
             return;
         };
+        let completes = line.prompt == Prompt::Command && !line.input.contains(' ');
         match ev.code {
             KeyCode::Escape => self.command_line = None,
             KeyCode::Enter => {
@@ -1121,28 +1129,36 @@ impl Helix {
                 self.command_line = None;
                 self.run_prompt(prompt, input);
             }
+            KeyCode::Tab if completes => {
+                let back = ev.modifiers.contains(Modifiers::SHIFT);
+                line.complete(back);
+            }
             KeyCode::Backspace if line.input.is_empty() => self.command_line = None,
             KeyCode::Backspace => {
                 line.input.pop();
+                line.completing = None;
             }
-            KeyCode::Char(c) if ev.modifiers.is_empty() => line.input.push(c),
+            KeyCode::Char(c) if ev.modifiers.is_empty() => {
+                line.input.push(c);
+                line.completing = None;
+            }
             _ => {}
         }
         if let Some(line) = &self.command_line {
-            let text = format!("{}{}", line.prompt.label(), line.input);
-            line.panel.update(&[vec![span(&text, "")]]);
-            line.panel.set_cursor(Some((0, text.len() as u32)));
+            line.show();
         }
     }
 
     fn run_prompt(&mut self, prompt: Prompt, input: String) {
         let view = editor::active_view();
         match prompt {
-            Prompt::Command => match cmdline::run(input.trim()) {
-                Ok(Ran::Switched) => to_blocks(&editor::active_view()),
-                Ok(Ran::Done) => {}
-                Err(err) => ui::show_message(&err),
-            },
+            Prompt::Command => {
+                if let Err(err) = cmdline::run(input.trim()) {
+                    ui::show_message(&err);
+                }
+                // Another buffer may be shown now, with its cursor a point.
+                points_to_blocks(&editor::active_view());
+            }
             _ if input.is_empty() => {}
             Prompt::Search { backward } => {
                 search(&view, &input, backward);
@@ -1151,6 +1167,90 @@ impl Helix {
             Prompt::Select => select_matches(&view, &input),
         }
     }
+}
+
+impl CommandLine {
+    /// Fills in the next command that starts with what was typed, or the
+    /// previous one.
+    fn complete(&mut self, back: bool) {
+        let (candidates, at) = match self.completing.take() {
+            Some((candidates, at)) => {
+                let n = candidates.len();
+                let at = if back { (at + n - 1) % n } else { (at + 1) % n };
+                (candidates, at)
+            }
+            None => {
+                let candidates = cmdline::candidates(&self.input);
+                if candidates.is_empty() {
+                    return;
+                }
+                let at = if back { candidates.len() - 1 } else { 0 };
+                (candidates, at)
+            }
+        };
+        self.input = candidates[at].0.clone();
+        self.completing = Some((candidates, at));
+    }
+
+    /// The commands that fit what is typed, above the line itself.
+    fn show(&self) {
+        let label = self.prompt.label();
+        let mut lines = Vec::new();
+        let listed = match &self.completing {
+            Some((candidates, at)) => Some((candidates.clone(), Some(*at))),
+            None if self.prompt == Prompt::Command
+                && !self.input.is_empty()
+                && !self.input.contains(' ') =>
+            {
+                Some((cmdline::candidates(&self.input), None))
+            }
+            None => None,
+        };
+        if let Some((candidates, at)) = listed {
+            // The chosen one stays in sight while cycling past the rows.
+            let first = at.map_or(0, |at| at.saturating_sub(CANDIDATE_ROWS - 1));
+            let shown = &candidates[first..candidates.len().min(first + CANDIDATE_ROWS)];
+            let width = shown.iter().map(|(name, _)| name.len()).max().unwrap_or(0);
+            for (i, (name, what)) in shown.iter().enumerate() {
+                let style = if at == Some(first + i) {
+                    "ui.menu.selected"
+                } else {
+                    ""
+                };
+                lines.push(vec![
+                    span(&format!(" {name:width$}"), style),
+                    span(&format!("  {what}"), "comment"),
+                ]);
+            }
+        }
+        let text = format!("{label}{}", self.input);
+        lines.push(vec![span(&text, "")]);
+        self.panel.update(&lines);
+        self.panel
+            .set_cursor(Some(((lines.len() - 1) as u32, text.len() as u32)));
+    }
+}
+
+/// Turns the points among the ranges into blocks, as normal mode keeps
+/// them.
+fn points_to_blocks(view: &View) {
+    let doc = Doc::new(view.buffer());
+    let selection = view.selection();
+    if selection.ranges.iter().all(|r| r.anchor != r.head) {
+        return;
+    }
+    let ranges = selection
+        .ranges
+        .iter()
+        .map(|r| {
+            if r.anchor == r.head {
+                block(&doc, r.head)
+            } else {
+                *r
+            }
+        })
+        .collect();
+    set_ranges(view, ranges, selection.primary);
 }
 
 /// A block over the grapheme at `pos`, or a point at the end of the text.

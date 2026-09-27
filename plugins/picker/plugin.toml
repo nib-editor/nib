@@ -1,5 +1,5 @@
 name = "picker"
-version = "0.1.1"
+version = "0.1.2"
 api = "0.4"
 # Lists the files of the working directory.
 capabilities = ["fs-read"]

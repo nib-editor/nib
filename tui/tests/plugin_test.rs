@@ -58,7 +58,7 @@ fn passes_its_tests(name: &str, dir: &str, count: usize) {
 
 #[test]
 fn the_helix_plugin_passes_its_tests() {
-    passes_its_tests("helix", "helix", 6);
+    passes_its_tests("helix", "helix", 9);
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn the_indent_plugin_passes_its_tests() {
 
 #[test]
 fn the_picker_plugin_passes_its_tests() {
-    passes_its_tests("picker", "picker", 2);
+    passes_its_tests("picker", "picker", 4);
 }
 
 /// Its fake language server is a Python script.

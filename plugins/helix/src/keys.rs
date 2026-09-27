@@ -86,6 +86,7 @@ const COMMANDS: &[(&str, &str)] = &[
     ("goto_prev_test", "[ T"),
     ("file_picker", "space f"),
     ("hover", "space k"),
+    ("command_palette", "space ?"),
     ("vsplit", "C-w v"),
     ("hsplit", "C-w s"),
     ("rotate_view", "C-w w"),
