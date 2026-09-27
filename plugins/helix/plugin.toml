@@ -1,5 +1,5 @@
 name = "helix"
-version = "0.1.12"
+version = "0.1.13"
 api = "0.4"
 # For the + register and Space y / Space p.
 capabilities = ["clipboard"]

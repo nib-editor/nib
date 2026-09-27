@@ -222,6 +222,7 @@ helix プラグインは、このために `clipboard` の権限を宣言する�
 | `:o <path>`（`:open`、`:e`、`:edit` も同じ） | `buffer.open` |
 | `:q` / `:q!`（`:quit` / `:quit!`） | `editor.quit`（`:q!` は `{"force": true}`） |
 | `:wq` / `:x` | `buffer.save` のあと `editor.quit` |
+| `:bc` / `:bc!`（`:buffer-close` / `:buffer-close!`） | `buffer.close`（`:bc!` は `{"force": true}`） |
 
 失敗したときは、コマンドが返したエラーを `ui.show-message` で表示する。
 

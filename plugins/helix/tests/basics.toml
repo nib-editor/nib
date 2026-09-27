@@ -42,3 +42,16 @@ command = "buffer.save"
 
 [test.expect]
 result = "null"
+
+[[test]]
+name = ":bc refuses unsaved changes, and :bc! drops them"
+text = "abc\n"
+
+[[test.step]]
+keys = "ix<esc>:bc<ret>"
+# Still open: the message names its path, which is long here.
+expect.text = "xabc\n"
+
+[[test.step]]
+keys = ":bc!<ret>"
+expect.text = ""

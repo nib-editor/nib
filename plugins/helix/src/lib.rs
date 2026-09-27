@@ -1163,6 +1163,8 @@ fn run_command_line(input: &str) {
         "q" | "quit" => quit(false),
         "q!" | "quit!" => quit(true),
         "wq" | "x" => save().and_then(|()| quit(false)),
+        "bc" | "buffer-close" => close_buffer(false),
+        "bc!" | "buffer-close!" => close_buffer(true),
         "o" | "open" | "e" | "edit" if !arg.is_empty() => {
             let args = format!(r#"{{"path":{}}}"#, json_string(arg));
             let opened = commands::call("buffer.open", &args).map(|_| ());
@@ -1182,6 +1184,12 @@ fn save() -> Result<(), String> {
     commands::call("buffer.save", "{}")?;
     let path = editor::active_view().buffer().path().unwrap_or_default();
     ui::show_message(&format!("{path} written"));
+    Ok(())
+}
+
+fn close_buffer(force: bool) -> Result<(), String> {
+    commands::call("buffer.close", &format!(r#"{{"force":{force}}}"#))?;
+    to_blocks(&editor::active_view());
     Ok(())
 }
 

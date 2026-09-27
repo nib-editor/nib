@@ -81,6 +81,7 @@ impl PluginData {
         self.state()?
             .buffers
             .get_mut(handle.rep() as usize)
+            .filter(|b| !b.is_closed())
             .ok_or_else(|| wasmtime::Error::msg("the buffer no longer exists"))
     }
 
@@ -115,8 +116,11 @@ impl editor::Host for PluginData {
     }
 
     fn buffers(&mut self) -> HostResult<Vec<Resource<BufferHandle>>> {
-        let count = self.state()?.buffers.len();
-        Ok((0..count as u32).map(Resource::new_own).collect())
+        let buffers = &self.state()?.buffers;
+        Ok((0..buffers.len())
+            .filter(|&i| !buffers[i].is_closed())
+            .map(|i| Resource::new_own(i as u32))
+            .collect())
     }
 
     fn working_directory(&mut self) -> HostResult<String> {

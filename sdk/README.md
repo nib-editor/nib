@@ -100,6 +100,7 @@ The core's commands (arguments are JSON):
 | `buffer.open` | Opens `{"path": "…"}` |
 | `buffer.save` | Saves the shown buffer |
 | `buffer.next` / `buffer.previous` | Shows the next / previous buffer |
+| `buffer.close` | Closes the shown buffer; `{"force": true}` drops unsaved changes. Its handles trap from then on |
 | `view.split` | Splits the view, `{"direction": "vertical"}` or `"horizontal"` |
 | `view.close` / `view.only` | Closes the focused view / all others |
 | `view.focus` | Moves the focus, `{"to": "next"}`, `"left"`, `"right"`, `"up"`, or `"down"` |
@@ -114,6 +115,7 @@ A plugin gets the kinds of events listed under `events` in its manifest:
 | `buffer-opened`, `buffer-saved` | A buffer was opened, saved. Buffers opened before the plugin loaded are announced after it does |
 | `buffer-changed` | A buffer changed. The changes come in the order that turns the old text into the new, each with its line and column, as LSP's `didChange` wants them |
 | `<plugin>.<name>` | A plugin called `events.emit(name, json)`. `helix.mode_changed` tells when the Helix keymap changes modes |
+| `editor.buffer_closed` | A buffer was closed: `{"path": …}`. The core emits it |
 | `editor.syntax_updated` | A buffer's syntax tree caught up with its edits: `{"path": …, "version": …}`. The core emits it |
 
 These come to the plugin that asked for them, without being listed: `timer` (from `timers.set`), `process-output` and `process-exit` (from `process.spawn`), and `files-listed` (from `files.walk`).

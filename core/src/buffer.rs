@@ -58,6 +58,9 @@ pub struct Buffer {
     /// Changes not yet turned into events: the version after each, and
     /// what it did.
     pub(crate) change_log: Vec<(u64, Vec<TextChange>)>,
+    /// Closed with `buffer.close`. Buffers keep their place in the list,
+    /// empty, so indices, which plugins hold as handles, never move.
+    closed: bool,
 }
 
 impl Default for Buffer {
@@ -90,11 +93,24 @@ impl Buffer {
             notes: Vec::new(),
             overrides: Overrides::default(),
             change_log: Vec::new(),
+            closed: false,
         }
     }
 
     /// Opens the file at `path`. A missing file gives an empty buffer that
     /// will be created on save.
+    /// What is left of a buffer after `buffer.close`.
+    pub(crate) fn closed() -> Self {
+        Self {
+            closed: true,
+            ..Self::default()
+        }
+    }
+
+    pub fn is_closed(&self) -> bool {
+        self.closed
+    }
+
     pub fn open(path: impl Into<PathBuf>) -> Result<Self, Error> {
         let path = path.into();
         let mut buffer = match fs::read_to_string(&path) {

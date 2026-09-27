@@ -215,3 +215,23 @@ fn plugins_list_commands_and_buffers() {
     assert!(names.contains(&"buffer.save".to_string()));
     assert!(names.contains(&"test-events.echo".to_string()));
 }
+
+/// A closed buffer leaves plugins' lists.
+#[test]
+fn closed_buffers_are_gone_for_plugins() {
+    let dir = env::temp_dir();
+    let a = dir.join(format!("nib-{}-closed-a.txt", std::process::id()));
+    let b = dir.join(format!("nib-{}-closed-b.txt", std::process::id()));
+    fs::write(&a, "a").unwrap();
+    fs::write(&b, "b").unwrap();
+    let mut editor = Editor::default();
+    editor.load_plugin(&plugin_dir("test-events")).unwrap();
+    editor.open(&a).unwrap();
+    editor.open(&b).unwrap();
+    assert_eq!(editor.call_command("test-events.buffers", "").unwrap(), "2");
+    editor.call_command("buffer.close", "").unwrap();
+    assert_eq!(editor.call_command("test-events.buffers", "").unwrap(), "1");
+    assert!(editor.plugins()[0].last_error.is_none());
+    fs::remove_file(&a).unwrap();
+    fs::remove_file(&b).unwrap();
+}

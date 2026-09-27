@@ -97,15 +97,23 @@ impl State {
         if let Some(language) = buffer.path().and_then(|p| self.languages.for_path(p)) {
             buffer.syntax = Some(BufferSyntax::new(language));
         }
-        let scratch = &self.buffers[0];
-        if self.buffers.len() == 1
-            && scratch.path().is_none()
-            && scratch.is_empty()
-            && !scratch.is_modified()
-        {
-            self.buffers[0] = buffer;
-            self.view = View::new(0);
-            self.push_event(None, Event::BufferOpened(0));
+        // An empty scratch buffer, when it is the only one open, gives way
+        // to the file.
+        let mut open = self
+            .buffers
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| !b.is_closed());
+        let only = match (open.next(), open.next()) {
+            (Some((index, b)), None) if b.path().is_none() && b.is_empty() && !b.is_modified() => {
+                Some(index)
+            }
+            _ => None,
+        };
+        if let Some(index) = only {
+            self.buffers[index] = buffer;
+            self.view = View::new(index);
+            self.push_event(None, Event::BufferOpened(index));
         } else {
             self.buffers.push(buffer);
             self.switch_to(self.buffers.len() - 1);
@@ -446,6 +454,69 @@ impl State {
     }
 
     /// Closes the focused view, focusing the one before it.
+    /// The open buffer after the shown one, or before it, going round.
+    /// The shown one if it is the only one.
+    fn next_open(&self, forward: bool) -> usize {
+        let count = self.buffers.len();
+        let step = if forward { 1 } else { count - 1 };
+        let mut at = self.view.buffer;
+        for _ in 0..count {
+            at = (at + step) % count;
+            if !self.buffers[at].is_closed() {
+                return at;
+            }
+        }
+        self.view.buffer
+    }
+
+    /// Closes the shown buffer. Views showing it show another open one,
+    /// or a new empty buffer if it was the last.
+    pub fn close_buffer(&mut self, force: bool) -> Result<(), String> {
+        let index = self.view.buffer;
+        let buffer = &self.buffers[index];
+        if buffer.is_modified() && !force {
+            let name = buffer
+                .path()
+                .map_or("[scratch]".into(), |p| p.display().to_string());
+            return Err(format!(
+                "{name} has unsaved changes; {{\"force\": true}} drops them"
+            ));
+        }
+        let path = buffer.path().map(|p| p.to_string_lossy().into_owned());
+        let previous = self.next_open(false);
+        let shown = if previous == index {
+            self.buffers.push(Buffer::default());
+            self.buffers.len() - 1
+        } else {
+            previous
+        };
+        self.switch_to(shown);
+        for (_, view) in &mut self.others {
+            if view.buffer == index {
+                *view = View::new(shown);
+            }
+        }
+        self.hidden_views.remove(&index);
+        // Events of the buffer not yet delivered would hand plugins a
+        // buffer that no longer exists.
+        self.flush_changes();
+        self.events.retain(|(_, event)| match event {
+            Event::BufferOpened(b) | Event::BufferSaved(b) => *b != index,
+            Event::BufferChanged { buffer, .. } => *buffer != index,
+            _ => true,
+        });
+        self.buffers[index] = Buffer::closed();
+        let data = serde_json::json!({ "path": path });
+        self.push_event(
+            None,
+            Event::Custom {
+                name: BUFFER_CLOSED.into(),
+                data: data.to_string(),
+            },
+        );
+        Ok(())
+    }
+
     pub fn close_view(&mut self) -> Result<(), String> {
         let order = self.splits.leaves();
         if order.len() == 1 {
@@ -536,10 +607,10 @@ impl State {
                 self.open(path).map_err(|err| format!("{path}: {err}"))?;
             }
             "buffer.next" | "buffer.previous" => {
-                let count = self.buffers.len();
-                let step = if name == "buffer.next" { 1 } else { count - 1 };
-                self.switch_to((self.view.buffer + step) % count);
+                let next = self.next_open(name == "buffer.next");
+                self.switch_to(next);
             }
+            "buffer.close" => self.close_buffer(args["force"].as_bool() == Some(true))?,
             "view.split" => {
                 let side_by_side = match args["direction"].as_str() {
                     Some("vertical") | None => true,
@@ -739,11 +810,17 @@ const LENT: &str = "editor state is only lent during plugin calls";
 /// The commands the core runs itself, with their descriptions.
 /// The event the core emits when a buffer's syntax tree is up to date.
 const SYNTAX_UPDATED: &str = "editor.syntax_updated";
+/// The event the core emits when a buffer is closed.
+const BUFFER_CLOSED: &str = "editor.buffer_closed";
 
 pub(crate) const CORE_COMMANDS: &[(&str, &str)] = &[
     ("buffer.save", "Save the current buffer"),
     ("buffer.open", "Open a file: {\"path\": string}"),
     ("buffer.next", "Show the next buffer"),
+    (
+        "buffer.close",
+        "Close the shown buffer; {\"force\": true} drops unsaved changes",
+    ),
     ("buffer.previous", "Show the previous buffer"),
     (
         "view.split",
@@ -1253,6 +1330,76 @@ mod tests {
         assert_eq!(editor.view().selection, Selection::point(2));
         fs::remove_file(&a).unwrap();
         fs::remove_file(&b).unwrap();
+    }
+
+    #[test]
+    fn closing_buffers_shows_another() {
+        let dir = std::env::temp_dir();
+        let paths: Vec<_> = ["a", "b", "c"]
+            .iter()
+            .map(|n| dir.join(format!("nib-{}-close-{n}.txt", std::process::id())))
+            .collect();
+        for (path, text) in paths.iter().zip(["aaa", "bbb", "ccc"]) {
+            fs::write(path, text).unwrap();
+        }
+        let mut editor = Editor::default();
+        for path in &paths {
+            editor.open(path).unwrap();
+        }
+        let text = |editor: &Editor| editor.buffer().text().to_string();
+        let run = |editor: &mut Editor, name: &str, args: &str| {
+            editor.state_mut().run_command(name, args)
+        };
+        // b, shown in a split too, is closed; both views show a.
+        run(&mut editor, "buffer.previous", "").unwrap();
+        run(&mut editor, "view.split", "").unwrap();
+        run(&mut editor, "buffer.close", "").unwrap();
+        assert_eq!(text(&editor), "aaa");
+        assert!(editor.state().others.iter().all(|(_, v)| v.buffer == 0));
+        // Going round skips it.
+        run(&mut editor, "buffer.next", "").unwrap();
+        assert_eq!(text(&editor), "ccc");
+        run(&mut editor, "buffer.next", "").unwrap();
+        assert_eq!(text(&editor), "aaa");
+
+        // Unsaved changes stay unless forced.
+        let buffer = &mut editor.state_mut().buffers[0];
+        let version = buffer.version();
+        let edit = vec![Edit::new(0, 0, "x")];
+        buffer
+            .apply(version, edit, &Selection::point(0), None, UndoMode::NewStep)
+            .unwrap();
+        let err = run(&mut editor, "buffer.close", "").unwrap_err();
+        assert!(err.contains("unsaved changes"), "{err}");
+        run(&mut editor, "buffer.close", r#"{"force": true}"#).unwrap();
+        assert_eq!(text(&editor), "ccc");
+        // Its change, not yet an event, is dropped with it: plugins would
+        // get a handle to a buffer that is gone.
+        let pending = editor.state().events.iter().any(|(_, event)| {
+            matches!(
+                event,
+                Event::BufferChanged { buffer: 0, .. } | Event::BufferOpened(0)
+            )
+        });
+        assert!(!pending);
+
+        // The last one gives way to an empty buffer, which a file then
+        // replaces.
+        run(&mut editor, "buffer.close", "").unwrap();
+        assert_eq!(text(&editor), "");
+        assert!(editor.buffer().path().is_none());
+        let open = editor
+            .state()
+            .buffers
+            .iter()
+            .filter(|b| !b.is_closed())
+            .count();
+        assert_eq!(open, 1);
+        editor.open(&paths[0]).unwrap();
+        assert_eq!(text(&editor), "aaa");
+        for path in &paths {
+            fs::remove_file(path).unwrap();
+        }
     }
 
     #[test]

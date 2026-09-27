@@ -239,12 +239,16 @@ interface syntax {
 | `buffer.open` | `{"path": string}` のファイルを開く |
 | `buffer.save` | 表示中のバッファを保存する |
 | `buffer.next` / `buffer.previous` | 次 / 前のバッファを表示する |
+| `buffer.close` | 表示中のバッファを閉じる。保存していない変更があれば断り、`{"force": true}` で捨てる |
 | `view.split` | `{"direction": "vertical" \| "horizontal"}` で分割する |
 | `view.close` / `view.only` | フォーカスのあるビューを閉じる / それ以外を閉じる |
 | `view.focus` | `{"to": "next" \| "left" \| "right" \| "up" \| "down"}` へフォーカスを移す |
 | `editor.quit` | 終了する。`{"force": true}` で保存していない変更を捨てる |
 
-  分割表示のコマンドは [architecture.md](architecture.md) の「分割表示」も見る。バッファを閉じるコマンドはまだない。
+  分割表示のコマンドは [architecture.md](architecture.md) の「分割表示」も見る。
+- バッファを閉じると、それを表示していたビューは、前の開いているバッファを表示する（最後の 1 つなら、空のバッファを作る）。
+  - 閉じたバッファは一覧の中に空で残し、番号をずらさない。プラグインが持つバッファの handle は番号なので、ほかのバッファの handle がずれないため。閉じたバッファの handle を使うとトラップする。`editor.buffers()` には出ない。
+  - まだ届けていない、そのバッファのイベントは捨てる。閉じたあとで、閉じたバッファの handle を渡さないため。
 
 呼び出しを同期にできるのは、呼び出し中はエディタの状態とプラグインの一覧をそのプラグインのストアに貸しているため。呼び出し先のプラグインへは、貸したものをそのまま又貸しする（[architecture.md](architecture.md) の「プラグインの実行」）。
 
@@ -273,11 +277,12 @@ events = ["buffer-opened", "buffer-changed", "helix.mode_changed"]
 | `buffer-opened` / `buffer-saved` | バッファを開いた・保存した | `events` に書いたプラグイン |
 | `buffer-changed` | バッファの変更。変更後のバージョンと、変更の列 | 同上 |
 | `<plugin>.<name>` | プラグインが `events.emit(name, json)` で出したもの（custom イベント） | 同上 |
+| `editor.buffer_closed` | バッファを閉じた。`{"path": string \| null}` | 同上 |
 | `editor.syntax_updated` | バッファの構文木が、編集のあとの解析で最新になった。`{"path": string \| null, "version": number}`（バッファのパスと、解析した時点のバージョン） | 同上 |
 | `timer` | `timers.set` で予約した時間がたった | 予約したプラグインだけ |
 | `process-output` / `process-exit` | 起動した外部プロセスの出力と終了 | 起動したプラグインだけ |
 | `files-listed` | `files.walk` で頼んだファイルの一覧（1,000 件ずつ） | 頼んだプラグインだけ |
-| `buffer-closed`、`selection-changed`、`paste` | 必要になったときに足す | |
+| `selection-changed`、`paste` | 必要になったときに足す | |
 
 - `buffer-changed` の変更の列は、先頭から順に 1 つずつ適用していけば変更後のテキストになるように並べる。LSP の `didChange` の `contentChanges` と同じ考え方で、変更ごとに、その時点のテキストでの行と列（バイト数）を付ける。LSP プラグインは、これをそのまま差分の同期に使える。
   - 1 回の `apply` の編集は、後ろから順に並べる。後ろの変更は前の位置を動かさないので、どれも変更前のテキストの位置のまま使える。
