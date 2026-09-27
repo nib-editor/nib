@@ -503,6 +503,19 @@ impl input::Host for PluginData {
         Ok(())
     }
 
+    fn leader_keys(&mut self) -> HostResult<Vec<input::LeaderKey>> {
+        Ok(self
+            .state()?
+            .leader_keys
+            .iter()
+            .map(|key| input::LeaderKey {
+                plugin: key.name.clone(),
+                keys: key.keys.clone(),
+                command: key.command.clone(),
+            })
+            .collect())
+    }
+
     fn pop_layer(&mut self) -> HostResult<()> {
         let plugin = self.plugin;
         let layers = &mut self.state()?.layers;

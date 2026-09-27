@@ -2,6 +2,9 @@
 //! while the next key is awaited, as Helix does.
 
 use base_kit::hints;
+use base_kit::keys::{self, Binding};
+use base_kit::leader::Leader;
+use nib_plugin::nib::plugin::commands;
 use nib_plugin::nib::plugin::types::Span;
 
 use crate::Pending;
@@ -64,19 +67,46 @@ pub fn lines(pending: Pending) -> Option<Vec<Vec<Span>>> {
                 ("o", "close the other views"),
             ],
         ),
-        Pending::Space => (
-            "Space",
-            vec![
-                ("f", "open a file"),
-                ("w", "views…"),
-                ("k", "show what it is"),
-                ("?", "run a command by name"),
-                ("y", "yank to the clipboard"),
-                ("p", "paste the clipboard after"),
-                ("P", "paste the clipboard before"),
-            ],
-        ),
+        Pending::Space => return None,
         Pending::Find(_) | Pending::Replace | Pending::Register => return None,
     };
     Some(hints::lines(title, &entries))
+}
+
+/// The keys under Space: this keymap's own, then what plugins suggest,
+/// with their commands' descriptions, then the ones that lost.
+pub fn leader_lines(leader: &Leader) -> Vec<Vec<Span>> {
+    let described: Vec<(String, String)> = commands::all();
+    let describe = |name: &str| {
+        described
+            .iter()
+            .find(|(command, _)| command == name)
+            .map_or(name, |(_, what)| what.as_str())
+            .to_string()
+    };
+    let mut entries: Vec<(String, String)> = [
+        ("w", "views…"),
+        ("y", "yank to the clipboard"),
+        ("p", "paste the clipboard after"),
+        ("P", "paste the clipboard before"),
+    ]
+    .iter()
+    .map(|&(key, what)| (key.to_string(), what.to_string()))
+    .collect();
+    for (key, binding) in &leader.keymap {
+        let what = match binding {
+            Binding::Command(name) => describe(name),
+            other => keys::describe(other),
+        };
+        entries.push((keys::label(key), what));
+    }
+    for lost in &leader.taken {
+        let what = format!("taken: {} ({})", lost.command, lost.plugin);
+        entries.push((lost.keys.clone(), what));
+    }
+    let entries: Vec<(&str, &str)> = entries
+        .iter()
+        .map(|(key, what)| (key.as_str(), what.as_str()))
+        .collect();
+    hints::lines("Space", &entries)
 }

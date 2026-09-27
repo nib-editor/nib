@@ -19,6 +19,7 @@ use base_kit::edit::{
     select_matches, set_ranges,
 };
 use base_kit::keys::{Binding, Keymap, lookup};
+use base_kit::leader::{self, Leader};
 use base_kit::{call_or_show, line_edit, regex_escape, span, tree};
 use keys::Keymaps;
 use nib_plugin::exports::nib::plugin::guest::{Guest, KeyResult};
@@ -132,6 +133,8 @@ struct Helix {
     hints: Option<(Pending, Popup)>,
     /// Keys from `[settings.keys.*]`, looked at before the built-in ones.
     keymaps: Keymaps,
+    /// What plugins put under Space, read when it is pressed.
+    leader: Option<Leader>,
     /// Inside a table of `keymaps`: its keys, and the keys typed to get
     /// there.
     remap_prefix: Option<(Keymap, Vec<KeyEvent>)>,
@@ -165,6 +168,7 @@ thread_local! {
             },
             remap_prefix: None,
             remap_hints: None,
+            leader: None,
         })
     };
 }
@@ -569,7 +573,10 @@ impl Helix {
                 self.search = Some(pattern);
             }
             'm' => self.wait(Pending::Match, count),
-            ' ' => self.wait(Pending::Space, count),
+            ' ' => {
+                self.leader = Some(leader::keymap(&own_leader_keys(), input::leader_keys()));
+                self.wait(Pending::Space, count);
+            }
             ']' => self.wait(Pending::Object { forward: true }, count),
             '[' => self.wait(Pending::Object { forward: false }, count),
             _ => return false,
@@ -582,6 +589,11 @@ impl Helix {
     fn show_hints(&mut self) {
         match (self.pending, &self.hints) {
             (Some(pending), Some((shown, _))) if pending == *shown => {}
+            (Some(Pending::Space), _) => {
+                let lines = self.leader.as_ref().map(hints::leader_lines);
+                self.hints =
+                    lines.map(|lines| (Pending::Space, Popup::new(PopupAnchor::Corner, &lines)));
+            }
             (Some(pending), _) => {
                 self.hints = hints::lines(pending)
                     .map(|lines| (pending, Popup::new(PopupAnchor::Corner, &lines)));
@@ -599,6 +611,16 @@ impl Helix {
 
     fn pending_key(&mut self, view: &View, pending: Pending, ev: KeyEvent) {
         let count = self.count.take();
+        // A key plugins put under Space, which need not be a plain char.
+        if pending == Pending::Space
+            && !own_leader_keys().contains(&ev)
+            && let Some(leader) = self.leader.take()
+        {
+            if let Some(binding) = lookup(&leader.keymap, &ev).cloned() {
+                self.run_binding(view, binding, vec![space_key(), ev]);
+            }
+            return;
+        }
         let Some(c) = plain(&ev) else {
             return;
         };
@@ -640,15 +662,7 @@ impl Helix {
                 }
                 if c == 'w' {
                     self.pending = Some(Pending::Window);
-                    return;
                 }
-                let command = match c {
-                    'f' => "picker.files",
-                    'k' => "lsp.hover",
-                    '?' => "picker.commands",
-                    _ => return,
-                };
-                call_or_show(command);
             }
             Pending::Window => {
                 let (command, args) = match c {
@@ -1268,6 +1282,21 @@ fn prompt_key(ev: KeyEvent) -> KeyResult {
     };
     prompts::edit(&edited.0, edited.1 as u32);
     KeyResult::Handled
+}
+
+/// The keys under Space this keymap keeps for itself.
+fn own_leader_keys() -> [KeyEvent; 4] {
+    ['w', 'y', 'p', 'P'].map(|c| KeyEvent {
+        code: KeyCode::Char(c),
+        modifiers: Modifiers::empty(),
+    })
+}
+
+fn space_key() -> KeyEvent {
+    KeyEvent {
+        code: KeyCode::Char(' '),
+        modifiers: Modifiers::empty(),
+    }
 }
 
 /// What a key does to a list shown without a line to type into, as in

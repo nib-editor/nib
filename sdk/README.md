@@ -34,9 +34,13 @@ version = "0.1.0"
 api = "0.5"               # the nib:plugin version it is built for
 capabilities = []         # what it may do beyond the editor API
 events = ["buffer-opened", "buffer-changed"]
+
+[keys]                    # keys for its own commands, under the base's leader
+w = "wordcount.show"      # Space w in helix; "c d" puts it under c
 ```
 
-- `name` is lowercase letters, digits, and `-`. `buffer`, `editor`, and `view` belong to the core.
+- `name` is lowercase letters, digits, and `-`. `buffer`, `config`, `core`, `editor`, and `view` belong to the core.
+- `[keys]` suggests keys for the plugin's own commands, relative to the leader of the base in use (Space in helix), so they land where that base keeps plugins' keys. Keys the base or a plugin loaded earlier holds win; the user's settings win over all. Bases read them with `input.leader-keys()`.
 - `api` is the `major.minor` of the `nib:plugin` package in the WIT. nib loads only plugins built for its own API, and says so when one is not.
 - A plugin can also provide languages without any code: tree-sitter grammars and queries, listed under `[[languages]]` (see the standard ones in [`plugins/languages/`](../plugins/languages)).
 
@@ -254,7 +258,7 @@ To make it findable by name, add it to [nib-editor/plugins](https://github.com/n
 crate-type = ["cdylib"]
 
 [dependencies]
-nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.5.1" }
+nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.5.2" }
 ```
 
 Implement `nib_plugin::exports::nib::plugin::guest::Guest` and export it with `nib_plugin::export!(YourType)`. The API is under `nib_plugin::nib::plugin::<interface>`. Build for `wasm32-wasip2`; `nib plugin build` does it.
@@ -265,4 +269,4 @@ Built with [TinyGo](https://tinygo.org/) 0.42 or later, since Go itself cannot m
 
 ### Versions
 
-SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.5.1`, `sdk/go/v0.5.1`.
+SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.5.2`, `sdk/go/v0.5.2`.

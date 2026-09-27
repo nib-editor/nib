@@ -1,4 +1,4 @@
-package nib:plugin@0.5.1;
+package nib:plugin@0.5.2;
 
 interface types {
     /// A UTF-8 byte offset into a buffer.
@@ -130,6 +130,15 @@ interface input {
     push-layer: func();
     /// Removes this plugin's topmost layer.
     pop-layer: func();
+
+    /// A key a plugin's manifest suggests for one of its commands, under
+    /// the base's leader. `keys` is written as settings write keys, such as
+    /// "w" or "c d".
+    record leader-key { plugin: string, keys: string, command: string }
+
+    /// For the base: the keys enabled plugins suggest, in the order they
+    /// were loaded.
+    leader-keys: func() -> list<leader-key>;
 }
 
 interface commands {

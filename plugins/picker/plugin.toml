@@ -1,5 +1,10 @@
 name = "picker"
-version = "0.1.3"
+version = "0.1.4"
 api = "0.5"
 # Lists the files of the working directory.
 capabilities = ["fs-read"]
+
+# Under the base's leader: Space f and Space ? in helix.
+[keys]
+f = "picker.files"
+"?" = "picker.commands"

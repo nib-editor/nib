@@ -1,5 +1,5 @@
 name = "lsp"
-version = "0.1.4"
+version = "0.1.5"
 api = "0.5"
 # Runs the language servers.
 capabilities = ["process"]
@@ -10,3 +10,7 @@ events = [
     "editor.buffer_closed",
     "helix.mode_changed",
 ]
+
+# Under the base's leader: Space k in helix.
+[keys]
+k = "lsp.hover"

@@ -30,6 +30,9 @@ pub(crate) struct Manifest {
     /// The key that opens the core menu while this base is in use.
     #[serde(default, rename = "menu-key")]
     pub menu_key: Option<String>,
+    /// Keys for the plugin's own commands, under the base's leader.
+    #[serde(default)]
+    pub keys: BTreeMap<String, String>,
 }
 
 pub(crate) const CAPABILITIES: [&str; 5] =
@@ -87,6 +90,23 @@ pub(crate) fn parse(text: &str, origin: &str) -> Result<Manifest, Error> {
             CAPABILITIES.join(", ")
         )));
     }
+    for (keys, command) in &manifest.keys {
+        let own = command
+            .strip_prefix(&manifest.name)
+            .is_some_and(|rest| rest.starts_with('.') && rest.len() > 1);
+        if !own {
+            return Err(fail(format!(
+                "keys.{keys}: {command:?} is not one of {}'s commands",
+                manifest.name
+            )));
+        }
+        let parsed: Result<Vec<KeyEvent>, _> = keys.split_whitespace().map(str::parse).collect();
+        match parsed {
+            Ok(parsed) if !parsed.is_empty() => {}
+            Ok(_) => return Err(fail("keys: a key is missing".into())),
+            Err(err) => return Err(fail(format!("keys.{keys}: {err}"))),
+        }
+    }
     if let Some(key) = &manifest.menu_key {
         if !manifest.base {
             return Err(fail("menu-key is only for bases (base = true)".into()));
@@ -95,4 +115,32 @@ pub(crate) fn parse(text: &str, origin: &str) -> Result<Manifest, Error> {
             .map_err(|err| fail(format!("menu-key: {err}")))?;
     }
     Ok(manifest)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn check(extra: &str) -> Result<Manifest, Error> {
+        parse(
+            &format!("name = \"demo\"\nversion = \"0.1.0\"\napi = \"0.5\"\n{extra}"),
+            "test",
+        )
+    }
+
+    #[test]
+    fn keys_are_for_the_plugins_own_commands() {
+        let manifest = check("[keys]\nw = \"demo.count\"\n\"c d\" = \"demo.go\"").unwrap();
+        assert_eq!(manifest.keys.len(), 2);
+        for (keys, wrong) in [
+            ("[keys]\nw = \"lsp.hover\"", "not one of demo's commands"),
+            ("[keys]\nw = \"demo\"", "not one of demo's commands"),
+            ("[keys]\nw = \"democracy.x\"", "not one of demo's commands"),
+            ("[keys]\n\"C-nope\" = \"demo.x\"", "keys.C-nope"),
+            ("[keys]\n\" \" = \"demo.x\"", "a key is missing"),
+        ] {
+            let err = check(keys).unwrap_err().to_string();
+            assert!(err.contains(wrong), "{keys}: {err}");
+        }
+    }
 }

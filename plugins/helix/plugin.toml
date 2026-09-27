@@ -1,5 +1,5 @@
 name = "helix"
-version = "0.1.17"
+version = "0.1.18"
 api = "0.5"
 # The whole way of editing (docs/base.md); only one base runs.
 base = true

@@ -35,7 +35,13 @@ events = ["buffer-changed"]
 
 base = true               # ベース（base.md）。[core] base で選ばれたものだけが動く
 menu-key = "C-g"          # ベースだけ: このベースを使う間、コアメニューを開くキー
+
+[keys]                    # 自分のコマンドのキー。ベースのリーダーからの相対（base.md）
+f = "picker.files"        # helix なら Space f
+"c d" = "lsp.definition"  # 空白で区切ると、前置きキーの下
 ```
+
+- `[keys]` の右辺は自分のコマンド（`<name>.` で始まる）だけ。キーの書き方は設定と同じ（`C-x`、`A-f`、`space`、`tab` など）。ベースは `input.leader-keys()` で、有効なプラグインの分を読み込んだ順に受け取る。
 
 - ベースは常に起動時に始まる（`load = "lazy"` は効かない）。選ばれていないベースは、止めたまま読み込み、コアメニューから切り替えられる。
 - 名前の `buffer`、`config`、`core`、`editor`、`view` はコアのコマンドと重なるので使えない。

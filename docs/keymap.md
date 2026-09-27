@@ -152,8 +152,9 @@ M1 のあとに回すもの:
 ## M3.3 で足すキー
 
 - `Space` で始まるキーを足す。`Space` を押すと、ほかの前置きキーと同じく候補を右下に出す。
-  - `Space f`: ファイル選択（`picker.files` コマンドを呼ぶ）
-  - `Space ?`: コマンドの一覧（`picker.commands`）。名前と説明で絞り込み、選んだものを引数なしで呼ぶ。Helix の command palette と同じ位置。
+  - `Space` は helix のリーダー（[base.md](base.md) の「リーダー」）。helix 自身が持つのは `Space w`、`Space y`、`Space p`、`Space P` だけで、ほかはプラグインの `plugin.toml` の `[keys]` から来る。押したときに `input.leader-keys()` で読み、候補にはコマンドの説明を出す。ぶつかって負けたキーは、候補の最後に「taken」として出す。
+  - `Space f`: ファイル選択（`picker.files`、picker の `[keys]`）
+  - `Space ?`: コマンドの一覧（`picker.commands`、picker の `[keys]`）。名前と説明で絞り込み、選んだものを引数なしで呼ぶ。Helix の command palette と同じ位置。
 
 ファイル選択そのものは、`picker` プラグインが入力スタックに層を積んで受け持つ。ファイルの一覧は、コアの `files.walk` で得る（M4.4 までは git / rg で得ていた）。
 
@@ -171,7 +172,7 @@ LSP プラグイン（[lsp.md](lsp.md)）のコマンドを呼ぶ。
 | キー | コマンド |
 |------|----------|
 | `gd` | `lsp.definition`（定義へ移動） |
-| `Space k` | `lsp.hover`（カーソル位置の説明） |
+| `Space k` | `lsp.hover`（カーソル位置の説明。lsp の `[keys]`） |
 | 挿入モードの `Ctrl-x` | `lsp.complete`（補完の候補を出す） |
 
 補完の一覧を開いているあいだは、helix が `Ctrl-n` / `↓`（次）、`Ctrl-p` / `↑`（前）、`Tab` / `Enter`（確定）を一覧への操作として送る（[plugin-api.md](plugin-api.md) の「文字を打つ欄のない一覧」、[lsp.md](lsp.md) の「補完」）。ほかのキーはふつうに効き、一覧は閉じる。

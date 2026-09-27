@@ -10,3 +10,8 @@ events = [
     "test-events.loop",
     "helix.mode_changed",
 ]
+
+# f loses to picker's when both are loaded, picker first.
+[keys]
+f = "test-events.echo"
+"t l" = "test-events.log"

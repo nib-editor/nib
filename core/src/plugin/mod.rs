@@ -301,6 +301,17 @@ struct Plugin {
     last_error: Option<String>,
     base: bool,
     menu_key: Option<KeyEvent>,
+    /// Keys for its commands under the base's leader, from its manifest.
+    keys: Vec<(String, String)>,
+}
+
+/// A key an enabled plugin suggests under the base's leader.
+#[derive(Clone, Debug)]
+pub(crate) struct LeaderKey {
+    pub plugin: PluginId,
+    pub name: String,
+    pub keys: String,
+    pub command: String,
 }
 
 /// Limits for one plugin: its own from `plugins/<name>.toml`, or the
@@ -548,8 +559,10 @@ impl Editor {
             last_error: None,
             base: manifest.base,
             menu_key,
+            keys: manifest.keys.into_iter().collect(),
         });
         if standby || (lazy && !manifest.base) {
+            self.sync_leader_keys(id);
             return Ok(());
         }
         let started = if manifest.base {
@@ -561,6 +574,7 @@ impl Editor {
             self.plugins.entries.pop();
             return Err(Error::Plugin(format!("{}: {message}", manifest.name)));
         }
+        self.sync_leader_keys(id);
         Ok(())
     }
 
@@ -665,7 +679,31 @@ impl Editor {
                 }
             }
         }
+        self.sync_leader_keys(id);
         result
+    }
+
+    /// Puts the plugin's leader keys where plugins can read them while it
+    /// is enabled, in the order plugins were loaded.
+    fn sync_leader_keys(&mut self, id: PluginId) {
+        let plugin = &self.plugins.entries[id];
+        let keys: Vec<LeaderKey> = match plugin.enabled {
+            true => plugin
+                .keys
+                .iter()
+                .map(|(keys, command)| LeaderKey {
+                    plugin: id,
+                    name: plugin.name.clone(),
+                    keys: keys.clone(),
+                    command: command.clone(),
+                })
+                .collect(),
+            false => Vec::new(),
+        };
+        let leader_keys = &mut self.state_mut().leader_keys;
+        leader_keys.retain(|key| key.plugin != id);
+        leader_keys.extend(keys);
+        leader_keys.sort_by_key(|key| key.plugin);
     }
 
     /// Stops the running bases other than `id`, as only one runs. Returns
@@ -723,6 +761,7 @@ impl Editor {
     pub(crate) fn disable_plugin(&mut self, id: PluginId) {
         self.stop_plugin(id);
         self.plugins.entries[id].enabled = false;
+        self.sync_leader_keys(id);
     }
 
     /// Compiles the plugin again from its directory and restarts it.

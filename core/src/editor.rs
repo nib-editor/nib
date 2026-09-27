@@ -15,7 +15,7 @@ use crate::files::FileJobs;
 use crate::history::UndoMode;
 use crate::input::{KeyCode, KeyEvent};
 use crate::layout;
-use crate::plugin::{PluginId, Plugins};
+use crate::plugin::{LeaderKey, PluginId, Plugins};
 use crate::process::Processes;
 use crate::prompt::{Action, Choices, Outcome, Prompt};
 use crate::selection::Selection;
@@ -64,6 +64,8 @@ pub(crate) struct State {
     pub last_prompt_id: u32,
     /// The base acted on the last choices during the key being handled.
     pub choices_acted: bool,
+    /// What enabled plugins suggest under the base's leader.
+    pub leader_keys: Vec<LeaderKey>,
     /// Events waiting for the current call to end, with the plugin they
     /// are for, or `None` for every plugin that listens to their kind.
     pub events: VecDeque<(Option<PluginId>, Event)>,
@@ -972,6 +974,7 @@ impl Default for Editor {
                 choices: Vec::new(),
                 last_prompt_id: 0,
                 choices_acted: false,
+                leader_keys: Vec::new(),
                 events: VecDeque::new(),
                 commands: Vec::new(),
                 timers: Vec::new(),

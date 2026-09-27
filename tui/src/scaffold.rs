@@ -7,9 +7,9 @@ use std::path::{Path, PathBuf};
 use nib_core::API_VERSION;
 
 /// The Rust SDK's tag for this nib's API. Bump with `sdk/rust`'s version.
-const RUST_SDK_TAG: &str = "sdk/rust/v0.5.1";
+const RUST_SDK_TAG: &str = "sdk/rust/v0.5.2";
 /// The Go SDK's version for this nib's API. Bump with its tags `sdk/go/v*`.
-const GO_SDK_VERSION: &str = "v0.5.1";
+const GO_SDK_VERSION: &str = "v0.5.2";
 
 /// Paths in the new plugin and their templates. `NAME` in a path is the
 /// plugin's name; dotfiles are stored without their dot.

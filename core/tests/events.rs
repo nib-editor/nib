@@ -325,3 +325,29 @@ fn choices_hear_the_base_and_cancel_on_other_keys() {
     let typed = log.iter().position(|e| e.contains("=x")).unwrap();
     assert!(last_cancel < typed, "{log:#?}");
 }
+
+#[test]
+fn plugins_put_keys_under_the_leader() {
+    let mut editor = Editor::default();
+    editor.resize(80, 20);
+    editor.load_plugin(&plugin_dir("helix")).unwrap();
+    editor.load_plugin(&plugin_dir("picker")).unwrap();
+    editor.load_plugin(&plugin_dir("test-events")).unwrap();
+    type_keys(&mut editor, " ");
+    let shown = screen(&editor).join("\n");
+    for line in [
+        "f  Pick a file to open",
+        "?  Pick a command to run",
+        "t  …",
+        "f  taken: test-events.echo (test-events)",
+    ] {
+        assert!(shown.contains(line), "{line:?} in\n{shown}");
+    }
+    // A table under the leader, then its key.
+    type_keys(&mut editor, "tl");
+    assert!(editor.message().is_none(), "{:?}", editor.message());
+    // Disabled, a plugin's keys go.
+    editor.handle_key(KeyEvent::ctrl('g'));
+    type_keys(&mut editor, "3d ");
+    assert!(!screen(&editor).join("\n").contains("t  …"));
+}
