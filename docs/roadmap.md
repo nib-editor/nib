@@ -386,7 +386,7 @@ M3 を終えた時点で、git のエディタ（`core.editor`）を hx から n
 ## M6 エディタの機能の残り
 
 - `buffer.close` と helix の `:bc` / `:bc!`（2026-09-28）
-- プラグイン専用のデータディレクトリ
+- プラグイン専用のデータディレクトリ（WASI の `/data`）
 - rustdoc の言語名のないコードブロックを Rust として色付けする
 - 構文木の API を injection の中でも使えるようにする（Markdown のコードブロックの中の Rust で `maf`、`]f` など）
 
