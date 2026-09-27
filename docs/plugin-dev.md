@@ -125,9 +125,39 @@ ihello<esc>       i、h、e、l、l、o、Esc
 <lt>              < そのもの
 ```
 
-### まだ書けないもの
+### 待つこと、手順、設定
 
-時間を進めること（タイマー）、外部プロセスの出力を待つこと、プラグインの設定（`plugins/<name>.toml` の `[settings]`）を与えること。使うプラグインが出てきたら足す。
+タイマー、外部プロセス、LSP のように、時間がたってから結果が出るものは `wait` で待つ。
+
+```toml
+[[test]]
+name = "shows diagnostics from the server"
+file = "main.rs"
+text = "fn main() { error }\n"
+# テストするプラグインの [settings]（plugins/<name>.toml に書くもの）
+settings = { servers.rust.command = ["python3", "{dir}/fake_server.py"] }
+
+[[test.step]]
+command = "lsp.status"
+wait = 5000                       # 最大 5 秒、expect が満たされるまでエディタを回す
+[test.step.expect]
+result = '"rust ready"'
+
+[[test.step]]
+keys = "<space>k"
+wait = 2000
+[test.step.expect]
+screen = ["found error"]
+```
+
+- `wait`（ミリ秒）: キーやコマンドのあと、その時間まで実際にエディタを回す。タイマーを発火させ、外部プロセスの出力やファイルの一覧を渡し、描画のあとの処理を済ませる。`expect` がすべて満たされた時点で次に進み、時間が来ても満たされなければ失敗にする。`expect` がなければ、その時間だけ回す（タイマーを進めるのに使う）。
+  - 時間は実際の時間。タイマーの 100 ms を待つテストは 100 ms かかる。
+- `[[test.step]]`: 手順を順に並べる。1 つの手順に `keys`、`command`、`args`、`wait`、`expect` を書ける。キーを送り、コマンドを呼び、待ってから確かめる。`step` を使わずに `[[test]]` に直接書いたものは、手順が 1 つのテストとして扱う（`text` と `file` と `settings` は `[[test]]` に書く）。
+  - 手順の `expect` が満たされなければ、そこでテストを失敗にする。
+- `settings`: テストするプラグインの `[settings]`。`init` に JSON で渡る。文字列の中の `{dir}` は、テストのファイルがあるディレクトリに置き換える（偽のサーバーのように、テストと一緒に置くファイルを指すため）。ファイルの先頭（`with` と同じ場所）に書くと、そのファイルのテスト全部の既定になる。
+- `lsp` は、`with` に書いたときだけ読み込む（テストするのが `lsp` 自身なら、いつも読み込む）。
+
+偽のサーバーは、どの言語で書いてもよい。標準の `lsp` プラグインのテスト（`plugins/lsp/tests/`）は、Python で書いた偽のサーバーを使う。
 
 ## `nib plugin pack` が入れるもの
 

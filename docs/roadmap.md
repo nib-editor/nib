@@ -373,6 +373,16 @@ M3 を終えた時点で、git のエディタ（`core.editor`）を hx から n
 
 確かめ方: `nib plugin new` で作った雛形が、`nib plugin build` と `nib plugin test` をそのまま通ること。
 
+### M5.3 テストの書式を広げる
+
+設計は [plugin-dev.md](plugin-dev.md) の「待つこと、手順、設定」。
+
+- `nib plugin test` の `wait`、`[[test.step]]`、`settings`
+- 標準プラグイン（lsp、picker、indent）のテストを TOML で書く。lsp は Python の偽のサーバーを使う
+- サンプルのプラグイン（`nib-editor/plugin-example`）に、雛形と同じ `tests/` と `AGENTS.md` を足す
+
+確かめ方: 標準プラグインのテストが `nib plugin test` で通り、壊したときに落ちること。
+
 ## 保留中のアイデア
 
 いつやるかは決めていないが、忘れないように書いておく。
