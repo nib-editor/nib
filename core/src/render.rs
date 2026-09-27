@@ -539,22 +539,33 @@ impl Editor {
             .path()
             .map_or_else(|| "[scratch]".into(), |path| path.display().to_string());
         let modified = if buffer.is_modified() { " [+]" } else { "" };
-        // Shorten a long path from the left so the modified mark stays visible.
-        let room = right_start.saturating_sub(x + 2 + modified.len() as u16);
+        let message = self.message().map(|message| format!("  {message}"));
+        // Shorten a long path from the left so the modified mark stays
+        // visible, and further for a message, which matters more than the
+        // path's start.
+        let room_before = |end: u16| end.saturating_sub(x + 2 + modified.len() as u16);
+        let mut room = room_before(right_start);
+        if let Some(message) = &message {
+            let width = graphemes(message).map(display_width).sum();
+            room = room.min(room_before(grid.width().saturating_sub(width)).max(MIN_PATH_WIDTH));
+        }
         x = grid.put_str(
             x,
             y,
             &format!(" {}{modified}", truncate_left(&name, room)),
             style,
         );
-        if let Some(message) = self.message() {
-            grid.put_str(x, y, &format!("  {message}"), style);
+        if let Some(message) = &message {
+            x = grid.put_str(x, y, message, style);
         }
-        if right_start > x || self.message().is_none() {
+        if message.is_none() || right_start >= x {
             put_line(grid, &state.theme, right_start, y, &right, style);
         }
     }
 }
+
+/// The columns a path keeps beside a message, for its file name.
+const MIN_PATH_WIDTH: u16 = 20;
 
 /// `text` cut to `width` columns, keeping its end: "…/src/lib.rs".
 fn truncate_left(text: &str, width: u16) -> Cow<'_, str> {
@@ -805,6 +816,15 @@ mod tests {
         let (rows, _) = render(&editor);
         assert!(rows[1].contains("x.txt [+]"), "{}", rows[1]);
         assert!(rows[1].starts_with(" …"), "{}", rows[1]);
+
+        editor.resize(60, 2);
+        editor.show_message("settings reloaded");
+        let (rows, _) = render(&editor);
+        assert!(
+            rows[1].contains("x.txt [+]  settings reloaded"),
+            "{}",
+            rows[1]
+        );
     }
 
     #[test]
