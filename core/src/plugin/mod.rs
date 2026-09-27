@@ -381,14 +381,59 @@ impl Editor {
     }
 
     /// Loads plugins in order, as `load_plugin` and `load_builtin_plugin`
-    /// do, going on past those that fail. They are compiled one after
-    /// another on this thread: compiling on others took 2 ms less at
-    /// startup, but kept 1.4 MB more, the compiled code scattered over
-    /// their allocators.
+    /// do, going on past those that fail. Taking their compiled code from
+    /// the cache is most of a plugin's startup, milliseconds each, so this
+    /// thread and one more share the compiling; then they are added and
+    /// started in order.
     pub fn load_plugins(&mut self, sources: &[PluginSource]) -> Vec<Result<(), Error>> {
+        let read: Vec<_> = sources.iter().map(|s| self.read_plugin(s)).collect();
+        let work: Vec<(usize, &manifest::Manifest, &[u8])> = read
+            .iter()
+            .enumerate()
+            .filter_map(|(i, read)| match read {
+                Ok((manifest, Some(wasm))) => Some((i, manifest, &wasm[..])),
+                _ => None,
+            })
+            .collect();
+        let mut components: Vec<Option<Result<Component, Error>>> =
+            read.iter().map(|_| None).collect();
+        if !work.is_empty() {
+            let engine = self.engine().cloned();
+            let next = AtomicUsize::new(0);
+            let compile = || {
+                let mut done = Vec::new();
+                while let Some(&(i, manifest, wasm)) =
+                    work.get(next.fetch_add(1, Ordering::Relaxed))
+                {
+                    let component = match &engine {
+                        Ok(engine) => compile_component(engine, manifest, wasm),
+                        Err(err) => Err(Error::Plugin(err.to_string())),
+                    };
+                    done.push((i, component));
+                }
+                done
+            };
+            let compiled = thread::scope(|scope| {
+                // One more thread than this one: each keeps a few MB of the
+                // code it compiled scattered over its allocator, and more
+                // barely shorten startup (docs/architecture.md).
+                let other = scope.spawn(compile);
+                let mut compiled = compile();
+                compiled.extend(other.join().expect("compiling plugins panicked"));
+                compiled
+            });
+            for (i, component) in compiled {
+                components[i] = Some(component);
+            }
+        }
         sources
             .iter()
-            .map(|source| self.add_plugin(source))
+            .zip(read)
+            .zip(components)
+            .map(|((source, read), component)| {
+                let (manifest, _) = read?;
+                self.add_compiled(source, manifest, component.transpose()?)
+            })
             .collect()
     }
 

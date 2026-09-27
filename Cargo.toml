@@ -4,7 +4,7 @@ members = ["core", "tui", "sdk/rust", "xtask"]
 exclude = ["plugins"]
 
 [workspace.package]
-version = "0.8.23"
+version = "0.8.24"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 authors = ["Q0tzly <contact@q0tzly.dev>"]
