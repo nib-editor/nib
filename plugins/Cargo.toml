@@ -4,6 +4,7 @@
 resolver = "3"
 # Rust plugins only; test/go is built with TinyGo.
 members = [
+    "base-kit",
     "helix",
     "indent",
     "lsp",

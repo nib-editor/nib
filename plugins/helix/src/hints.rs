@@ -1,6 +1,7 @@
 //! What the keys after a prefix such as `g` or `m` do, shown in a popup
 //! while the next key is awaited, as Helix does.
 
+use base_kit::hints;
 use nib_plugin::nib::plugin::types::Span;
 
 use crate::Pending;
@@ -76,20 +77,5 @@ pub fn lines(pending: Pending) -> Option<Vec<Vec<Span>>> {
         ),
         Pending::Find(_) | Pending::Replace | Pending::Register => return None,
     };
-    let key_width = entries.iter().map(|(key, _)| key.len()).max().unwrap_or(0);
-    let mut lines = vec![vec![span(title, "ui.popup.title")]];
-    lines.extend(entries.into_iter().map(|(key, what)| {
-        vec![
-            span(&format!("{key:key_width$}"), "ui.popup.key"),
-            span(&format!("  {what}"), ""),
-        ]
-    }));
-    Some(lines)
-}
-
-fn span(text: &str, style: &str) -> Span {
-    Span {
-        text: text.into(),
-        style: style.into(),
-    }
+    Some(hints::lines(title, &entries))
 }

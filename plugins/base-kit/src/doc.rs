@@ -69,6 +69,17 @@ impl Doc {
         self.buffer.line_start(line).unwrap_or(self.len)
     }
 
+    /// The last line with text: a final line break does not start a new
+    /// line to jump to.
+    pub fn last_line(&self) -> u64 {
+        let last = self.line_count().saturating_sub(1);
+        if last > 0 && self.line_start(last) == self.len {
+            last - 1
+        } else {
+            last
+        }
+    }
+
     /// The line break ending the line of `pos`, or the end of the text.
     pub fn line_end(&self, pos: u64) -> u64 {
         match self.buffer.line_start(self.line_of(pos) + 1) {

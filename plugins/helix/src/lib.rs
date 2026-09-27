@@ -5,23 +5,29 @@
 //! Helix, and motions select what they pass over. The core knows nothing
 //! about modes; they live here.
 
-mod doc;
 mod hints;
 mod keys;
-mod tree;
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-use doc::{Doc, FindKind};
-use keys::{Binding, Keymap, Keymaps};
+use base_kit::cmdline::{self, Ran};
+use base_kit::doc::{self, Doc, FindKind};
+use base_kit::edit::{
+    apply_placing, delete_selections, deletion, edits_for, find, flip_selections, indent,
+    indent_unit, insertion, join_lines, next_object, object_or_pair, point, range, replace_with,
+    select_matches, set_ranges,
+};
+use base_kit::keys::{Binding, Keymap, lookup};
+use base_kit::{call_or_show, regex_escape, span, tree};
+use keys::Keymaps;
 use nib_plugin::exports::nib::plugin::guest::{Guest, KeyResult};
 use nib_plugin::nib::plugin::editor::{ScrollAmount, View};
 use nib_plugin::nib::plugin::events::{self, Event};
 use nib_plugin::nib::plugin::types::{
-    CursorShape, Edit, KeyCode, KeyEvent, Modifiers, SelRange, Selection, Span, UndoMode,
+    CursorShape, Edit, KeyCode, KeyEvent, Modifiers, SelRange, Selection, UndoMode,
 };
-use nib_plugin::nib::plugin::ui::{Decoration, Panel, Popup, PopupAnchor, Side};
+use nib_plugin::nib::plugin::ui::{Panel, Popup, PopupAnchor, Side};
 use nib_plugin::nib::plugin::{clipboard, commands, editor, input, settings, ui};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -299,7 +305,7 @@ impl Helix {
     fn remapped(&mut self, view: &View, ev: KeyEvent) -> Option<bool> {
         if let Some((table, typed)) = self.remap_prefix.take() {
             self.remap_hints = None;
-            if let Some(binding) = keys::lookup(&table, &ev).cloned() {
+            if let Some(binding) = lookup(&table, &ev).cloned() {
                 let mut typed = typed;
                 typed.push(ev);
                 return Some(self.run_binding(view, binding, typed));
@@ -321,7 +327,7 @@ impl Helix {
             Mode::Insert => &self.keymaps.insert,
             Mode::Select => &self.keymaps.select,
         };
-        let binding = keys::lookup(keymap, &ev)?.clone();
+        let binding = lookup(keymap, &ev)?.clone();
         Some(self.run_binding(view, binding, vec![ev]))
     }
 
@@ -334,19 +340,7 @@ impl Helix {
                 }
             }
             Binding::Prefix(table) => {
-                let title: Vec<String> = typed.iter().map(keys::label).collect();
-                let mut lines = vec![vec![span(&title.join(" "), "ui.popup.title")]];
-                let width = table
-                    .iter()
-                    .map(|(k, _)| keys::label(k).len())
-                    .max()
-                    .unwrap_or(0);
-                for (key, binding) in &table {
-                    lines.push(vec![
-                        span(&format!("{:width$}", keys::label(key)), "ui.popup.key"),
-                        span(&format!("  {}", keys::describe(binding)), ""),
-                    ]);
-                }
+                let lines = base_kit::hints::keymap_lines(&typed, &table);
                 self.remap_hints = Some(Popup::new(PopupAnchor::Corner, &lines));
                 self.remap_prefix = Some((table, typed));
             }
@@ -651,7 +645,7 @@ impl Helix {
             Pending::Goto => {
                 let goto: fn(&Doc, u64, Option<u64>) -> u64 = match c {
                     'g' => |doc, _, count| doc.line_start(count.map_or(0, |n| n.saturating_sub(1))),
-                    'e' => |doc, _, _| doc.line_start(last_line(doc)),
+                    'e' => |doc, _, _| doc.line_start(doc.last_line()),
                     'h' => |doc, pos, _| doc.line_start(doc.line_of(pos)),
                     'l' => |doc, pos, _| {
                         let (start, end) = (doc.line_start(doc.line_of(pos)), doc.line_end(pos));
@@ -797,7 +791,7 @@ impl Helix {
             .min(rows.saturating_sub(1) / 2);
         // No margin is needed where the view cannot scroll further.
         let low = if top == 0 { 0 } else { top + margin };
-        let high = if bottom >= last_line(&doc) {
+        let high = if bottom >= doc.last_line() {
             bottom
         } else {
             bottom - margin
@@ -1144,7 +1138,11 @@ impl Helix {
     fn run_prompt(&mut self, prompt: Prompt, input: String) {
         let view = editor::active_view();
         match prompt {
-            Prompt::Command => run_command_line(input.trim()),
+            Prompt::Command => match cmdline::run(input.trim()) {
+                Ok(Ran::Switched) => to_blocks(&editor::active_view()),
+                Ok(Ran::Done) => {}
+                Err(err) => ui::show_message(&err),
+            },
             _ if input.is_empty() => {}
             Prompt::Search { backward } => {
                 search(&view, &input, backward);
@@ -1152,112 +1150,6 @@ impl Helix {
             }
             Prompt::Select => select_matches(&view, &input),
         }
-    }
-}
-
-fn run_command_line(input: &str) {
-    let (command, arg) = input.split_once(' ').unwrap_or((input, ""));
-    let arg = arg.trim();
-    let result = match command {
-        "w" | "write" => save(),
-        "q" | "quit" => quit(false),
-        "q!" | "quit!" => quit(true),
-        "wq" | "x" => save().and_then(|()| quit(false)),
-        "bc" | "buffer-close" => close_buffer(false),
-        "config" => {
-            let args = match arg {
-                "" => "{}".to_string(),
-                name => format!(r#"{{"plugin":{}}}"#, json_string(name)),
-            };
-            let opened = commands::call("config.open", &args).map(|_| ());
-            to_blocks(&editor::active_view());
-            opened
-        }
-        "config-reload" => commands::call("config.reload", "{}").map(|_| ()),
-        "bc!" | "buffer-close!" => close_buffer(true),
-        "o" | "open" | "e" | "edit" if !arg.is_empty() => {
-            let args = format!(r#"{{"path":{}}}"#, json_string(arg));
-            let opened = commands::call("buffer.open", &args).map(|_| ());
-            to_blocks(&editor::active_view());
-            opened
-        }
-        "o" | "open" | "e" | "edit" => Err(format!(":{command} needs a path")),
-        "" => Ok(()),
-        _ => Err(format!("unknown command: {command}")),
-    };
-    if let Err(err) = result {
-        ui::show_message(&err);
-    }
-}
-
-fn save() -> Result<(), String> {
-    commands::call("buffer.save", "{}")?;
-    let path = editor::active_view().buffer().path().unwrap_or_default();
-    ui::show_message(&format!("{path} written"));
-    Ok(())
-}
-
-fn close_buffer(force: bool) -> Result<(), String> {
-    commands::call("buffer.close", &format!(r#"{{"force":{force}}}"#))?;
-    to_blocks(&editor::active_view());
-    Ok(())
-}
-
-fn quit(force: bool) -> Result<(), String> {
-    commands::call("editor.quit", &format!(r#"{{"force":{force}}}"#)).map(|_| ())
-}
-
-fn json_string(s: &str) -> String {
-    let mut out = String::from("\"");
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
-}
-
-/// The text Tab inserts, from the core's indent setting.
-fn indent_unit() -> String {
-    match settings::get("indent").as_deref() {
-        Some("\"tab\"") => "\t".to_string(),
-        Some(n) => " ".repeat(n.parse().unwrap_or(4)),
-        None => "    ".to_string(),
-    }
-}
-
-fn span(text: &str, style: &str) -> Span {
-    Span {
-        text: text.into(),
-        style: style.into(),
-    }
-}
-
-fn range(anchor: u64, head: u64) -> SelRange {
-    SelRange { anchor, head }
-}
-
-fn point(pos: u64) -> SelRange {
-    range(pos, pos)
-}
-
-fn insertion(pos: u64, text: String) -> Edit {
-    Edit {
-        start: pos,
-        end: pos,
-        text,
-    }
-}
-
-fn deletion(start: u64, end: u64) -> Edit {
-    Edit {
-        start,
-        end,
-        text: String::new(),
     }
 }
 
@@ -1297,22 +1189,6 @@ fn next_char(doc: &Doc, pos: u64) -> u64 {
     if next < doc.len { next } else { pos }
 }
 
-/// The last line with text: a final line break does not start a new line
-/// to jump to.
-fn last_line(doc: &Doc) -> u64 {
-    let last = doc.line_count().saturating_sub(1);
-    if last > 0 && doc.line_start(last) == doc.len {
-        last - 1
-    } else {
-        last
-    }
-}
-
-fn set_ranges(view: &View, ranges: Vec<SelRange>, primary: u32) {
-    let primary = primary.min(ranges.len().saturating_sub(1) as u32);
-    let _ = view.set_selection(&Selection { ranges, primary });
-}
-
 /// Turns every range into a block at its cursor, as after leaving insert
 /// mode or undoing.
 fn to_blocks(view: &View) {
@@ -1322,16 +1198,6 @@ fn to_blocks(view: &View) {
         .ranges
         .iter()
         .map(|r| block(&doc, cursor(&doc, r)))
-        .collect();
-    set_ranges(view, ranges, selection.primary);
-}
-
-fn flip_selections(view: &View) {
-    let selection = view.selection();
-    let ranges = selection
-        .ranges
-        .iter()
-        .map(|r| range(r.head, r.anchor))
         .collect();
     set_ranges(view, ranges, selection.primary);
 }
@@ -1382,315 +1248,6 @@ fn copy_to_next_line(view: &View) {
     set_ranges(view, ranges, primary);
 }
 
-fn delete_selections(view: &View) {
-    let edits = edits_for(view, |r| {
-        let (from, to) = (r.anchor.min(r.head), r.anchor.max(r.head));
-        (from < to).then(|| deletion(from, to))
-    });
-    apply(view, &edits);
-}
-
-/// Applies `edits` as a new undo step, mapping the selections through them.
-fn apply(view: &View, edits: &[Edit]) -> bool {
-    if edits.is_empty() {
-        return false;
-    }
-    let version = view.buffer().version();
-    view.apply(version, edits, None, UndoMode::NewStep).is_ok()
-}
-
-/// Applies one edit per selection and makes each selection
-/// `start..end`, counted in bytes from the start of its edit's text.
-fn apply_placing(view: &View, mut changes: Vec<(Edit, u64, u64)>, undo: UndoMode) -> bool {
-    changes.sort_by_key(|(edit, _, _)| edit.start);
-    let mut shift = 0i64;
-    let ranges = changes
-        .iter()
-        .map(|(edit, start, end)| {
-            let at = (edit.start as i64 + shift) as u64;
-            shift += edit.text.len() as i64 - (edit.end - edit.start) as i64;
-            range(at + start, at + end)
-        })
-        .collect::<Vec<_>>();
-    let edits: Vec<Edit> = changes.into_iter().map(|(edit, _, _)| edit).collect();
-    let primary = view.selection().primary;
-    let after = Selection {
-        primary: primary.min(ranges.len().saturating_sub(1) as u32),
-        ranges,
-    };
-    let version = view.buffer().version();
-    view.apply(version, &edits, Some(&after), undo).is_ok()
-}
-
-/// `r`: replaces every char of each selection with `c`, keeping line breaks.
-fn replace_with(view: &View, c: char) {
-    let doc = Doc::new(view.buffer());
-    let changes = view
-        .selection()
-        .ranges
-        .iter()
-        .filter(|r| r.anchor != r.head)
-        .map(|r| {
-            let (from, to) = (r.anchor.min(r.head), r.anchor.max(r.head));
-            let text: String = doc
-                .slice(from, to)
-                .chars()
-                .map(|ch| if ch == '\n' { ch } else { c })
-                .collect();
-            let len = text.len() as u64;
-            let (start, end) = if r.head < r.anchor {
-                (len, 0)
-            } else {
-                (0, len)
-            };
-            (
-                Edit {
-                    start: from,
-                    end: to,
-                    text,
-                },
-                start,
-                end,
-            )
-        })
-        .collect();
-    apply_placing(view, changes, UndoMode::NewStep);
-}
-
-/// The lines each selection touches, each once.
-fn selected_lines(doc: &Doc, view: &View) -> Vec<u64> {
-    let mut lines: Vec<u64> = view
-        .selection()
-        .ranges
-        .iter()
-        .flat_map(|r| {
-            let (from, to) = (r.anchor.min(r.head), r.anchor.max(r.head));
-            let last = doc.prev_grapheme(to).max(from);
-            doc.line_of(from)..=doc.line_of(last)
-        })
-        .collect();
-    lines.sort_unstable();
-    lines.dedup();
-    lines
-}
-
-/// `>` and `<`: indents or unindents the selected lines by one unit.
-fn indent(view: &View, more: bool) {
-    let doc = Doc::new(view.buffer());
-    let unit = indent_unit();
-    let width = if unit == "\t" { 1 } else { unit.len() };
-    let edits: Vec<Edit> = selected_lines(&doc, view)
-        .into_iter()
-        .filter_map(|line| {
-            let start = doc.line_start(line);
-            let leading = doc::indentation(&doc, start);
-            if more {
-                (doc.line_end(start) > start).then(|| insertion(start, unit.clone()))
-            } else {
-                // A tab counts as a whole unit.
-                let mut end = start;
-                for (i, c) in leading.chars().enumerate() {
-                    if i >= width {
-                        break;
-                    }
-                    end += c.len_utf8() as u64;
-                    if c == '\t' {
-                        break;
-                    }
-                }
-                (end > start).then(|| deletion(start, end))
-            }
-        })
-        .collect();
-    apply(view, &edits);
-}
-
-/// `J`: joins the selected lines, or the line with the next one, replacing
-/// each line break and the next line's indentation with a space.
-fn join_lines(view: &View) {
-    let doc = Doc::new(view.buffer());
-    let mut breaks: Vec<u64> = view
-        .selection()
-        .ranges
-        .iter()
-        .flat_map(|r| {
-            let (from, to) = (r.anchor.min(r.head), r.anchor.max(r.head));
-            let first = doc.line_of(from);
-            let last = doc.line_of(doc.prev_grapheme(to).max(from)).max(first + 1);
-            first..last
-        })
-        .collect();
-    breaks.sort_unstable();
-    breaks.dedup();
-    let edits: Vec<Edit> = breaks
-        .into_iter()
-        .filter(|&line| line + 1 < doc.line_count())
-        .map(|line| {
-            let newline = doc.line_end(doc.line_start(line));
-            let next = newline + 1;
-            let text_start = doc::first_non_blank(&doc, next);
-            let empty = text_start == doc.line_end(next);
-            Edit {
-                start: newline,
-                end: text_start,
-                text: if empty { String::new() } else { " ".into() },
-            }
-        })
-        .collect();
-    apply(view, &edits);
-}
-
-fn edits_for(view: &View, edit: impl Fn(&SelRange) -> Option<Edit>) -> Vec<Edit> {
-    view.selection().ranges.iter().filter_map(edit).collect()
-}
-
-/// Selects the next match of `pattern` after the primary selection, or the
-/// previous one before it, wrapping around the buffer.
-fn search(view: &View, pattern: &str, backward: bool) {
-    let buffer = view.buffer();
-    let selection = view.selection();
-    let r = selection.ranges[selection.primary as usize];
-    let (from, to) = (r.anchor.min(r.head), r.anchor.max(r.head));
-    let (start, wrap_start) = if backward {
-        (from, buffer.len())
-    } else {
-        (to, 0)
-    };
-    let found = match buffer.find(pattern, start, backward) {
-        Ok(Some(found)) => Some((found, false)),
-        Ok(None) => match buffer.find(pattern, wrap_start, backward) {
-            Ok(found) => found.map(|found| (found, true)),
-            Err(err) => return ui::show_message(&describe(err)),
-        },
-        Err(err) => return ui::show_message(&describe(err)),
-    };
-    let Some(((start, end), wrapped)) = found else {
-        return ui::show_message(&format!("no matches for {pattern}"));
-    };
-    let doc = Doc::new(buffer);
-    let found = if start == end {
-        block(&doc, start)
-    } else {
-        range(start, end)
-    };
-    set_ranges(view, vec![found], 0);
-    if wrapped {
-        ui::show_message("search wrapped around");
-    }
-}
-
-/// `s`: replaces the selections with the matches of `pattern` inside them.
-fn select_matches(view: &View, pattern: &str) {
-    let buffer = view.buffer();
-    let mut ranges = Vec::new();
-    for r in view.selection().ranges {
-        match buffer.find_all(pattern, r.anchor.min(r.head), r.anchor.max(r.head)) {
-            Ok(found) => ranges.extend(
-                found
-                    .into_iter()
-                    .filter(|(start, end)| start < end)
-                    .map(|(start, end)| range(start, end)),
-            ),
-            Err(err) => return ui::show_message(&describe(err)),
-        }
-    }
-    if ranges.is_empty() {
-        ui::show_message(&format!("no matches for {pattern}"));
-    } else {
-        set_ranges(view, ranges, 0);
-    }
-}
-
-/// `mi` and `ma`: selects inside or around the pair of `c` around each
-/// cursor.
-/// Calls another plugin's command, showing its error if it fails.
-fn call_or_show(command: &str) {
-    if let Err(err) = commands::call(command, "") {
-        ui::show_message(&err);
-    }
-}
-
-/// Highlights the bracket that pairs with the one at the primary cursor.
-/// Only the syntax tree is asked: searching the text for a bracket without
-/// a pair would scan to the end of the file on every key.
-fn highlight_match(view: &View) {
-    let doc = Doc::new(view.buffer());
-    let selection = view.selection();
-    let pos = cursor(&doc, &selection.ranges[selection.primary as usize]);
-    let decorations: Vec<Decoration> = tree::matching_pair(&doc.buffer, pos)
-        .map(|other| Decoration {
-            start: other,
-            end: other + 1,
-            style: "ui.cursor.match".into(),
-        })
-        .into_iter()
-        .collect();
-    ui::set_decorations(&doc.buffer, "match", &decorations);
-}
-
-/// `mi` and `ma`: selects a text object, or the inside or all of a pair.
-fn select_pairs(view: &View, c: char, around: bool) {
-    let doc = Doc::new(view.buffer());
-    let selection = view.selection();
-    let object = tree::object_name(c).map(|name| {
-        let part = if around { "around" } else { "inside" };
-        format!("{name}.{part}")
-    });
-    let ranges = selection
-        .ranges
-        .iter()
-        .map(|r| {
-            let pos = cursor(&doc, r);
-            if let Some(capture) = &object {
-                return tree::object_around(&doc.buffer, capture, pos)
-                    .map_or(*r, |(start, end)| range(start, end));
-            }
-            // The tree knows which brackets are in strings and comments;
-            // the text is the fallback, e.g. inside a comment.
-            let pair = tree::surrounding_pair(&doc.buffer, pos, c)
-                .or_else(|| doc::surrounding_pair(&doc, pos, c));
-            match pair {
-                Some((open, close)) if around => range(open, close + 1),
-                Some((open, close)) => range(open + 1, close),
-                None => *r,
-            }
-        })
-        .collect();
-    set_ranges(view, ranges, selection.primary);
-}
-
-/// `]f`, `[f`, and so on: selects the next or previous text object.
-fn goto_object(view: &View, c: char, forward: bool, count: u64) {
-    let Some(name) = tree::object_name(c) else {
-        return;
-    };
-    // Jumping between arguments means landing on them, not their commas.
-    let part = if c == 'a' { "inside" } else { "around" };
-    let capture = format!("{name}.{part}");
-    let doc = Doc::new(view.buffer());
-    let selection = view.selection();
-    let ranges = selection
-        .ranges
-        .iter()
-        .map(|r| {
-            // Backward from the start of the selection, so `[f` after `]f`
-            // does not find the function it selected.
-            let from = if forward {
-                cursor(&doc, r)
-            } else {
-                r.anchor.min(r.head)
-            };
-            let found = tree::next_object(&doc.buffer, &capture, from, forward, count);
-            match found {
-                Some((start, end)) if forward => range(start, end),
-                Some((start, end)) => range(end, start),
-                None => *r,
-            }
-        })
-        .collect();
-    set_ranges(view, ranges, selection.primary);
-}
-
 /// `Alt-n` and `Alt-p`: selects the next or previous syntax node.
 fn select_siblings(view: &View, forward: bool) {
     let buffer = view.buffer();
@@ -1706,21 +1263,63 @@ fn select_siblings(view: &View, forward: bool) {
     set_ranges(view, ranges, selection.primary);
 }
 
-fn describe(err: editor::Error) -> String {
-    match err {
-        editor::Error::InvalidPattern(message) => message,
-        other => format!("{other:?}"),
-    }
+/// Selects the next match of `pattern`, or the previous one.
+fn search(view: &View, pattern: &str, backward: bool) {
+    let Some((start, end)) = find(view, pattern, backward) else {
+        return;
+    };
+    let found = if start == end {
+        block(&Doc::new(view.buffer()), start)
+    } else {
+        range(start, end)
+    };
+    set_ranges(view, vec![found], 0);
 }
 
-/// Escapes regex syntax, so `*` searches for the selected text as is.
-fn regex_escape(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        if "\\.+*?()|[]{}^$#&-~".contains(c) {
-            out.push('\\');
-        }
-        out.push(c);
-    }
-    out
+/// Highlights the bracket that pairs with the one at the primary cursor.
+fn highlight_match(view: &View) {
+    let doc = Doc::new(view.buffer());
+    let selection = view.selection();
+    let pos = cursor(&doc, &selection.ranges[selection.primary as usize]);
+    base_kit::edit::highlight_match(&doc, pos);
+}
+
+/// `mi` and `ma`: selects a text object, or the inside or all of a pair.
+fn select_pairs(view: &View, c: char, around: bool) {
+    let doc = Doc::new(view.buffer());
+    let selection = view.selection();
+    let ranges = selection
+        .ranges
+        .iter()
+        .map(|r| {
+            object_or_pair(&doc, cursor(&doc, r), c, around)
+                .map_or(*r, |(start, end)| range(start, end))
+        })
+        .collect();
+    set_ranges(view, ranges, selection.primary);
+}
+
+/// `]f`, `[f`, and so on: selects the next or previous text object.
+fn goto_object(view: &View, c: char, forward: bool, count: u64) {
+    let doc = Doc::new(view.buffer());
+    let selection = view.selection();
+    let ranges = selection
+        .ranges
+        .iter()
+        .map(|r| {
+            // Backward from the start of the selection, so `[f` after `]f`
+            // does not find the function it selected.
+            let from = if forward {
+                cursor(&doc, r)
+            } else {
+                r.anchor.min(r.head)
+            };
+            match next_object(&doc, c, from, forward, count) {
+                Some((start, end)) if forward => range(start, end),
+                Some((start, end)) => range(end, start),
+                None => *r,
+            }
+        })
+        .collect();
+    set_ranges(view, ranges, selection.primary);
 }
