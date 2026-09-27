@@ -80,6 +80,8 @@ fn the_lsp_plugin_passes_its_tests() {
         out.status.success() && String::from_utf8_lossy(&out.stdout).starts_with("Python 3")
     });
     if !found {
+        // CI has Python everywhere; a skip there would hide a broken test.
+        assert!(env::var_os("CI").is_none(), "no python3 on CI");
         eprintln!("skipped: no python3");
         return;
     }
