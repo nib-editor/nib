@@ -108,6 +108,7 @@ pub fn run(dir: &Path, files: &[PathBuf]) -> Result<(), String> {
     // Absolute, as each test runs in a directory of its own.
     let absolute = |path: &Path| {
         path.canonicalize()
+            .map(plain)
             .map_err(|err| format!("{}: {err}", path.display()))
     };
     let started_in = std::env::current_dir().map_err(|err| err.to_string())?;
@@ -145,7 +146,7 @@ pub fn run(dir: &Path, files: &[PathBuf]) -> Result<(), String> {
             }
         };
         let folder = file.parent().unwrap_or(Path::new("."));
-        let folder = folder.canonicalize().unwrap_or(folder.to_path_buf());
+        let folder = folder.canonicalize().map_or(folder.to_path_buf(), plain);
         for case in &tests.test {
             count += 1;
             let work = scratch.0.join(count.to_string());
@@ -366,6 +367,16 @@ fn run_step(editor: &mut Editor, step: &Step) -> Result<(), Vec<String>> {
     }
 }
 
+/// `path` without Windows' `\\?\` prefix, which `canonicalize` adds and
+/// programs given the path, such as a test's fake server, may not take.
+fn plain(path: PathBuf) -> PathBuf {
+    let text = path.to_string_lossy();
+    match text.strip_prefix(r"\\?\") {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => PathBuf::from(rest),
+        _ => path,
+    }
+}
+
 /// `[settings]` from TOML as the JSON plugins get, with `{dir}` in strings
 /// replaced by `folder`.
 fn plugin_settings(table: &toml::Table, folder: &Path) -> serde_json::Value {
@@ -510,5 +521,24 @@ impl Scratch {
 impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plain_paths_drop_the_verbatim_prefix() {
+        assert_eq!(
+            plain(PathBuf::from(r"\\?\D:\a\b")),
+            PathBuf::from(r"D:\a\b")
+        );
+        // Network paths need it.
+        assert_eq!(
+            plain(PathBuf::from(r"\\?\UNC\server\share")),
+            PathBuf::from(r"\\?\UNC\server\share")
+        );
+        assert_eq!(plain(PathBuf::from("/tmp/a")), PathBuf::from("/tmp/a"));
     }
 }

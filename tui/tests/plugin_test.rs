@@ -74,7 +74,12 @@ fn the_picker_plugin_passes_its_tests() {
 /// Its fake language server is a Python script.
 #[test]
 fn the_lsp_plugin_passes_its_tests() {
-    if Command::new("python3").arg("--version").output().is_err() {
+    // Windows may have a python3 that only points to the store.
+    let python = Command::new("python3").arg("--version").output();
+    let found = python.is_ok_and(|out| {
+        out.status.success() && String::from_utf8_lossy(&out.stdout).starts_with("Python 3")
+    });
+    if !found {
         eprintln!("skipped: no python3");
         return;
     }
