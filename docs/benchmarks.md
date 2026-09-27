@@ -196,6 +196,7 @@ cargo test --release -p nib-core --test plugins key_latency -- --ignored --nocap
 | スクロール | 中央値 2 ms 未満、p99 8 ms 未満 | 1.58 / 4.92 ms |
 | 起動から最初の描画まで（キャッシュあり） | 100 ms 未満 | 53 ms（色付けまで） |
 | 1 つのプラグインが 1 回のイベントに使う時間 | 1 ms 未満を目安 | 3.3 µs（test-insert） |
+| メモリ（起動の直後） | 30 MB まで、Helix の 1.1 倍まで | 22.7 MB（Helix 23.3 MB の 0.97 倍）。Markdown では 34.4 MB（Helix 50.8 MB の 0.68 倍） |
 
 Markdown（6,969 行）でも、打鍵 0.96 / 4.70 ms、スクロール 2.12 / 4.83 ms で、スクロールの中央値だけが目標をわずかに超える。
 
