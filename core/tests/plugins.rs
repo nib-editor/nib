@@ -295,6 +295,8 @@ fn data_outlives_restarts() {
     editor.handle_key(key('l'));
     assert_eq!(editor.message(), Some("test-events reloaded"));
     assert_eq!(editor.call_command("test-events.load", "").unwrap(), "kept");
+    // The plugin holds its directory open, which Windows will not remove.
+    drop(editor);
     fs::remove_dir_all(&data).unwrap();
 
     // Without a place for it, there is no /data.
