@@ -183,10 +183,37 @@ result = "2"
 | `selections` | The text with the selections marked |
 | `message` | The message line |
 | `screen` | Each string is somewhere on the 80 × 24 screen |
+| `absent` | No string is anywhere on the screen |
 | `result` | What `command` returned, compared as JSON |
 | `error` | That `command` failed, with this in its message |
 
-Put `with = ["helix"]` at the top of a file to load only the standard plugins named. Each test runs in a new editor.
+Put `with = ["helix"]` at the top of a file to load only the standard plugins named. Each test runs in a new editor, in a directory of its own that holds the test's file and any `files` it lists, so a plugin that lists or reads files sees the same ones wherever the tests run.
+
+**Waiting.** For what takes time, such as timers, programs, and language servers, give a step `wait` in milliseconds: nib runs as it would in a terminal until the expectations hold, and fails the test if they still do not when the time is up. With nothing to expect, it just lets the time pass. Steps run in order, so a test can wait for something to be ready before sending keys. A step that calls a command and expects its `result` calls it again while waiting, for commands that report a status.
+
+```toml
+with = ["helix", "rust"]
+# The plugin's [settings]; {dir} is this file's directory.
+settings = { servers.rust.command = ["python3", "{dir}/fake_server.py"] }
+
+[[test]]
+name = "hover shows where the cursor is"
+file = "main.rs"
+text = "f#[n|]# main() {}\n"
+files = { "Cargo.toml" = "[package]\n" }   # more files in the working directory
+
+[[test.step]]
+command = "lsp.status"
+wait = 10000
+expect.result = "rust ready"
+
+[[test.step]]
+keys = "<space>k"
+wait = 10000
+expect.screen = ["hover at 0:1"]
+```
+
+`settings` goes at the top of a file for all its tests, or in one test. The standard plugins' tests in [`plugins/*/tests/`](../plugins) are examples, among them a fake language server in Python for the `lsp` plugin.
 
 **Selections** are written as in Helix's tests: `#[` and `]#` around the primary range, `#(` and `)#` around others, and `|` where the cursor is. `#[h|]#ello` is a cursor on the `h`; `#[|hello]#` selects `hello` backward. Without marks, the cursor is on the first character.
 

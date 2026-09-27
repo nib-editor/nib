@@ -3,8 +3,13 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::{Duration, Instant};
 
-use nib_core::{Editor, Grid, PluginSource, Selection, Symbol, marks, parse_keys, read_manifest};
+use nib_core::{
+    Config, Editor, Grid, PluginConfig, PluginSource, Selection, Symbol, marks, parse_keys,
+    read_manifest,
+};
 use serde::Deserialize;
 
 use crate::builtin;
@@ -15,6 +20,8 @@ use crate::settings;
 struct TestFile {
     /// The standard plugins to load; all but `lsp` when not given.
     with: Option<Vec<String>>,
+    /// The tested plugin's `[settings]` for every test that has none.
+    settings: Option<toml::Table>,
     #[serde(default)]
     test: Vec<Case>,
 }
@@ -27,12 +34,37 @@ struct Case {
     file: String,
     #[serde(default)]
     text: String,
+    settings: Option<toml::Table>,
+    /// More files in the working directory, by path.
+    #[serde(default)]
+    files: toml::Table,
+    /// A test of one step can put it here instead of in `step`.
+    #[serde(flatten)]
+    only: Step,
+    #[serde(default)]
+    step: Vec<Step>,
+}
+
+/// Keys to send, then a command to call, then expectations to check,
+/// waiting up to `wait` ms for them.
+#[derive(Deserialize, Default)]
+struct Step {
     #[serde(default)]
     keys: String,
     command: Option<String>,
     args: Option<String>,
+    wait: Option<u64>,
     #[serde(default)]
     expect: Expect,
+}
+
+impl Step {
+    fn is_empty(&self) -> bool {
+        self.keys.is_empty()
+            && self.command.is_none()
+            && self.wait.is_none()
+            && self.expect.is_empty()
+    }
 }
 
 #[derive(Deserialize, Default)]
@@ -42,8 +74,22 @@ struct Expect {
     selections: Option<String>,
     message: Option<String>,
     screen: Option<Vec<String>>,
+    /// Strings on no row of the screen.
+    absent: Option<Vec<String>>,
     result: Option<String>,
     error: Option<String>,
+}
+
+impl Expect {
+    fn is_empty(&self) -> bool {
+        self.text.is_none()
+            && self.selections.is_none()
+            && self.message.is_none()
+            && self.screen.is_none()
+            && self.absent.is_none()
+            && self.result.is_none()
+            && self.error.is_none()
+    }
 }
 
 fn default_file() -> String {
@@ -59,6 +105,13 @@ const SIZE: (u16, u16) = (80, 24);
 /// Runs the tests in `files`, or in `dir/tests/*.toml`, against the plugin
 /// in `dir`. Prints a line per test and fails if any did.
 pub fn run(dir: &Path, files: &[PathBuf]) -> Result<(), String> {
+    // Absolute, as each test runs in a directory of its own.
+    let absolute = |path: &Path| {
+        path.canonicalize()
+            .map_err(|err| format!("{}: {err}", path.display()))
+    };
+    let started_in = std::env::current_dir().map_err(|err| err.to_string())?;
+    let dir = &absolute(dir)?;
     let manifest = read_manifest(dir).map_err(|err| err.to_string())?;
     if manifest.has_code && !dir.join("plugin.wasm").is_file() {
         return Err(format!(
@@ -68,12 +121,21 @@ pub fn run(dir: &Path, files: &[PathBuf]) -> Result<(), String> {
     }
     let files = match files {
         [] => test_files(dir)?,
-        files => files.to_vec(),
+        files => files
+            .iter()
+            .map(|f| absolute(f))
+            .collect::<Result<_, _>>()?,
     };
     let scratch = Scratch::new()?;
     let (mut passed, mut failed) = (0, 0);
+    let mut count = 0;
     for file in &files {
-        let shown = file.strip_prefix(dir).unwrap_or(file).display().to_string();
+        let shown = file
+            .strip_prefix(dir)
+            .or_else(|_| file.strip_prefix(&started_in))
+            .unwrap_or(file)
+            .display()
+            .to_string();
         let tests = match read(file) {
             Ok(tests) => tests,
             Err(err) => {
@@ -82,8 +144,20 @@ pub fn run(dir: &Path, files: &[PathBuf]) -> Result<(), String> {
                 continue;
             }
         };
+        let folder = file.parent().unwrap_or(Path::new("."));
+        let folder = folder.canonicalize().unwrap_or(folder.to_path_buf());
         for case in &tests.test {
-            let outcome = run_case(dir, &manifest.name, tests.with.as_deref(), case, &scratch.0);
+            count += 1;
+            let work = scratch.0.join(count.to_string());
+            let setup = Setup {
+                dir,
+                name: &manifest.name,
+                with: tests.with.as_deref(),
+                settings: case.settings.as_ref().or(tests.settings.as_ref()),
+                folder: &folder,
+                work: &work,
+            };
+            let outcome = run_case(&setup, case);
             match outcome {
                 Ok(()) => {
                     println!("test {shown}: {} ... ok", case.name);
@@ -99,6 +173,9 @@ pub fn run(dir: &Path, files: &[PathBuf]) -> Result<(), String> {
             }
         }
     }
+    // Out of the tests' directories before they are removed, which Windows
+    // refuses for the current one.
+    std::env::set_current_dir(&started_in).map_err(|err| err.to_string())?;
     println!("{passed} passed, {failed} failed");
     match failed {
         0 => Ok(()),
@@ -135,34 +212,76 @@ fn read(file: &Path) -> Result<TestFile, String> {
     Ok(tests)
 }
 
+/// What a test runs against.
+struct Setup<'a> {
+    /// The tested plugin's directory and name.
+    dir: &'a Path,
+    name: &'a str,
+    with: Option<&'a [String]>,
+    settings: Option<&'a toml::Table>,
+    /// The test file's directory, for `{dir}` in settings.
+    folder: &'a Path,
+    /// The test's own working directory, made for it.
+    work: &'a Path,
+}
+
 /// Runs one test in a new editor, and says what did not come out as
 /// expected.
-fn run_case(
-    dir: &Path,
-    name: &str,
-    with: Option<&[String]>,
-    case: &Case,
-    scratch: &Path,
-) -> Result<(), Vec<String>> {
+fn run_case(setup: &Setup, case: &Case) -> Result<(), Vec<String>> {
     let fail = |problem: String| vec![problem];
+    let steps: Vec<&Step> = match (case.only.is_empty(), case.step.is_empty()) {
+        (_, true) => vec![&case.only],
+        (true, false) => case.step.iter().collect(),
+        (false, false) => {
+            return Err(fail(
+                "put keys, command, wait, and expect in the steps when there are steps".into(),
+            ));
+        }
+    };
     let marked = marks::parse(&case.text).map_err(|err| fail(format!("text: {err}")))?;
-    let keys = parse_keys(&case.keys).map_err(|err| fail(format!("keys: {err}")))?;
     let file_name = Path::new(&case.file)
         .file_name()
         .ok_or_else(|| fail(format!("file: {:?} is not a file name", case.file)))?;
-    let path = scratch.join(file_name);
-    fs::write(&path, &marked.text).map_err(|err| fail(format!("{}: {err}", path.display())))?;
+    let path = setup.work.join(file_name);
+    let mut written = vec![(path.clone(), marked.text.clone())];
+    for (name, text) in &case.files {
+        let Some(text) = text.as_str() else {
+            return Err(fail(format!("files: {name:?} needs a string")));
+        };
+        written.push((setup.work.join(name), text.to_string()));
+    }
+    for (path, text) in &written {
+        let made = path
+            .parent()
+            .map_or(Ok(()), fs::create_dir_all)
+            .and_then(|()| fs::write(path, text));
+        made.map_err(|err| fail(format!("{}: {err}", path.display())))?;
+    }
+    // The editor and plugins take the process's directory as the working
+    // one; each test gets its own, so listing files gives the same answer
+    // wherever tests run.
+    std::env::set_current_dir(setup.work)
+        .map_err(|err| fail(format!("{}: {err}", setup.work.display())))?;
 
     let mut editor = Editor::default();
     editor.set_plugin_cache_dir(settings::cache_dir());
     editor.resize(SIZE.0, SIZE.1);
+    if let Some(table) = setup.settings {
+        let mut config = Config::default();
+        let plugin = PluginConfig {
+            settings: plugin_settings(table, setup.folder).to_string(),
+            ..PluginConfig::default()
+        };
+        config.plugins.insert(setup.name.to_string(), plugin);
+        editor.apply_config(config);
+    }
     // Opened before the plugins load, as when nib starts with a file.
     editor
         .open(&path)
         .map_err(|err| fail(format!("{}: {err}", path.display())))?;
     let standard = builtin::PLUGINS.iter().filter(|(n, _, _)| {
-        *n != name
-            && match with {
+        *n != setup.name
+            && match setup.with {
                 Some(with) => with.iter().any(|w| w == n),
                 None => !LEFT_OUT.contains(n),
             }
@@ -170,7 +289,7 @@ fn run_case(
     let mut sources: Vec<_> = standard
         .map(|&(_, manifest, files)| PluginSource::Bytes { manifest, files })
         .collect();
-    sources.push(PluginSource::Dir(dir));
+    sources.push(PluginSource::Dir(setup.dir));
     let failures: Vec<String> = editor
         .load_plugins(&sources)
         .into_iter()
@@ -186,16 +305,85 @@ fn run_case(
         editor.view_mut().selection = selection;
     }
     settle(&mut editor);
+    for (n, step) in steps.iter().enumerate() {
+        run_step(&mut editor, step).map_err(|problems| match steps.len() {
+            1 => problems,
+            _ => problems
+                .into_iter()
+                .map(|p| format!("step {}: {p}", n + 1))
+                .collect(),
+        })?;
+    }
+    Ok(())
+}
+
+fn run_step(editor: &mut Editor, step: &Step) -> Result<(), Vec<String>> {
+    let keys = parse_keys(&step.keys).map_err(|err| vec![format!("keys: {err}")])?;
     for key in keys {
         editor.handle_key(key);
-        settle(&mut editor);
+        settle(editor);
     }
-    let result = case.command.as_ref().map(|command| {
-        let result = editor.call_command(command, case.args.as_deref().unwrap_or("{}"));
-        settle(&mut editor);
-        result
-    });
-    check(&editor, &case.expect, result)
+    let call = |editor: &mut Editor| {
+        step.command.as_ref().map(|command| {
+            let result = editor.call_command(command, step.args.as_deref().unwrap_or("{}"));
+            settle(editor);
+            result
+        })
+    };
+    let mut result = call(editor);
+    let Some(wait) = step.wait else {
+        return check(editor, &step.expect, result);
+    };
+    // Waiting for a command's answer calls it again, as for a status.
+    let again = step.expect.result.is_some() || step.expect.error.is_some();
+    // Runs the editor as the terminal does, until the expectations hold
+    // or the time is up.
+    let deadline = Instant::now() + Duration::from_millis(wait);
+    let mut first = true;
+    loop {
+        if again && !first {
+            result = call(editor);
+        }
+        first = false;
+        let checked = check(editor, &step.expect, result.clone());
+        let now = Instant::now();
+        let waiting = step.expect.is_empty() || checked.is_err();
+        if !waiting || now >= deadline {
+            return checked;
+        }
+        editor.run_background();
+        editor.run_timers();
+        settle(editor);
+        let next = editor
+            .next_timer()
+            .map_or(deadline, |due| due.min(deadline));
+        let pause = next
+            .saturating_duration_since(now)
+            .min(Duration::from_millis(5));
+        thread::sleep(pause);
+    }
+}
+
+/// `[settings]` from TOML as the JSON plugins get, with `{dir}` in strings
+/// replaced by `folder`.
+fn plugin_settings(table: &toml::Table, folder: &Path) -> serde_json::Value {
+    fn replace(value: serde_json::Value, folder: &str) -> serde_json::Value {
+        use serde_json::Value;
+        match value {
+            Value::String(s) => Value::String(s.replace("{dir}", folder)),
+            Value::Array(items) => {
+                Value::Array(items.into_iter().map(|v| replace(v, folder)).collect())
+            }
+            Value::Object(map) => Value::Object(
+                map.into_iter()
+                    .map(|(k, v)| (k, replace(v, folder)))
+                    .collect(),
+            ),
+            other => other,
+        }
+    }
+    let value = serde_json::to_value(table).expect("TOML is JSON");
+    replace(value, &folder.to_string_lossy())
 }
 
 /// Does what the terminal loop does after each frame.
@@ -237,6 +425,14 @@ fn check(
         for line in expected {
             if !rows.iter().any(|row| row.contains(line.as_str())) {
                 differ("screen", line, &rows.join("\n"));
+            }
+        }
+    }
+    if let Some(absent) = &expect.absent {
+        let rows = screen(editor);
+        for line in absent {
+            if rows.iter().any(|row| row.contains(line.as_str())) {
+                differ("absent", line, &rows.join("\n"));
             }
         }
     }

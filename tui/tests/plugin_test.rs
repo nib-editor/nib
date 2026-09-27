@@ -31,12 +31,54 @@ fn nib_plugin_test(dir: &Path, file: &Path) -> (bool, String) {
     (output.status.success(), text)
 }
 
+/// Runs a standard plugin's tests in `plugins/<dir>/tests/`.
+fn passes_its_tests(name: &str, dir: &str, count: usize) {
+    let tests = root().join("plugins").join(dir).join("tests");
+    let mut files: Vec<_> = fs::read_dir(&tests)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|e| e == "toml"))
+        .collect();
+    files.sort();
+    let mut out = String::new();
+    let mut ok = true;
+    for file in files {
+        let (passed, text) = nib_plugin_test(&built(name), &file);
+        ok &= passed;
+        out += &text;
+    }
+    assert!(ok, "{out}");
+    let passed: usize = out
+        .lines()
+        .filter_map(|line| line.split_once(" passed, 0 failed"))
+        .map(|(n, _)| n.parse::<usize>().unwrap())
+        .sum();
+    assert_eq!(passed, count, "{out}");
+}
+
 #[test]
 fn the_helix_plugin_passes_its_tests() {
-    let file = root().join("plugins/helix/tests/basics.toml");
-    let (ok, out) = nib_plugin_test(&built("helix"), &file);
-    assert!(ok, "{out}");
-    assert!(out.contains("5 passed, 0 failed"), "{out}");
+    passes_its_tests("helix", "helix", 5);
+}
+
+#[test]
+fn the_indent_plugin_passes_its_tests() {
+    passes_its_tests("indent", "indent", 5);
+}
+
+#[test]
+fn the_picker_plugin_passes_its_tests() {
+    passes_its_tests("picker", "picker", 2);
+}
+
+/// Its fake language server is a Python script.
+#[test]
+fn the_lsp_plugin_passes_its_tests() {
+    if Command::new("python3").arg("--version").output().is_err() {
+        eprintln!("skipped: no python3");
+        return;
+    }
+    passes_its_tests("lsp", "lsp", 3);
 }
 
 #[test]
@@ -58,4 +100,36 @@ fn failures_show_what_was_expected() {
     assert!(out.contains("expected: \"y\\n\""), "{out}");
     assert!(out.contains("actual:   \"x\\n\""), "{out}");
     assert!(out.contains("0 passed, 2 failed"), "{out}");
+}
+
+#[test]
+fn waits_for_timers() {
+    let file = env::temp_dir().join(format!("nib-{}-timer.toml", std::process::id()));
+    fs::write(
+        &file,
+        r#"with = []
+
+[[test]]
+name = "a timer fires after waiting"
+
+[[test.step]]
+command = "test-events.timer"
+args = "100"
+
+[[test.step]]
+command = "test-events.log"
+expect.result = "opened test.txt"
+
+[[test.step]]
+wait = 300
+
+[[test.step]]
+command = "test-events.log"
+expect.result = "timer 1"
+"#,
+    )
+    .unwrap();
+    let (ok, out) = nib_plugin_test(&built("test-events"), &file);
+    fs::remove_file(&file).unwrap();
+    assert!(ok, "{out}");
 }

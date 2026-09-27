@@ -17,7 +17,7 @@ nib plugin build   # plugin.wasm
 nib plugin test    # tests/*.toml, without a terminal
 ```
 
-Add a test to `tests/` for each thing the plugin does: set `text` (with `#[x|]#` for the cursor), send `keys` or call a `command`, and `expect` the `text`, `selections`, `message`, `screen`, or `result`. The tests run with the standard Helix keymap, so keys work as in Helix.
+Add a test to `tests/` for each thing the plugin does: set `text` (with `#[x|]#` for the cursor), send `keys` or call a `command`, and `expect` the `text`, `selections`, `message`, `screen`, `absent`, or `result`. The tests run with the standard Helix keymap, so keys work as in Helix. For timers, programs, or anything else that takes time, add `wait` (milliseconds) and steps; give the plugin `settings` and the working directory `files` when it needs them. The plugin guide's "Testing" section has the details.
 
 ## Rules
 
