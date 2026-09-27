@@ -60,7 +60,11 @@ impl Editor {
                     (_, true) if plugin.waiting => "waiting".to_string(),
                     // Such as a call stopped with the menu key just now.
                     (Some(err), true) => format!("running; last error: {err}"),
+                    (None, true) if plugin.base => "running, the base".to_string(),
                     (None, true) => "running".to_string(),
+                    (None, false) if plugin.base && self.base_in_use() != Some(&plugin.name) => {
+                        "base, not in use".to_string()
+                    }
                     (Some(err), false) => format!("disabled: {err}"),
                     (None, false) => "disabled".to_string(),
                 };
@@ -419,7 +423,11 @@ impl Editor {
             }
             Some(Menu::Plugin(id)) => {
                 let plugin = &self.plugins()[id];
-                let toggle = if plugin.enabled { "disable" } else { "enable" };
+                let toggle = match (plugin.enabled, plugin.base) {
+                    (true, _) => "disable",
+                    (false, true) => "use as the base",
+                    (false, false) => "enable",
+                };
                 let reload = if plugin.reloadable {
                     "  [l] reload from disk"
                 } else {

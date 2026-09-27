@@ -669,6 +669,10 @@ impl State {
             }
             "config.open" => self.open_config(args["plugin"].as_str())?,
             "config.reload" => self.reload_config = true,
+            "core.menu" => {
+                self.menu = Some(Menu::Main);
+                self.menu_cursor = 0;
+            }
             "buffer.open" => {
                 let path = args["path"]
                     .as_str()
@@ -906,6 +910,7 @@ pub(crate) const CORE_COMMANDS: &[(&str, &str)] = &[
         "Open config.toml, or plugins/<name>.toml with {\"plugin\": name}",
     ),
     ("config.reload", "Read the settings again"),
+    ("core.menu", "Open the core menu"),
     (
         "buffer.close",
         "Close the shown buffer; {\"force\": true} drops unsaved changes",
@@ -1115,7 +1120,7 @@ impl Editor {
         self.state_mut().message = None;
         if let Some(menu) = self.state_mut().menu.take() {
             self.handle_menu_key(menu, key);
-        } else if key == self.settings().menu_key {
+        } else if key == self.menu_key() {
             let state = self.state_mut();
             state.menu = Some(Menu::Main);
             state.menu_cursor = 0;
@@ -1191,6 +1196,13 @@ impl Editor {
                 Err(err) => message += &format!("; {name}: {err}"),
             }
         }
+        let base = self.settings().base.clone();
+        if self.base_in_use() != Some(base.as_str()) {
+            message += &match self.switch_base(&base) {
+                Ok(()) => format!("; {base} is the base now"),
+                Err(err) => format!("; {err}"),
+            };
+        }
         if !later.is_empty() {
             message += &format!(
                 "; the rest of {}'s settings take effect when nib starts again",
@@ -1198,6 +1210,16 @@ impl Editor {
             );
         }
         message
+    }
+
+    /// Starts base `name` in place of the one in use.
+    fn switch_base(&mut self, name: &str) -> Result<(), String> {
+        let id = self
+            .plugin_id(name)
+            .filter(|&id| self.plugins()[id].base)
+            .ok_or_else(|| format!("no base named {name}"))?;
+        self.restart_plugin(id)
+            .map_err(|err| format!("{name}: {err}"))
     }
 
     /// Whether plugin `id` can be updated from the core menu.
@@ -1427,11 +1449,10 @@ impl Editor {
     /// Shown while no plugin takes input, when the menu is the only thing
     /// that responds.
     pub fn key_hint(&self) -> Option<String> {
-        let state = self.state();
-        state
+        self.state()
             .layers
             .is_empty()
-            .then(|| format!("{}: menu", state.settings.menu_key))
+            .then(|| format!("{}: menu", self.menu_key()))
     }
 
     pub fn modified_buffers(&self) -> usize {
@@ -1560,6 +1581,13 @@ impl Editor {
                 } else if plain('d') && plugin.enabled {
                     self.disable_plugin(id);
                     format!("{name} disabled")
+                } else if plain('d') && plugin.base {
+                    match self.restart_plugin(id) {
+                        Ok(()) => format!(
+                            "{name} is the base now; base = \"{name}\" in config.toml's [core] keeps it"
+                        ),
+                        Err(err) => format!("{name}: starting failed: {err}"),
+                    }
                 } else if plain('d') {
                     match self.restart_plugin(id) {
                         Ok(()) => format!("{name} enabled"),

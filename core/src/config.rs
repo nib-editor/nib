@@ -24,7 +24,10 @@ pub struct Settings {
     pub indent: Indent,
     /// Lines kept visible above and below the cursor.
     pub scroll_margin: u16,
-    pub menu_key: KeyEvent,
+    /// The base plugin to use (docs/base.md).
+    pub base: String,
+    /// Set by the user; otherwise the base's, or Ctrl-g.
+    pub menu_key: Option<KeyEvent>,
     /// A plugin call taking longer is stopped, unless the plugin's own
     /// settings say otherwise.
     pub plugin_timeout: Duration,
@@ -63,7 +66,8 @@ impl Default for Settings {
             tab_width: 4,
             indent: Indent::Spaces(4),
             scroll_margin: 5,
-            menu_key: KeyEvent::ctrl('g'),
+            base: "helix".into(),
+            menu_key: None,
             plugin_timeout: Duration::from_secs(1),
             plugin_init_timeout: Duration::from_secs(5),
             plugin_memory: 256 << 20,
@@ -275,6 +279,7 @@ struct RawCore {
     tab_width: Option<u16>,
     indent: Option<RawIndent>,
     scroll_margin: Option<u16>,
+    base: Option<String>,
     menu_key: Option<String>,
     /// Moved to `path` in `plugins/<name>.toml`; read only to say so.
     plugin_dirs: Option<toml::Value>,
@@ -320,10 +325,14 @@ impl Config {
         if let Some(margin) = raw_core.scroll_margin {
             core.scroll_margin = margin;
         }
+        if let Some(base) = raw_core.base {
+            core.base = base;
+        }
         if let Some(key) = raw_core.menu_key {
-            core.menu_key = key
-                .parse()
-                .map_err(|err| fail(format!("menu-key: {err}")))?;
+            core.menu_key = Some(
+                key.parse()
+                    .map_err(|err| fail(format!("menu-key: {err}")))?,
+            );
         }
         if raw_core.plugin_dirs.is_some() {
             return Err(fail(
@@ -460,7 +469,10 @@ pub const CONFIG_TEMPLATE: &str = r##"# nib's settings. Every line is optional; 
 # indent = 4
 # Lines kept visible above and below the cursor.
 # scroll-margin = 5
-# Opens the core menu to manage plugins; plugins never see this key.
+# The way of editing: helix, or another base plugin.
+# base = "helix"
+# Opens the core menu to manage plugins; plugins never see this key. The
+# base has its own (C-g for helix), and this replaces it.
 # menu-key = "C-g"
 # Limits for every plugin; plugins/<name>.toml can set its own.
 # plugin-timeout-ms = 1000
@@ -512,7 +524,6 @@ mod tests {
     }
 
     use super::*;
-    use crate::input::KeyCode;
 
     #[test]
     fn empty_config_is_default() {
@@ -526,6 +537,7 @@ mod tests {
             [core]
             tab-width = 8
             indent = "tab"
+            base = "vim"
             menu-key = "C-]"
             plugin-timeout-ms = 2000
             plugin-memory-mib = 512
@@ -534,7 +546,8 @@ mod tests {
         .unwrap();
         assert_eq!(config.core.tab_width, 8);
         assert_eq!(config.core.indent, Indent::Tab);
-        assert_eq!(config.core.menu_key, KeyEvent::ctrl(']'));
+        assert_eq!(config.core.menu_key, Some(KeyEvent::ctrl(']')));
+        assert_eq!(config.core.base, "vim");
         assert_eq!(config.core.plugin_timeout, Duration::from_secs(2));
         assert_eq!(config.core.plugin_init_timeout, Duration::from_secs(5));
         assert_eq!(config.core.plugin_memory, 512 << 20);
@@ -644,6 +657,6 @@ mod tests {
         assert_eq!(settings.get_json("tab-width").as_deref(), Some("4"));
         assert_eq!(settings.get_json("indent").as_deref(), Some("4"));
         assert_eq!(settings.get_json("menu-key"), None);
-        assert_eq!(settings.menu_key.code, KeyCode::Char('g'));
+        assert_eq!(settings.menu_key, None);
     }
 }

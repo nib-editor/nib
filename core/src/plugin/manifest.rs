@@ -5,6 +5,7 @@ use std::path::Path;
 use serde::Deserialize;
 
 use crate::Error;
+use crate::input::KeyEvent;
 
 /// `plugin.toml`: what the editor needs to know before loading a plugin.
 #[derive(Debug, Deserialize)]
@@ -22,6 +23,13 @@ pub(crate) struct Manifest {
     /// What it may do beyond the editor API.
     #[serde(default)]
     pub capabilities: Vec<String>,
+    /// A base: the whole way of editing, keys and all (docs/base.md). Only
+    /// the one `[core] base` names runs.
+    #[serde(default)]
+    pub base: bool,
+    /// The key that opens the core menu while this base is in use.
+    #[serde(default, rename = "menu-key")]
+    pub menu_key: Option<String>,
 }
 
 pub(crate) const CAPABILITIES: [&str; 5] =
@@ -64,7 +72,7 @@ pub(crate) fn parse(text: &str, origin: &str) -> Result<Manifest, Error> {
     }
     // Command names start with the plugin's name, so these would pass for
     // core commands.
-    if ["buffer", "editor", "view"].contains(&manifest.name.as_str()) {
+    if ["buffer", "config", "core", "editor", "view"].contains(&manifest.name.as_str()) {
         return Err(fail(format!("name {:?} is reserved", manifest.name)));
     }
     // A misspelled capability would leave the plugin without it, failing
@@ -78,6 +86,13 @@ pub(crate) fn parse(text: &str, origin: &str) -> Result<Manifest, Error> {
             "unknown capability {unknown:?}; known ones are {}",
             CAPABILITIES.join(", ")
         )));
+    }
+    if let Some(key) = &manifest.menu_key {
+        if !manifest.base {
+            return Err(fail("menu-key is only for bases (base = true)".into()));
+        }
+        key.parse::<KeyEvent>()
+            .map_err(|err| fail(format!("menu-key: {err}")))?;
     }
     Ok(manifest)
 }

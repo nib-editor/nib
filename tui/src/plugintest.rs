@@ -269,15 +269,19 @@ fn run_case(setup: &Setup, case: &Case) -> Result<(), Vec<String>> {
     // Empty for each test, and never the user's.
     editor.set_plugin_data_dir(Some(setup.work.with_extension("data")));
     editor.resize(SIZE.0, SIZE.1);
+    let mut config = Config::default();
+    // A base under test is the one in use.
+    if read_manifest(setup.dir).is_ok_and(|manifest| manifest.base) {
+        config.core.base = setup.name.to_string();
+    }
     if let Some(table) = setup.settings {
-        let mut config = Config::default();
         let plugin = PluginConfig {
             settings: plugin_settings(table, setup.folder).to_string(),
             ..PluginConfig::default()
         };
         config.plugins.insert(setup.name.to_string(), plugin);
-        editor.apply_config(config);
     }
+    editor.apply_config(config);
     // Opened before the plugins load, as when nib starts with a file.
     editor
         .open(&path)

@@ -664,3 +664,97 @@ fn settings_open_and_reload_when_saved() {
     drop(editor);
     fs::remove_dir_all(&dir).unwrap();
 }
+
+/// helix, copied as another base named `other` whose menu key is F10.
+fn other_base(dir: &std::path::Path) -> std::path::PathBuf {
+    let other = dir.join("other");
+    fs::create_dir_all(&other).unwrap();
+    fs::copy(
+        plugin_dir("helix").join("plugin.wasm"),
+        other.join("plugin.wasm"),
+    )
+    .unwrap();
+    let manifest = "name = \"other\"\nversion = \"0.1.0\"\napi = \"0.4\"\nbase = true\n\
+                    menu-key = \"F10\"\nevents = [\"editor.syntax_updated\"]\n";
+    fs::write(other.join("plugin.toml"), manifest).unwrap();
+    other
+}
+
+fn running(editor: &Editor) -> Vec<String> {
+    editor
+        .plugins()
+        .into_iter()
+        .filter(|p| p.enabled)
+        .map(|p| p.name)
+        .collect()
+}
+
+#[test]
+fn only_the_chosen_base_runs() {
+    let dir = env::temp_dir().join(format!("nib-{}-bases", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let other = other_base(&dir);
+    let helix = plugin_dir("helix");
+    let load = |base: &str, menu_key: Option<KeyEvent>| {
+        let mut editor = Editor::default();
+        let mut config = Config::default();
+        config.core.base = base.into();
+        config.core.menu_key = menu_key;
+        editor.apply_config(config);
+        let results = editor.load_plugins(&[PluginSource::Dir(&helix), PluginSource::Dir(&other)]);
+        let errors: Vec<String> = results
+            .into_iter()
+            .filter_map(Result::err)
+            .map(|err| err.to_string())
+            .collect();
+        (editor, errors)
+    };
+
+    // The other base waits, stopped.
+    let (editor, errors) = load("helix", None);
+    assert!(errors.is_empty(), "{errors:?}");
+    assert_eq!(running(&editor), ["helix"]);
+    assert_eq!(editor.base_in_use(), Some("helix"));
+    assert_eq!(editor.menu_key(), KeyEvent::ctrl('g'));
+
+    // The chosen one brings its menu key, unless the user set one.
+    let (editor, _) = load("other", None);
+    assert_eq!(running(&editor), ["other"]);
+    assert_eq!(editor.menu_key(), KeyEvent::new(KeyCode::F(10)));
+    let (editor, _) = load("other", Some(KeyEvent::ctrl(']')));
+    assert_eq!(editor.menu_key(), KeyEvent::ctrl(']'));
+
+    // Without the chosen one, helix, as no key would edit otherwise.
+    let (mut editor, errors) = load("vim", None);
+    assert_eq!(errors, ["vim is not available as the base; using helix"]);
+    assert_eq!(running(&editor), ["helix"]);
+
+    // The menu switches, and restarting everything keeps one base.
+    editor.handle_key(KeyEvent::ctrl('g'));
+    editor.handle_key(key('2'));
+    editor.handle_key(key('d'));
+    assert_eq!(running(&editor), ["other"]);
+    assert!(
+        editor
+            .message()
+            .unwrap()
+            .starts_with("other is the base now")
+    );
+    editor.handle_key(KeyEvent::new(KeyCode::F(10)));
+    editor.handle_key(key('r'));
+    assert_eq!(running(&editor), ["other"]);
+
+    // So does the core.menu command, and the settings when read again.
+    editor.call_command("core.menu", "{}").unwrap();
+    assert_eq!(editor.menu(), Some(Menu::Main));
+    editor.handle_key(KeyEvent::new(KeyCode::Escape));
+    editor.set_config_dir(Some(dir.clone()));
+    fs::write(dir.join("config.toml"), "[core]\nbase = \"helix\"\n").unwrap();
+    editor.call_command("config.reload", "{}").unwrap();
+    assert_eq!(
+        editor.message(),
+        Some("settings reloaded; helix is the base now")
+    );
+    assert_eq!(running(&editor), ["helix"]);
+    let _ = fs::remove_dir_all(&dir);
+}

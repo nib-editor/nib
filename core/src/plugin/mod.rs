@@ -51,6 +51,8 @@ pub struct PluginManifest {
     pub language_files: Vec<String>,
     /// It has code to run, not only data such as languages.
     pub has_code: bool,
+    /// It is a base (docs/base.md).
+    pub base: bool,
 }
 
 /// Reads and checks the manifest of the plugin in `dir`.
@@ -70,8 +72,12 @@ pub fn read_manifest(dir: &Path) -> Result<PluginManifest, Error> {
             .collect(),
         languages: manifest.languages.into_iter().map(|l| l.name).collect(),
         has_code: dir.join("plugin.wasm").is_file(),
+        base: manifest.base,
     })
 }
+
+/// The base started when the chosen one is not available.
+const FALLBACK_BASE: &str = "helix";
 
 /// The version of `nib:plugin` this host implements.
 pub const API_VERSION: &str = "0.4";
@@ -135,10 +141,16 @@ pub struct PluginInfo {
     pub capabilities: Vec<String>,
     /// Loaded lazily and not started yet.
     pub waiting: bool,
+    /// A base; only the one in use runs.
+    pub base: bool,
 }
 
+/// The key that stops a plugin stuck in a call. It is not the menu key:
+/// Emacs users press it all the time, and it means the same there.
+pub const INTERRUPT_KEY: KeyEvent = KeyEvent::ctrl('g');
+
 /// Stops the plugin call running when it is used, from any thread. The
-/// frontend uses it when the menu key is pressed, so a plugin stuck in a
+/// frontend uses it when `INTERRUPT_KEY` is pressed, so a plugin stuck in a
 /// call can be stopped. Calls that start afterwards are not affected.
 #[derive(Clone, Debug)]
 pub struct Interrupter(Arc<AtomicU64>);
@@ -201,6 +213,9 @@ pub(crate) struct Plugins {
     failures: Vec<(PluginId, String)>,
     /// Counts interrupt requests; see `Interrupter`.
     interrupts: Arc<AtomicU64>,
+    /// The base in use, by name: the one started last. It stays while
+    /// disabled, so its menu key does too.
+    base: Option<String>,
 }
 
 struct Runtime {
@@ -284,6 +299,8 @@ struct Plugin {
     crashes: Vec<Instant>,
     slow_calls: u32,
     last_error: Option<String>,
+    base: bool,
+    menu_key: Option<KeyEvent>,
 }
 
 /// Limits for one plugin: its own from `plugins/<name>.toml`, or the
@@ -436,7 +453,7 @@ impl Editor {
                 components[i] = Some(component);
             }
         }
-        sources
+        let mut results: Vec<_> = sources
             .iter()
             .zip(read)
             .zip(components)
@@ -444,7 +461,35 @@ impl Editor {
                 let (manifest, _) = read?;
                 self.add_compiled(source, manifest, component.transpose()?)
             })
-            .collect()
+            .collect();
+        if let Some(fallback) = self.fall_back_to_a_base() {
+            results.push(Err(Error::Plugin(fallback)));
+        }
+        results
+    }
+
+    /// Starts a base when the chosen one is missing or failed, since
+    /// without one no key edits: helix if it is there. Says which.
+    fn fall_back_to_a_base(&mut self) -> Option<String> {
+        if self.plugins.base.is_some() {
+            return None;
+        }
+        let bases = || {
+            self.plugins
+                .entries
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| p.base)
+        };
+        let (id, _) = bases()
+            .find(|(_, p)| p.name == FALLBACK_BASE)
+            .or_else(|| bases().next())?;
+        let chosen = self.state().settings.base.clone();
+        let name = self.plugins.entries[id].name.clone();
+        Some(match self.restart_plugin(id) {
+            Ok(()) => format!("{chosen} is not available as the base; using {name}"),
+            Err(err) => format!("{chosen} is not available as the base, nor {name}: {err}"),
+        })
     }
 
     fn add_plugin(&mut self, source: &PluginSource) -> Result<(), Error> {
@@ -475,6 +520,12 @@ impl Editor {
             memory: settings.memory.unwrap_or(options.memory_limit),
         };
         let lazy = settings.load == Load::Lazy && component.is_some();
+        // Bases other than the chosen one wait, stopped, to be switched to.
+        let standby = manifest.base && manifest.name != self.state().settings.base;
+        let menu_key = manifest.menu_key.as_deref().map(|key| {
+            key.parse()
+                .expect("the manifest's menu key was checked when it was read")
+        });
         let id = self.plugins.entries.len();
         self.plugins.entries.push(Plugin {
             name: manifest.name.clone(),
@@ -490,16 +541,23 @@ impl Editor {
             capabilities: manifest.capabilities,
             instance: None,
             in_call: false,
-            waiting: lazy,
-            enabled: true,
+            waiting: lazy && !manifest.base,
+            enabled: !standby,
             crashes: Vec::new(),
             slow_calls: 0,
             last_error: None,
+            base: manifest.base,
+            menu_key,
         });
-        if lazy {
+        if standby || (lazy && !manifest.base) {
             return Ok(());
         }
-        if let Err(message) = self.start_plugin(id) {
+        let started = if manifest.base {
+            self.restart_plugin(id)
+        } else {
+            self.start_plugin(id)
+        };
+        if let Err(message) = started {
             self.plugins.entries.pop();
             return Err(Error::Plugin(format!("{}: {message}", manifest.name)));
         }
@@ -584,17 +642,73 @@ impl Editor {
         Ok(&self.plugins.runtime.as_ref().expect("created above").engine)
     }
 
-    /// Stops the plugin, forgets its failures, and starts it again.
+    /// Stops the plugin, forgets its failures, and starts it again. A base
+    /// takes the place of the one in use, which comes back if it fails.
     pub(crate) fn restart_plugin(&mut self, id: PluginId) -> Result<(), String> {
+        let previous = match self.plugins.entries[id].base {
+            true => self.stop_other_bases(id),
+            false => None,
+        };
         self.stop_plugin(id);
         let plugin = &mut self.plugins.entries[id];
         plugin.crashes.clear();
         plugin.enabled = true;
         let result = self.start_plugin(id);
-        if result.is_err() {
-            self.plugins.entries[id].enabled = false;
+        let plugin = &mut self.plugins.entries[id];
+        match &result {
+            Ok(()) if plugin.base => self.plugins.base = Some(plugin.name.clone()),
+            Ok(()) => {}
+            Err(_) => {
+                plugin.enabled = false;
+                if let Some(previous) = previous {
+                    let _ = self.restart_plugin(previous);
+                }
+            }
         }
         result
+    }
+
+    /// Stops the running bases other than `id`, as only one runs. Returns
+    /// the one that was in use.
+    fn stop_other_bases(&mut self, id: PluginId) -> Option<PluginId> {
+        let running: Vec<PluginId> = (0..self.plugins.entries.len())
+            .filter(|&other| {
+                let plugin = &self.plugins.entries[other];
+                other != id && plugin.base && plugin.enabled
+            })
+            .collect();
+        for &other in &running {
+            self.disable_plugin(other);
+        }
+        running.first().copied()
+    }
+
+    /// The base in use, by name.
+    pub fn base_in_use(&self) -> Option<&str> {
+        self.plugins.base.as_deref()
+    }
+
+    /// The plugin by name.
+    pub(crate) fn plugin_id(&self, name: &str) -> Option<PluginId> {
+        self.plugins.entries.iter().position(|p| p.name == name)
+    }
+
+    /// The key that opens the core menu: the user's, or the base's, or
+    /// Ctrl-g.
+    pub fn menu_key(&self) -> KeyEvent {
+        let base = || {
+            let name = self.plugins.base.as_ref()?;
+            self.plugins
+                .entries
+                .iter()
+                .find(|p| &p.name == name)?
+                .menu_key
+        };
+        self.state()
+            .settings
+            .menu_key
+            .or_else(base)
+            .unwrap_or(KeyEvent::ctrl('g'))
     }
 
     pub(crate) fn disable_plugin(&mut self, id: PluginId) {
@@ -629,6 +743,10 @@ impl Editor {
     pub(crate) fn restart_plugins(&mut self) {
         let mut failures = Vec::new();
         for id in 0..self.plugins.entries.len() {
+            let plugin = &self.plugins.entries[id];
+            if plugin.base && self.plugins.base.as_ref() != Some(&plugin.name) {
+                continue;
+            }
             if let Err(err) = self.restart_plugin(id) {
                 failures.push(format!("{}: {err}", self.plugins.entries[id].name));
             }
@@ -656,6 +774,7 @@ impl Editor {
                 timeout: p.limits.call,
                 capabilities: p.capabilities.clone(),
                 waiting: p.waiting,
+                base: p.base,
             })
             .collect()
     }

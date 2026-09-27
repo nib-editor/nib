@@ -32,7 +32,13 @@ api = "0.4"               # 対応する nib:plugin のバージョン（メジ�
 
 capabilities = []         # "fs-read" / "fs-write" / "process" / "network"
 events = ["buffer-changed"]
+
+base = true               # ベース（base.md）。[core] base で選ばれたものだけが動く
+menu-key = "C-g"          # ベースだけ: このベースを使う間、コアメニューを開くキー
 ```
+
+- ベースは常に起動時に始まる（`load = "lazy"` は効かない）。選ばれていないベースは、止めたまま読み込み、コアメニューから切り替えられる。
+- 名前の `buffer`、`config`、`core`、`editor`、`view` はコアのコマンドと重なるので使えない。
 
 権限をマニフェストで宣言させるのは、WASM の import だけでは権限を判定できないため。たとえば Rust の標準ライブラリを使うと、使っていなくても `wasi:filesystem` を import する。
 
@@ -246,6 +252,7 @@ interface syntax {
 | `buffer.next` / `buffer.previous` | 次 / 前のバッファを表示する |
 | `config.open` | `config.toml` を開く。`{"plugin": name}` なら `plugins/<name>.toml`。なければ既定値のコメントを書いた状態で開く |
 | `config.reload` | 設定を読み直す（設定のディレクトリのファイルを保存したときも読み直す） |
+| `core.menu` | コアメニューを開く |
 | `buffer.close` | 表示中のバッファを閉じる。保存していない変更があれば断り、`{"force": true}` で捨てる |
 | `view.split` | `{"direction": "vertical" \| "horizontal"}` で分割する |
 | `view.close` / `view.only` | フォーカスのあるビューを閉じる / それ以外を閉じる |
@@ -264,7 +271,7 @@ JSON を選んだのは、WIT に再帰する型がなく、任意の値の木�
 ## 入力
 
 - `input.push-layer()` で入力スタックに層を積み、`input.pop-layer()` で外す。キーは上の層から順に `handle-key` で届き、`pass` を返すと下の層に回る。
-- Ctrl-g はコアの予約キーなので、プラグインには届かない。予約キーは利用者が `[core]` の `menu-key` で変えられる（[architecture.md](architecture.md) の「入力」）。
+- コアメニューのキー（既定は Ctrl-g、ベースが `menu-key` で決め、利用者が `[core]` の `menu-key` で変えられる）はプラグインに届かない（[architecture.md](architecture.md) の「入力」）。
 - キーマッププラグインは `init` で 1 層積み、それを外さない。
 - 貼り付け（bracketed paste）は、キーではなく `paste` イベントとして届ける。
 

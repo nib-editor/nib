@@ -124,7 +124,7 @@ fn main() -> ExitCode {
     }
     // The keymap takes every key, so nothing else tells people the menu key.
     if editor.message().is_none() {
-        editor.show_message(format!("{}: plugin menu", editor.settings().menu_key));
+        editor.show_message(format!("{}: plugin menu", editor.menu_key()));
     }
 
     if let Err(err) = terminal::run(&mut editor) {

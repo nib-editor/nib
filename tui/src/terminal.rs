@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use crossterm::event::{self, Event, KeyEventKind, KeyModifiers};
 use crossterm::{cursor, execute, terminal};
-use nib_core::{Editor, Grid, KeyCode, KeyEvent, Modifiers};
+use nib_core::{Editor, Grid, INTERRUPT_KEY, KeyCode, KeyEvent, Modifiers};
 
 use crate::draw;
 
@@ -85,15 +85,14 @@ fn start_input(editor: &mut Editor) -> Receiver<Wake> {
         let _ = background.send(Wake::Background);
     })));
     let interrupter = editor.interrupter();
-    let menu_key = editor.settings().menu_key;
     thread::spawn(move || {
         loop {
             let event = event::read();
-            // The menu key stops a plugin stuck in a call, which the main
-            // thread cannot do while it waits for the call.
+            // Stops a plugin stuck in a call, which the main thread cannot
+            // do while it waits for the call.
             if let Ok(Event::Key(key)) = &event
                 && key.kind != KeyEventKind::Release
-                && convert_key(*key) == Some(menu_key)
+                && convert_key(*key) == Some(INTERRUPT_KEY)
             {
                 interrupter.interrupt();
             }
