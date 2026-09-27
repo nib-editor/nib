@@ -1191,6 +1191,25 @@ impl Languages {
     /// Where `capture` of the query `name` matched in `range`, one range per
     /// match, sorted and without repeats. Compiles the query the first time;
     /// the error comes back once, and later runs find nothing.
+    /// `captures` over the buffer's own tree and every parsed layer in
+    /// `range`, each with its own language's query, in order.
+    pub fn captures_in(
+        &mut self,
+        syntax: &BufferSyntax,
+        name: &str,
+        capture: &str,
+        text: &Rope,
+        range: Range<usize>,
+    ) -> Result<Vec<Range<usize>>, String> {
+        let mut found = Vec::new();
+        for (language, tree) in overlapping(syntax, &range) {
+            found.extend(self.captures(language, name, capture, tree, text, range.clone())?);
+        }
+        found.sort_by_key(|r| (r.start, r.end));
+        found.dedup();
+        Ok(found)
+    }
+
     pub fn captures(
         &mut self,
         language: usize,
@@ -1285,6 +1304,86 @@ fn info(node: Node) -> NodeInfo {
 }
 
 /// The smallest node covering `range`, or the smallest named one.
+/// The trees of `syntax` that cover `range`, from the buffer's own to the
+/// innermost injected layer, with their languages. A layer covers it when
+/// its start and its end each fall in the layer's ranges: all of a file's
+/// doc comments make one layer, and the code between them is not in it.
+fn covering<'s>(syntax: &'s BufferSyntax, range: &Range<usize>) -> Vec<(usize, &'s Tree)> {
+    let Some(tree) = &syntax.tree else {
+        return Vec::new();
+    };
+    let within = |ranges: &[TsRange], at: usize| {
+        ranges
+            .iter()
+            .any(|r| r.start_byte <= at && at <= r.end_byte)
+    };
+    let mut chain = vec![(syntax.language, tree)];
+    let mut layers = &syntax.injections.layers;
+    while let Some((layer, tree)) = layers.iter().find_map(|layer| {
+        let covers = within(&layer.ranges, range.start) && within(&layer.ranges, range.end);
+        Some((layer, layer.tree.as_ref().filter(|_| covers)?))
+    }) {
+        chain.push((layer.language, tree));
+        layers = &layer.injections.layers;
+    }
+    chain
+}
+
+/// Every parsed tree of `syntax`, the buffer's own and its layers', with
+/// their languages, if it overlaps `range`.
+fn overlapping<'s>(syntax: &'s BufferSyntax, range: &Range<usize>) -> Vec<(usize, &'s Tree)> {
+    fn add<'s>(layers: &'s [Layer], range: &Range<usize>, out: &mut Vec<(usize, &'s Tree)>) {
+        for layer in layers {
+            let (first, last) = (&layer.ranges[0], &layer.ranges[layer.ranges.len() - 1]);
+            if first.start_byte > range.end || last.end_byte < range.start {
+                continue;
+            }
+            if let Some(tree) = &layer.tree {
+                out.push((layer.language, tree));
+            }
+            add(&layer.injections.layers, range, out);
+        }
+    }
+    let mut out: Vec<_> = syntax.tree.iter().map(|t| (syntax.language, t)).collect();
+    add(&syntax.injections.layers, range, &mut out);
+    out
+}
+
+/// The smallest node covering `range` in the innermost tree that covers
+/// it, so a code block's language answers inside it.
+pub(crate) fn node_at_in(
+    syntax: &BufferSyntax,
+    range: Range<usize>,
+    named: bool,
+) -> Option<NodeInfo> {
+    let (_, tree) = *covering(syntax, &range).last()?;
+    node_at(tree, range, named)
+}
+
+/// The parent of a node handed out earlier, in the tree it came from. The
+/// root of a layer has for parent the node around it in the tree the layer
+/// is injected into.
+pub(crate) fn parent_in(syntax: &BufferSyntax, of: &NodeInfo) -> Option<NodeInfo> {
+    let chain = covering(syntax, &of.range);
+    let at = chain
+        .iter()
+        .rposition(|(_, tree)| find(tree, of).is_some())?;
+    if let Some(parent) = parent(chain[at].1, of) {
+        return Some(parent);
+    }
+    let (_, host) = *chain.get(at.checked_sub(1)?)?;
+    node_at(host, of.range.clone(), false)
+}
+
+pub(crate) fn children_in(syntax: &BufferSyntax, of: &NodeInfo) -> Vec<NodeInfo> {
+    let chain = covering(syntax, &of.range);
+    chain
+        .iter()
+        .rev()
+        .find(|(_, tree)| find(tree, of).is_some())
+        .map_or_else(Vec::new, |(_, tree)| children(tree, of))
+}
+
 pub(crate) fn node_at(tree: &Tree, range: Range<usize>, named: bool) -> Option<NodeInfo> {
     let root = tree.root_node();
     let node = if named {

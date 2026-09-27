@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use ropey::Rope;
-use tree_sitter::Tree;
 
 use crate::Error;
 use crate::background::{Inbox, Message, Waker};
@@ -332,25 +331,33 @@ impl State {
 
     /// Runs `f` with the up-to-date syntax tree of buffer `index`, if it has
     /// one, and the id of its language.
-    pub(crate) fn with_tree<R>(
+    /// Calls `f` with the syntax of buffer `index`, up to date with its
+    /// text, injected layers too: parses under way are likely nearly done,
+    /// and the buffer's own tree is parsed here only if the text changed
+    /// again meanwhile. `None` for a buffer without a language or a tree.
+    pub(crate) fn with_syntax<R>(
         &mut self,
         index: usize,
-        f: impl FnOnce(&mut Languages, usize, &Tree, &Rope) -> R,
+        f: impl FnOnce(&mut Languages, &BufferSyntax, &Rope) -> R,
     ) -> Option<R> {
-        // The parse under way is likely nearly done; parse here only if
-        // the text changed again meanwhile.
-        if let Some(job) = self.buffers[index].syntax.as_ref().and_then(|s| s.job()) {
+        while let Some(job) = self.buffers[index]
+            .syntax
+            .as_ref()
+            .and_then(|s| s.jobs().first().copied())
+        {
             self.take_parses(Some(job));
+            // A thread gone keeps its jobs; parse on this one instead.
+            if let Some(syntax) = self.buffers[index].syntax.as_mut()
+                && syntax.jobs().contains(&job)
+            {
+                syntax.forget_job();
+                self.languages.set_background(None);
+            }
         }
         self.parse(index);
         let buffer = &self.buffers[index];
-        let syntax = buffer.syntax.as_ref()?;
-        Some(f(
-            &mut self.languages,
-            syntax.language,
-            syntax.tree.as_ref()?,
-            buffer.text(),
-        ))
+        let syntax = buffer.syntax.as_ref().filter(|s| s.tree.is_some())?;
+        Some(f(&mut self.languages, syntax, buffer.text()))
     }
 
     /// Highlight styles for the bytes in `range` of the shown buffer, if it

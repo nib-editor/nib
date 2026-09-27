@@ -141,7 +141,7 @@ Text is a list of spans, each with a style named after the theme (`"keyword"`, `
 
 ### Syntax
 
-The core parses buffers with tree-sitter, and plugins read the trees: `syntax.node-at`, `parent`, `children`, and `captures`, which runs one of the language's queries (`"textobjects"`, say) over a range. Answers are always up to date, even right after an edit in the same call. Buffers without a language answer with nothing, so fall back to working on text.
+The core parses buffers with tree-sitter, and plugins read the trees: `syntax.node-at`, `parent`, `children`, and `captures`, which runs one of the language's queries (`"textobjects"`, say) over a range. Answers are always up to date, even right after an edit in the same call. Buffers without a language answer with nothing, so fall back to working on text. Inside a language injected into another, such as a Rust code block in Markdown, answers come from that language's tree: `node-at` gives its nodes, the parent of its outermost node is the node around it outside, and `captures` runs each language's own query, so the same text objects work there.
 
 nib parses on a thread of its own, so an answer right after an edit waits for that parse. For what a plugin reads on every key, such as the bracket to highlight, read the tree when `editor.syntax_updated` comes instead, as the Helix keymap does after keys that change text.
 

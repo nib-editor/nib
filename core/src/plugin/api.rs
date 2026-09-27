@@ -386,8 +386,8 @@ impl editor::HostView for PluginData {
 impl syntax::Host for PluginData {
     fn language(&mut self, buffer: Resource<BufferHandle>) -> HostResult<Option<String>> {
         let (index, _) = self.buffer_range(&buffer, 0, 0)?;
-        Ok(self.state()?.with_tree(index, |languages, language, _, _| {
-            languages.name(language).to_string()
+        Ok(self.state()?.with_syntax(index, |languages, syntax, _| {
+            languages.name(syntax.language).to_string()
         }))
     }
 
@@ -399,9 +399,9 @@ impl syntax::Host for PluginData {
         named: bool,
     ) -> HostResult<Option<syntax::Node>> {
         let (index, range) = self.buffer_range(&buffer, start, end)?;
-        let found = self
-            .state()?
-            .with_tree(index, |_, _, tree, _| trees::node_at(tree, range, named));
+        let found = self.state()?.with_syntax(index, |_, syntax, _| {
+            trees::node_at_in(syntax, range, named)
+        });
         Ok(found.flatten().map(wit_node))
     }
 
@@ -414,7 +414,7 @@ impl syntax::Host for PluginData {
         let of = node_info(of);
         let found = self
             .state()?
-            .with_tree(index, |_, _, tree, _| trees::parent(tree, &of));
+            .with_syntax(index, |_, syntax, _| trees::parent_in(syntax, &of));
         Ok(found.flatten().map(wit_node))
     }
 
@@ -427,7 +427,7 @@ impl syntax::Host for PluginData {
         let of = node_info(of);
         let found = self
             .state()?
-            .with_tree(index, |_, _, tree, _| trees::children(tree, &of));
+            .with_syntax(index, |_, syntax, _| trees::children_in(syntax, &of));
         Ok(found
             .unwrap_or_default()
             .into_iter()
@@ -445,8 +445,8 @@ impl syntax::Host for PluginData {
     ) -> HostResult<Vec<(u64, u64)>> {
         let (index, range) = self.buffer_range(&buffer, start, end)?;
         let state = self.state()?;
-        let found = state.with_tree(index, |languages, language, tree, text| {
-            languages.captures(language, &query, &capture, tree, text, range)
+        let found = state.with_syntax(index, |languages, syntax, text| {
+            languages.captures_in(syntax, &query, &capture, text, range)
         });
         match found {
             Some(Ok(found)) => Ok(found

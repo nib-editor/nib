@@ -388,7 +388,7 @@ M3 を終えた時点で、git のエディタ（`core.editor`）を hx から n
 - `buffer.close` と helix の `:bc` / `:bc!`（2026-09-28）
 - プラグイン専用のデータディレクトリ（WASI の `/data`）（2026-09-28）
 - rustdoc の言語名のないコードブロックを Rust として色付けする（`injection.parent`）（2026-09-28）
-- 構文木の API を injection の中でも使えるようにする（Markdown のコードブロックの中の Rust で `maf`、`]f` など）
+- 構文木の API を injection の中でも使えるようにする（Markdown のコードブロックの中の Rust で `maf`、`]f` など）（2026-09-28）
 
 ## 保留中のアイデア
 

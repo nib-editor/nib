@@ -206,6 +206,73 @@ fn jumps_between_text_objects() {
     fs::remove_file(&path).unwrap();
 }
 
+/// The syntax API answers from the language of a code block inside it,
+/// so text objects and node moves work there too.
+#[test]
+fn trees_of_code_blocks_answer_inside_them() {
+    let text = "# Notes\n\nSome text.\n\n```rust\nfn add(a: u8) -> u8 {\n    a + 1\n}\n\nfn two() {}\n```\n";
+    let (mut editor, path) = editor_with(&["markdown", "rust"], "blocks-tree.md", text);
+    let at = |editor: &mut Editor, what: &str| {
+        let pos = text.find(what).unwrap();
+        editor.view_mut().selection =
+            Selection::new(vec![Range::new(pos, pos + 1)], 0, editor.buffer().text()).unwrap();
+    };
+    at(&mut editor, "a + 1");
+    type_keys(&mut editor, "maf");
+    assert_eq!(selected(&editor), "fn add(a: u8) -> u8 {\n    a + 1\n}");
+
+    // From the Markdown before the block to the functions in it.
+    at(&mut editor, "Some");
+    type_keys(&mut editor, "]f");
+    assert!(
+        selected(&editor).starts_with("fn add("),
+        "{:?}",
+        selected(&editor)
+    );
+    type_keys(&mut editor, "]f");
+    assert_eq!(selected(&editor), "fn two() {}");
+
+    // Growing the selection goes up Rust's tree, then out into Markdown's.
+    at(&mut editor, "a + 1");
+    let mut grown = Vec::new();
+    for _ in 0..8 {
+        editor.handle_key(alt(KeyCode::Char('o')));
+        grown.push(selected(&editor));
+    }
+    assert!(grown.contains(&"a + 1".to_string()), "{grown:#?}");
+    assert!(
+        grown
+            .iter()
+            .any(|s| s.starts_with("fn add(") && s.ends_with('}')),
+        "{grown:#?}"
+    );
+    assert!(grown.iter().any(|s| s.starts_with("```rust")), "{grown:#?}");
+    fs::remove_file(&path).unwrap();
+}
+
+/// In Rust, a code block of a doc comment is Rust of its own, and the code
+/// between two doc comments is still the file's, though all of its doc
+/// comments make one Markdown document around it.
+#[test]
+fn doc_comment_code_blocks_have_their_own_tree() {
+    let text =
+        "/// ```\n/// fn inner() {}\n/// ```\nfn outer() {\n    1\n}\n\n/// Last.\nfn last() {}\n";
+    let (mut editor, path) = editor_with(&["rust", "markdown"], "doc-tree.rs", text);
+    let at = |editor: &mut Editor, what: &str| {
+        let pos = text.find(what).unwrap();
+        editor.view_mut().selection =
+            Selection::new(vec![Range::new(pos, pos + 1)], 0, editor.buffer().text()).unwrap();
+    };
+    at(&mut editor, "inner");
+    type_keys(&mut editor, "maf");
+    assert_eq!(selected(&editor), "fn inner() {}");
+    // Growing the selection stays in the file's tree.
+    at(&mut editor, "1\n");
+    editor.handle_key(alt(KeyCode::Char('o')));
+    assert_eq!(selected(&editor), "{\n    1\n}");
+    fs::remove_file(&path).unwrap();
+}
+
 #[test]
 fn jumps_across_long_gaps() {
     // Farther apart than the first window the keymap searches.
