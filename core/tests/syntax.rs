@@ -657,3 +657,83 @@ fn edits_during_a_parse_are_applied_to_its_tree() {
     fs::remove_file(&path).unwrap();
     fs::remove_file(&edited).unwrap();
 }
+
+/// Colors kept from frame to frame and moved with edits come out as a
+/// full paint of the same text would, including Markdown in doc comments.
+#[test]
+fn kept_colors_match_a_full_paint() {
+    let block =
+        "/// # Title\n/// Some `code`.\nfn f(a: u8) -> u8 {\n    let s = \"x\"; // c\n    a\n}\n\n";
+    let source = block.repeat(30);
+    let path = env::temp_dir().join(format!("nib-{}-kept.rs", std::process::id()));
+    fs::write(&path, &source).unwrap();
+    let cache = env::temp_dir().join(format!("nib-{}-kept-cache", std::process::id()));
+    let open = |path: &std::path::Path, background: bool| {
+        let mut editor = Editor::default();
+        editor.set_background_parsing(background);
+        editor.set_plugin_cache_dir(Some(cache.clone()));
+        editor.open(path).unwrap();
+        for plugin in ["helix", "rust", "markdown"] {
+            editor.load_plugin(&plugin_dir(plugin)).unwrap();
+        }
+        editor.resize(60, 20);
+        settle_in_background(&mut editor);
+        editor
+    };
+    let colors = |editor: &Editor| {
+        let mut grid = Grid::default();
+        editor.render(&mut grid);
+        (0..grid.height() - 2)
+            .map(|y| {
+                (0..grid.width())
+                    .map(|x| grid.cell(x, y).style.fg)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+    };
+    // Parsing in the background, so the frame right after a key is drawn
+    // with the old tree, moved.
+    let mut editor = open(&path, true);
+    // Each step ends with a key that edits, so the frame after it is drawn
+    // with the old tree, moved, before the thread's parse is taken in.
+    let steps = [
+        "jjjA z",
+        "<esc>kkkA more",
+        "<esc>ggO/// ## New",
+        "<esc>jjjjwwi\"",
+        "<esc>xd",
+        "u",
+        "U",
+        "i// out",
+        "<esc><C-d>o}",
+        "<esc><C-u>jjA `x`",
+    ];
+    let fresh_path = env::temp_dir().join(format!("nib-{}-kept-fresh.rs", std::process::id()));
+    let full = |editor: &mut Editor| {
+        editor.repaint_all();
+        colors(editor)
+    };
+    for step in steps {
+        colors(&editor);
+        type_keys(&mut editor, step);
+        let kept = colors(&editor);
+        assert_eq!(kept, full(&mut editor), "right after {step:?}");
+        settle_in_background(&mut editor);
+        let kept = colors(&editor);
+        assert_eq!(kept, full(&mut editor), "after parsing {step:?}");
+
+        fs::write(&fresh_path, editor.buffer().text().to_string()).unwrap();
+        let mut fresh = open(&fresh_path, false);
+        fresh.view_mut().top_line = editor.view().top_line;
+        fresh.view_mut().selection = editor.view().selection.clone();
+        while fresh.catch_up() {}
+        assert_eq!(
+            colors(&editor),
+            colors(&fresh),
+            "opened fresh after {step:?}"
+        );
+    }
+    fs::remove_file(&path).unwrap();
+    fs::remove_file(&fresh_path).unwrap();
+    let _ = fs::remove_dir_all(&cache);
+}

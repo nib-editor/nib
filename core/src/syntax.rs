@@ -3,6 +3,7 @@
 //! plugin shares them and they run on every edit and frame.
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -36,6 +37,9 @@ pub(crate) struct Languages {
     /// Started with the first parse it gets.
     worker: Option<Worker>,
     last_job: u64,
+    /// Where injected layers changed while updating them, for the buffer's
+    /// kept colors to be painted again there.
+    repaint: Vec<Range<usize>>,
 }
 
 /// The syntax thread: it parses what it is sent, one job after another.
@@ -178,9 +182,21 @@ pub(crate) struct BufferSyntax {
     job: Option<u64>,
     since_job: Vec<InputEdit>,
     injections: Injections,
+    /// The colors of the last frame, kept for the next (docs/architecture.md,
+    /// "構文木"). Drawing only reads the syntax, hence the cell.
+    painted: RefCell<Option<Painted>>,
     /// The first parse leaves injections for later, so a file just opened
     /// shows the colors of its own language sooner.
     injections_pending: bool,
+}
+
+/// Highlight colors of a range of the text, as painted for a frame.
+struct Painted {
+    range: Range<usize>,
+    /// One per byte of `range`.
+    styles: Vec<Option<Style>>,
+    /// Where the colors are no longer right, to paint again first.
+    stale: Vec<Range<usize>>,
 }
 
 /// How deep injections nest: Rust, the Markdown of its doc comments, the
@@ -325,6 +341,7 @@ impl Default for Languages {
             background: None,
             worker: None,
             last_job: 0,
+            repaint: Vec::new(),
         }
     }
 }
@@ -576,12 +593,21 @@ impl Languages {
         syntax.base = syntax.tree.clone();
         syntax.dirty = false;
         let edited = syntax.edited.take();
+        let regions = match (&old, &syntax.tree) {
+            (Some(old), Some(tree)) => Some(changed_regions(old, tree, edited.clone())),
+            _ => None,
+        };
+        // The colors kept were painted with the old tree, which differs
+        // from the new one only there.
+        match &regions {
+            Some(regions) => syntax.repaint(regions.iter().cloned()),
+            None => syntax.forget_colors(),
+        }
         if syntax.injections_pending {
             return;
         }
         match &syntax.tree {
             Some(tree) => {
-                let regions = old.map(|old| changed_regions(&old, tree, edited.clone()));
                 let (language, injections) = (syntax.language, &mut syntax.injections);
                 let found = Found {
                     tree,
@@ -589,6 +615,8 @@ impl Languages {
                     regions: regions.as_deref(),
                 };
                 self.inject(language, found, text, injections, edited.as_ref(), 1);
+                let changed = std::mem::take(&mut self.repaint);
+                syntax.repaint(changed);
             }
             None => syntax.injections = Injections::default(),
         }
@@ -615,7 +643,9 @@ impl Languages {
             let (language, injections) = (syntax.language, &mut syntax.injections);
             self.inject(language, found, text, injections, None, 1);
         }
-        self.fill(&mut syntax.injections, text, view, None, 1)
+        let parsed = self.fill(&mut syntax.injections, text, view, None, 1);
+        syntax.repaint(std::mem::take(&mut self.repaint));
+        parsed
     }
 
     /// Parses the layers `near` the screen ahead of time, and drops the
@@ -628,6 +658,7 @@ impl Languages {
         keep: &[Range<usize>],
     ) {
         self.fill(&mut syntax.injections, text, near, Some(keep), 1);
+        syntax.repaint(std::mem::take(&mut self.repaint));
     }
 
     fn fill(
@@ -646,6 +677,7 @@ impl Languages {
             if keep.is_some_and(|keep| !in_any(layer, keep)) {
                 if layer.tree.take().is_some() {
                     layer.injections = Injections::default();
+                    self.repaint.extend(byte_ranges(&layer.ranges));
                 }
                 continue;
             }
@@ -674,6 +706,7 @@ impl Languages {
                     depth + 1,
                 );
                 layer.tree = Some(tree);
+                self.repaint.extend(byte_ranges(&layer.ranges));
                 parsed = true;
             }
             parsed |= self.fill(&mut layer.injections, text, wanted, keep, depth + 1);
@@ -769,6 +802,7 @@ impl Languages {
                     self.parse_in(language, text, &layer.ranges, Some(&old_tree))
                 {
                     let regions = changed_regions(&old_tree, &tree, edited.cloned());
+                    self.repaint.extend(regions.iter().cloned());
                     let found = Found {
                         tree: &tree,
                         host: &layer.ranges,
@@ -778,8 +812,14 @@ impl Languages {
                     layer.tree = Some(tree);
                     layer.injections = inner;
                 }
+            } else {
+                self.repaint.extend(byte_ranges(&layer.ranges));
             }
             injections.layers.push(layer);
+        }
+        // Layers no longer found took their colors with them.
+        for gone in old.values() {
+            self.repaint.extend(byte_ranges(&gone.ranges));
         }
     }
 
@@ -882,6 +922,35 @@ impl Languages {
     /// The highlight style of each byte in `range`, or `None` for plain text.
     /// Injected languages paint over the language around them.
     pub fn highlight(
+        &self,
+        theme: &Theme,
+        syntax: &BufferSyntax,
+        text: &Rope,
+        range: Range<usize>,
+    ) -> Vec<Option<Style>> {
+        let mut painted = syntax.painted.borrow_mut();
+        if let Some(kept) = painted
+            .as_mut()
+            .filter(|p| p.range.start <= range.start && range.end <= p.range.end)
+        {
+            for part in merged(std::mem::take(&mut kept.stale), &kept.range) {
+                let fresh = self.paint_range(theme, syntax, text, part.clone());
+                let at = part.start - kept.range.start;
+                kept.styles[at..at + part.len()].copy_from_slice(&fresh);
+            }
+            let at = range.start - kept.range.start;
+            return kept.styles[at..at + range.len()].to_vec();
+        }
+        let styles = self.paint_range(theme, syntax, text, range.clone());
+        *painted = Some(Painted {
+            range,
+            styles: styles.clone(),
+            stale: Vec::new(),
+        });
+        styles
+    }
+
+    fn paint_range(
         &self,
         theme: &Theme,
         syntax: &BufferSyntax,
@@ -1196,6 +1265,29 @@ fn mark_range_changes(tree: &mut Tree, old: &[TsRange], new: &[TsRange]) {
     }
 }
 
+fn byte_ranges(ranges: &[TsRange]) -> impl Iterator<Item = Range<usize>> + '_ {
+    ranges.iter().map(|r| r.start_byte..r.end_byte)
+}
+
+/// `ranges` cut to `within`, sorted, and joined where they are close, so a
+/// layer of many short ranges is painted in a few runs, not one each.
+fn merged(mut ranges: Vec<Range<usize>>, within: &Range<usize>) -> Vec<Range<usize>> {
+    const CLOSE: usize = 256;
+    ranges.retain_mut(|r| {
+        *r = r.start.max(within.start)..r.end.min(within.end);
+        r.start < r.end
+    });
+    ranges.sort_by_key(|r| r.start);
+    let mut joined: Vec<Range<usize>> = Vec::new();
+    for range in ranges {
+        match joined.last_mut() {
+            Some(last) if range.start <= last.end + CLOSE => last.end = last.end.max(range.end),
+            _ => joined.push(range),
+        }
+    }
+    joined
+}
+
 fn same_bytes(a: &[TsRange], b: &[TsRange]) -> bool {
     a.len() == b.len()
         && a.iter()
@@ -1277,6 +1369,7 @@ impl BufferSyntax {
             job: None,
             since_job: Vec::new(),
             injections: Injections::default(),
+            painted: RefCell::new(None),
             injections_pending: true,
         }
     }
@@ -1295,6 +1388,7 @@ impl BufferSyntax {
         for tree in [&mut self.tree, &mut self.base].into_iter().flatten() {
             tree.edit(&edit);
         }
+        self.move_colors(new, &edit);
         if self.job.is_some() {
             self.since_job.push(edit);
         }
@@ -1315,6 +1409,54 @@ impl BufferSyntax {
         self.job
     }
 
+    /// Moves the kept colors along with an edit. Only the edited lines are
+    /// painted again: with the old tree moved the same way, the others would
+    /// come out as they were.
+    fn move_colors(&mut self, text: &Rope, edit: &InputEdit) {
+        let painted = self.painted.get_mut();
+        let Some(kept) = painted else {
+            return;
+        };
+        let (start, old_end, new_end) = (edit.start_byte, edit.old_end_byte, edit.new_end_byte);
+        let range = kept.range.clone();
+        if old_end <= range.start {
+            kept.range = shift(range.start, edit)..shift(range.end, edit);
+        } else if start >= range.end {
+            return;
+        } else if range.start <= start && old_end <= range.end {
+            let at = start - range.start;
+            kept.styles.splice(
+                at..at + (old_end - start),
+                std::iter::repeat_n(None, new_end - start),
+            );
+            kept.range = range.start..range.end - (old_end - start) + (new_end - start);
+        } else {
+            *painted = None;
+            return;
+        }
+        for stale in &mut kept.stale {
+            *stale = shift(stale.start, edit)..shift(stale.end, edit).max(shift(stale.start, edit));
+        }
+        let line = text.byte_to_line(start.min(text.len_bytes()));
+        let from = text.line_to_byte(line);
+        let end_line = text.byte_to_line(new_end.min(text.len_bytes()));
+        let to = text
+            .try_line_to_byte(end_line + 1)
+            .unwrap_or(text.len_bytes());
+        kept.stale.push(from..to.max(new_end));
+    }
+
+    /// Marks where the kept colors are no longer right.
+    fn repaint(&mut self, ranges: impl IntoIterator<Item = Range<usize>>) {
+        if let Some(kept) = self.painted.get_mut() {
+            kept.stale.extend(ranges);
+        }
+    }
+
+    pub fn forget_colors(&mut self) {
+        *self.painted.get_mut() = None;
+    }
+
     /// Stops waiting for the parse under way, as when the thread is gone.
     /// The text still counts as changed, so it is parsed again.
     pub fn forget_job(&mut self) {
@@ -1328,6 +1470,7 @@ impl BufferSyntax {
 
     /// Drops the trees when an edit cannot be described, e.g. after undo.
     pub fn invalidate(&mut self) {
+        self.forget_colors();
         self.tree = None;
         self.base = None;
         self.job = None;

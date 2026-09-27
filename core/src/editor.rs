@@ -265,6 +265,9 @@ impl State {
     /// Waits until the syntax thread has parsed every shown buffer up to
     /// its text, sending the parses still needed.
     pub fn wait_for_parses(&mut self) {
+        if !self.languages.in_background() {
+            return;
+        }
         loop {
             let under_way = self
                 .buffers
@@ -810,7 +813,12 @@ impl Editor {
         options.init_timeout = config.core.plugin_init_timeout;
         options.memory_limit = config.core.plugin_memory;
         self.state_mut().settings = config.core;
-        self.state_mut().theme = config.theme;
+        let state = self.state_mut();
+        state.theme = config.theme;
+        // Kept colors come from the old theme.
+        for syntax in state.buffers.iter_mut().filter_map(|b| b.syntax.as_mut()) {
+            syntax.forget_colors();
+        }
         self.plugin_configs = config.plugins;
     }
 
@@ -843,6 +851,19 @@ impl Editor {
         // Parses sent to a thread now gone never come back.
         for syntax in state.buffers.iter_mut().filter_map(|b| b.syntax.as_mut()) {
             syntax.forget_job();
+        }
+    }
+
+    /// Forgets the highlight colors kept from the last frame, so the next
+    /// paints everything again.
+    pub fn repaint_all(&mut self) {
+        for syntax in self
+            .state_mut()
+            .buffers
+            .iter_mut()
+            .filter_map(|b| b.syntax.as_mut())
+        {
+            syntax.forget_colors();
         }
     }
 
