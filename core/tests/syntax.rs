@@ -525,11 +525,20 @@ fn code_blocks_with_no_language_are_in_their_host_language() {
     assert_eq!(fg(&editor, 4, 1), KEYWORD);
     fs::remove_file(&path).unwrap();
 
-    let text = "```\nfn main() {}\n```\n\n```rust\nfn main() {}\n```\n";
+    // So is one with only rustdoc's attributes, but not with other words.
+    let text = "/// ```no_run,should_panic\n/// let x = 1;\n/// ```\n/// ```text\n/// let y\n/// ```\nfn f() {}\n";
+    let (editor, path) = editor_with(&["rust", "markdown"], "attributes.rs", text);
+    assert_eq!(fg(&editor, 4, 1), KEYWORD);
+    assert_ne!(fg(&editor, 4, 4), KEYWORD);
+    fs::remove_file(&path).unwrap();
+
+    let text = "```\nfn main() {}\n```\n\n```rust\nfn main() {}\n```\n\n```ignore\nfn main() {}\n```\n";
     let (editor, path) = editor_with(&["markdown", "rust"], "bare.md", text);
     assert_eq!(fg(&editor, 0, 1), LITERAL);
     // One with a language is only in that language.
     assert_eq!(fg(&editor, 0, 5), KEYWORD);
+    // Attributes mean nothing outside Rust.
+    assert_eq!(fg(&editor, 0, 9), LITERAL);
     fs::remove_file(&path).unwrap();
 }
 

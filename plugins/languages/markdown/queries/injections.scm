@@ -23,6 +23,16 @@
   (code_fence_content) @injection.content
   (#set! injection.parent))
 
+; A block whose info string holds only rustdoc's attributes ("ignore",
+; "no_run,should_panic", "edition2021") is Rust to rustdoc; in the language
+; of what the Markdown is in, as a block with none.
+(fenced_code_block
+  (info_string
+    (language) @_attributes)
+  (code_fence_content) @injection.content
+  (#match? @_attributes "^(ignore|no_run|should_panic|compile_fail|standalone_crate|test_harness|edition[0-9]+)(,(ignore|no_run|should_panic|compile_fail|standalone_crate|test_harness|edition[0-9]+))*$")
+  (#set! injection.parent))
+
 ; Front matter.
 ((minus_metadata) @injection.content
  (#set! injection.language "yaml"))
