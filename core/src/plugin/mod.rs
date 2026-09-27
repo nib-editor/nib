@@ -218,6 +218,29 @@ pub(crate) struct Plugins {
     base: Option<String>,
 }
 
+/// A plugin's code.
+enum Code {
+    /// Only data, such as a language.
+    None,
+    /// Compiled when first started: a base waiting to be switched to. The
+    /// compiled code of a base takes megabytes, and the bytes built into
+    /// nib take none.
+    Wasm(Cow<'static, [u8]>),
+    Compiled(Component),
+}
+
+impl Plugins {
+    /// The runtime, started with the first plugin that has code.
+    fn runtime(&mut self) -> Result<&Runtime, String> {
+        if self.runtime.is_none() {
+            let runtime = Runtime::new(&self.options)
+                .map_err(|err| format!("starting the plugin runtime failed: {err}"))?;
+            self.runtime = Some(runtime);
+        }
+        Ok(self.runtime.as_ref().expect("created above"))
+    }
+}
+
 struct Runtime {
     engine: Engine,
     linker: Linker<PluginData>,
@@ -281,8 +304,7 @@ struct Plugin {
     version: String,
     /// `None` for plugins built into the editor.
     dir: Option<PathBuf>,
-    /// `None` for plugins that only provide data, such as languages.
-    component: Option<Component>,
+    code: Code,
     /// `[settings]` from its `plugins/<name>.toml`, as JSON.
     config: String,
     limits: Limits,
@@ -429,7 +451,9 @@ impl Editor {
             .iter()
             .enumerate()
             .filter_map(|(i, read)| match read {
-                Ok((manifest, Some(wasm))) => Some((i, manifest, &wasm[..])),
+                Ok((manifest, Some(wasm))) if !self.standby(manifest) => {
+                    Some((i, manifest, &wasm[..]))
+                }
                 _ => None,
             })
             .collect();
@@ -469,8 +493,13 @@ impl Editor {
             .zip(read)
             .zip(components)
             .map(|((source, read), component)| {
-                let (manifest, _) = read?;
-                self.add_compiled(source, manifest, component.transpose()?)
+                let (manifest, wasm) = read?;
+                let code = match (component, wasm) {
+                    (Some(component), _) => Code::Compiled(component?),
+                    (None, Some(wasm)) => Code::Wasm(wasm),
+                    (None, None) => Code::None,
+                };
+                self.add_compiled(source, manifest, code)
             })
             .collect();
         if let Some(fallback) = self.fall_back_to_a_base() {
@@ -505,14 +534,23 @@ impl Editor {
 
     fn add_plugin(&mut self, source: &PluginSource) -> Result<(), Error> {
         let (manifest, component) = self.compile(source)?;
-        self.add_compiled(source, manifest, component)
+        self.add_compiled(
+            source,
+            manifest,
+            component.map_or(Code::None, Code::Compiled),
+        )
+    }
+
+    /// Bases other than the chosen one wait, stopped, to be switched to.
+    fn standby(&self, manifest: &manifest::Manifest) -> bool {
+        manifest.base && manifest.name != self.state().settings.base
     }
 
     fn add_compiled(
         &mut self,
         source: &PluginSource,
         manifest: manifest::Manifest,
-        component: Option<Component>,
+        code: Code,
     ) -> Result<(), Error> {
         if self.plugins.entries.iter().any(|p| p.name == manifest.name) {
             return Err(Error::Plugin(format!("{}: already loaded", manifest.name)));
@@ -530,9 +568,8 @@ impl Editor {
                 .map_or(Some(options.init_timeout), |t| t.limit()),
             memory: settings.memory.unwrap_or(options.memory_limit),
         };
-        let lazy = settings.load == Load::Lazy && component.is_some();
-        // Bases other than the chosen one wait, stopped, to be switched to.
-        let standby = manifest.base && manifest.name != self.state().settings.base;
+        let lazy = settings.load == Load::Lazy && !matches!(code, Code::None);
+        let standby = self.standby(&manifest);
         let menu_key = manifest.menu_key.as_deref().map(|key| {
             key.parse()
                 .expect("the manifest's menu key was checked when it was read")
@@ -545,7 +582,7 @@ impl Editor {
                 PluginSource::Dir(dir) => Some(dir.to_path_buf()),
                 PluginSource::Bytes { .. } => None,
             },
-            component,
+            code,
             config: settings.settings,
             limits,
             subscriptions: manifest.events,
@@ -647,13 +684,8 @@ impl Editor {
     /// The engine plugins run on, started with the first plugin that has
     /// code.
     fn engine(&mut self) -> Result<&Engine, Error> {
-        if self.plugins.runtime.is_none() {
-            let runtime = Runtime::new(&self.plugins.options).map_err(|err| {
-                Error::Plugin(format!("starting the plugin runtime failed: {err}"))
-            })?;
-            self.plugins.runtime = Some(runtime);
-        }
-        Ok(&self.plugins.runtime.as_ref().expect("created above").engine)
+        let runtime = self.plugins.runtime().map_err(Error::Plugin)?;
+        Ok(&runtime.engine)
     }
 
     /// Stops the plugin, forgets its failures, and starts it again. A base
@@ -782,7 +814,7 @@ impl Editor {
         plugin.version = manifest.version;
         plugin.subscriptions = manifest.events;
         plugin.capabilities = manifest.capabilities;
-        plugin.component = component;
+        plugin.code = component.map_or(Code::None, Code::Compiled);
         self.restart_plugin(id)
     }
 
@@ -818,7 +850,7 @@ impl Editor {
                 slow_calls: p.slow_calls,
                 last_error: p.last_error.clone(),
                 reloadable: p.dir.is_some(),
-                has_code: p.component.is_some(),
+                has_code: !matches!(p.code, Code::None),
                 timeout: p.limits.call,
                 capabilities: p.capabilities.clone(),
                 waiting: p.waiting,
@@ -1163,10 +1195,17 @@ impl PluginData {
 /// stopped, with the reason as its last error.
 fn start_in(plugins: &mut Plugins, state: &mut Option<State>, id: PluginId) -> Result<(), String> {
     plugins.entries[id].waiting = false;
-    let Some(component) = plugins.entries[id].component.clone() else {
+    if let Code::Wasm(wasm) = &plugins.entries[id].code {
+        let wasm = wasm.clone();
+        let component =
+            Component::new(&plugins.runtime()?.engine, &wasm).map_err(|err| format!("{err:#}"))?;
+        plugins.entries[id].code = Code::Compiled(component);
+    }
+    let Code::Compiled(component) = &plugins.entries[id].code else {
         // Data only: nothing runs.
         return Ok(());
     };
+    let component = component.clone();
     let runtime = plugins.runtime.as_ref().expect("runtime exists");
     let plugin = &mut plugins.entries[id];
     let limits = plugin.limits;
