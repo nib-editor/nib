@@ -51,6 +51,8 @@ struct Worker {
 struct Job {
     id: u64,
     language: Language,
+    /// Only these of the text, for an injected layer; all of it if empty.
+    ranges: Vec<TsRange>,
     text: Rope,
     old: Option<Tree>,
 }
@@ -81,8 +83,13 @@ impl Worker {
             .name("nib-syntax".into())
             .spawn(move || {
                 for job in job_queue {
-                    let tree =
-                        parse_text(&mut parser, &job.language, &[], &job.text, job.old.as_ref());
+                    let tree = parse_text(
+                        &mut parser,
+                        &job.language,
+                        &job.ranges,
+                        &job.text,
+                        job.old.as_ref(),
+                    );
                     if finished.send(Done { id: job.id, tree }).is_err() {
                         return;
                     }
@@ -218,6 +225,49 @@ struct Layer {
     /// An edit reached into `ranges` since the layer was parsed.
     touched: bool,
     injections: Injections,
+    /// How deep it is among injections, 1 for a layer in the buffer's own
+    /// language.
+    depth: usize,
+    /// Its parse under way on the syntax thread, and the edits since it
+    /// started.
+    job: Option<u64>,
+    since_job: Vec<InputEdit>,
+    /// Where the text changed since the layer's own injections were last
+    /// looked for, to look again there once it is parsed on the thread.
+    edited: Option<Range<usize>>,
+}
+
+/// The layer whose parse is `job`.
+fn find_job(injections: &mut Injections, job: u64) -> Option<&mut Layer> {
+    for layer in &mut injections.layers {
+        if layer.job == Some(job) {
+            return Some(layer);
+        }
+        if let Some(found) = find_job(&mut layer.injections, job) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// The parses of layers under way.
+fn layer_jobs(injections: &Injections, jobs: &mut Vec<u64>) {
+    for layer in &injections.layers {
+        jobs.extend(layer.job);
+        layer_jobs(&layer.injections, jobs);
+    }
+}
+
+/// Stops waiting for the parses of layers, as when the thread is gone.
+/// They count as edited, so they are parsed again.
+fn forget_layer_jobs(injections: &mut Injections) {
+    for layer in &mut injections.layers {
+        if layer.job.take().is_some() {
+            layer.since_job.clear();
+            layer.touched = true;
+        }
+        forget_layer_jobs(&mut layer.injections);
+    }
 }
 
 /// The languages injected into a tree.
@@ -508,8 +558,23 @@ impl Languages {
         if !syntax.dirty || syntax.job.is_some() {
             return Ok(());
         }
-        self.ensure_loaded(syntax.language)?;
-        let EntryState::Loaded { language, .. } = &self.list[syntax.language].state else {
+        let id = self.send_job(syntax.language, Vec::new(), text, syntax.tree.clone())?;
+        syntax.job = Some(id);
+        syntax.since_job.clear();
+        Ok(())
+    }
+
+    /// Sends a parse to the syntax thread, starting it if needed. Returns
+    /// the job's id.
+    fn send_job(
+        &mut self,
+        language: usize,
+        ranges: Vec<TsRange>,
+        text: &Rope,
+        old: Option<Tree>,
+    ) -> Result<u64, String> {
+        self.ensure_loaded(language)?;
+        let EntryState::Loaded { language, .. } = &self.list[language].state else {
             unreachable!("loaded above");
         };
         let language = language.clone();
@@ -525,17 +590,68 @@ impl Languages {
         let job = Job {
             id: self.last_job,
             language,
+            ranges,
             text: text.clone(),
-            old: syntax.tree.clone(),
+            old,
         };
         let worker = self.worker.as_ref().expect("started above");
         worker
             .jobs
             .send(job)
             .map_err(|_| "the syntax thread stopped".to_string())?;
-        syntax.job = Some(self.last_job);
-        syntax.since_job.clear();
-        Ok(())
+        Ok(self.last_job)
+    }
+
+    /// Takes a parse the syntax thread finished for an injected layer.
+    /// Returns whether its colors changed.
+    pub fn take_layer_parse(&mut self, syntax: &mut BufferSyntax, done: Done, text: &Rope) -> bool {
+        let Some(layer) = find_job(&mut syntax.injections, done.id) else {
+            return false;
+        };
+        layer.job = None;
+        let Some(mut tree) = done.tree else {
+            return false;
+        };
+        // Its queries may still be compiling, as when its grammar loaded
+        // for this parse. If they failed, the layer shows as text.
+        if self.finish_loading(layer.language).is_err() {
+            return false;
+        }
+        if !layer.since_job.is_empty() {
+            // Parsed again when its host's tree is next taken in.
+            for edit in layer.since_job.drain(..) {
+                tree.edit(&edit);
+            }
+            layer.tree = Some(tree);
+            layer.touched = true;
+            return false;
+        }
+        let edited = layer.edited.take();
+        let regions = layer
+            .tree
+            .as_ref()
+            .map(|old| changed_regions(old, &tree, edited.clone()));
+        match &regions {
+            Some(regions) => self.repaint.extend(regions.iter().cloned()),
+            None => self.repaint.extend(byte_ranges(&layer.ranges)),
+        }
+        let found = Found {
+            tree: &tree,
+            host: &layer.ranges,
+            regions: regions.as_deref(),
+        };
+        let (language, depth) = (layer.language, layer.depth);
+        self.inject(
+            language,
+            found,
+            text,
+            &mut layer.injections,
+            edited.as_ref(),
+            depth + 1,
+        );
+        layer.tree = Some(tree);
+        syntax.repaint(std::mem::take(&mut self.repaint));
+        true
     }
 
     /// The parses the syntax thread has finished, after waiting for `job`
@@ -675,6 +791,7 @@ impl Languages {
         let mut parsed = false;
         for layer in &mut injections.layers {
             if keep.is_some_and(|keep| !in_any(layer, keep)) {
+                layer.job = None;
                 if layer.tree.take().is_some() {
                     layer.injections = Injections::default();
                     self.repaint.extend(byte_ranges(&layer.ranges));
@@ -682,6 +799,14 @@ impl Languages {
                 continue;
             }
             if !in_any(layer, wanted) {
+                continue;
+            }
+            if layer.tree.is_none() && self.in_background() {
+                if layer.job.is_none()
+                    && let Ok(job) = self.send_job(layer.language, layer.ranges.clone(), text, None)
+                {
+                    layer.job = Some(job);
+                }
                 continue;
             }
             if layer.tree.is_none() {
@@ -706,6 +831,7 @@ impl Languages {
                     depth + 1,
                 );
                 layer.tree = Some(tree);
+                layer.edited = None;
                 self.repaint.extend(byte_ranges(&layer.ranges));
                 parsed = true;
             }
@@ -789,16 +915,31 @@ impl Languages {
                 tree: None,
                 touched: false,
                 injections: Injections::default(),
+                depth,
+                job: None,
+                since_job: Vec::new(),
+                edited: None,
             };
             if let Some(Layer {
                 tree: Some(mut old_tree),
                 ranges: old_ranges,
                 injections: mut inner,
+                edited: old_edited,
                 ..
             }) = old
             {
                 mark_range_changes(&mut old_tree, &old_ranges, &layer.ranges);
-                if let Ok(Some(tree)) =
+                if self.in_background() {
+                    // Shown with the old tree until the thread is done.
+                    if let Ok(job) =
+                        self.send_job(language, layer.ranges.clone(), text, Some(old_tree.clone()))
+                    {
+                        layer.job = Some(job);
+                    }
+                    layer.edited = old_edited;
+                    layer.tree = Some(old_tree);
+                    layer.injections = inner;
+                } else if let Ok(Some(tree)) =
                     self.parse_in(language, text, &layer.ranges, Some(&old_tree))
                 {
                     let regions = changed_regions(&old_tree, &tree, edited.cloned());
@@ -1393,14 +1534,7 @@ impl BufferSyntax {
             self.since_job.push(edit);
         }
         edit_injections(&mut self.injections, &edit);
-        self.edited = Some(match self.edited.take() {
-            Some(edited) => {
-                let (edited_start, edited_end) =
-                    (shift(edited.start, &edit), shift(edited.end, &edit));
-                edited_start.min(start)..edited_end.max(new_end)
-            }
-            None => start..new_end,
-        });
+        add_edit(&mut self.edited, &edit);
         self.dirty = true;
     }
 
@@ -1462,6 +1596,14 @@ impl BufferSyntax {
     pub fn forget_job(&mut self) {
         self.job = None;
         self.since_job.clear();
+        forget_layer_jobs(&mut self.injections);
+    }
+
+    /// Every parse of this buffer under way: its own and its layers'.
+    pub fn jobs(&self) -> Vec<u64> {
+        let mut jobs: Vec<u64> = self.job.into_iter().collect();
+        layer_jobs(&self.injections, &mut jobs);
+        jobs
     }
 
     pub fn injections_pending(&self) -> bool {
@@ -1493,6 +1635,10 @@ fn edit_injections(injections: &mut Injections, edit: &InputEdit) {
         if let Some(tree) = &mut layer.tree {
             tree.edit(edit);
         }
+        if layer.job.is_some() {
+            layer.since_job.push(*edit);
+        }
+        add_edit(&mut layer.edited, edit);
         // Touching counts: typing at the end of a range may extend it.
         layer.touched |= layer
             .ranges
@@ -1501,6 +1647,16 @@ fn edit_injections(injections: &mut Injections, edit: &InputEdit) {
         layer.ranges.iter_mut().for_each(|r| shift_range(r, edit));
         edit_injections(&mut layer.injections, edit);
     }
+}
+
+/// Adds `edit` to `edited`, the span of the text changed so far, moved
+/// along with it.
+fn add_edit(edited: &mut Option<Range<usize>>, edit: &InputEdit) {
+    let (start, new_end) = (edit.start_byte, edit.new_end_byte);
+    *edited = Some(match edited.take() {
+        Some(span) => shift(span.start, edit).min(start)..shift(span.end, edit).max(new_end),
+        None => start..new_end,
+    });
 }
 
 /// Where `byte` is after `edit`. Bytes inside the edited text move to its

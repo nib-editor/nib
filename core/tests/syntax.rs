@@ -579,7 +579,9 @@ fn layers_far_from_the_screen_wait_until_it_comes() {
 fn settle_in_background(editor: &mut Editor) {
     loop {
         editor.wait_for_syntax();
-        if !editor.catch_up() {
+        // Taking trees in can send more parses, as of layers near the
+        // screen.
+        if !editor.catch_up() && !editor.is_parsing() {
             break;
         }
     }
@@ -736,4 +738,47 @@ fn kept_colors_match_a_full_paint() {
     fs::remove_file(&path).unwrap();
     fs::remove_file(&fresh_path).unwrap();
     let _ = fs::remove_dir_all(&cache);
+}
+
+/// Keys typed in a doc comment while the syntax thread parses the
+/// Markdown of all doc comments land in its tree too.
+#[test]
+fn edits_during_a_layer_parse_are_applied_to_its_tree() {
+    let source: String = (0..1500)
+        .map(|i| format!("/// Item `{i}` and *more*\n/// # H{i}\nfn f{i}() {{}}\n"))
+        .collect();
+    let path = env::temp_dir().join(format!("nib-{}-layer-replay.rs", std::process::id()));
+    fs::write(&path, &source).unwrap();
+    let open = |path: &std::path::Path, background: bool| {
+        let mut editor = Editor::default();
+        editor.set_background_parsing(background);
+        editor.open(path).unwrap();
+        for plugin in ["helix", "rust", "markdown"] {
+            editor.load_plugin(&plugin_dir(plugin)).unwrap();
+        }
+        editor.resize(60, 20);
+        settle_in_background(&mut editor);
+        editor
+    };
+    let mut background = open(&path, true);
+    type_keys(&mut background, "wwwi`x` and **y** <esc>jA z<esc>");
+    settle_in_background(&mut background);
+
+    let edited = env::temp_dir().join(format!("nib-{}-layer-final.rs", std::process::id()));
+    fs::write(&edited, background.buffer().text().to_string()).unwrap();
+    let mut foreground = open(&edited, false);
+    foreground.view_mut().top_line = background.view().top_line;
+    foreground.view_mut().selection = background.view().selection.clone();
+    while foreground.catch_up() {}
+    let colors = |editor: &Editor| {
+        let mut grid = Grid::default();
+        editor.render(&mut grid);
+        (0..grid.height() - 2)
+            .flat_map(|y| (0..grid.width()).map(move |x| (x, y)))
+            .map(|(x, y)| (grid.cell(x, y).style.fg, grid.cell(x, y).style.bold))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(colors(&background), colors(&foreground));
+    fs::remove_file(&path).unwrap();
+    fs::remove_file(&edited).unwrap();
 }

@@ -135,8 +135,8 @@ impl State {
     /// until they are shown. Returns whether the colors may have changed.
     pub fn update_syntax(&mut self) -> bool {
         // Trees the syntax thread finished, for hidden buffers too.
-        let mut fresh = self.take_parses(None);
-        let mut changed = !fresh.is_empty();
+        let (mut fresh, layers) = self.take_parses(None);
+        let mut changed = layers || !fresh.is_empty();
         for index in self.shown_buffers() {
             if self.languages.in_background() {
                 self.start_parse(index);
@@ -232,21 +232,27 @@ impl State {
     }
 
     /// Takes the trees the syntax thread finished, after waiting for `job`
-    /// if given. Returns the buffers whose trees are now up to date.
-    fn take_parses(&mut self, job: Option<u64>) -> Vec<usize> {
+    /// if given. Returns the buffers whose own trees are now up to date,
+    /// and whether trees of injected layers changed colors.
+    fn take_parses(&mut self, job: Option<u64>) -> (Vec<usize>, bool) {
         let mut fresh = Vec::new();
+        let mut layers = false;
         for done in self.languages.finished(job) {
+            let id = done.id();
+            let own = |b: &Buffer| b.syntax.as_ref().is_some_and(|s| s.job() == Some(id));
+            let any = |b: &Buffer| b.syntax.as_ref().is_some_and(|s| s.jobs().contains(&id));
             // Parses of buffers since closed or parsed again are dropped.
-            let Some(index) = self.buffers.iter().position(|b| {
-                b.syntax
-                    .as_ref()
-                    .is_some_and(|s| s.job() == Some(done.id()))
-            }) else {
+            let Some(index) = self.buffers.iter().position(any) else {
                 continue;
             };
+            let is_own = own(&self.buffers[index]);
             let buffer = &mut self.buffers[index];
             let text = buffer.text().clone();
             let syntax = buffer.syntax.as_mut().expect("found by its job");
+            if !is_own {
+                layers |= self.languages.take_layer_parse(syntax, done, &text);
+                continue;
+            }
             match self.languages.take_parse(syntax, done, &text) {
                 Ok(true) => fresh.push(index),
                 Ok(false) => {}
@@ -259,11 +265,12 @@ impl State {
         for &index in &fresh {
             self.syntax_updated(index);
         }
-        fresh
+        (fresh, layers)
     }
 
     /// Waits until the syntax thread has parsed every shown buffer up to
-    /// its text, sending the parses still needed.
+    /// its text, and its injected layers near the screen, sending the parses
+    /// still needed.
     pub fn wait_for_parses(&mut self) {
         if !self.languages.in_background() {
             return;
@@ -272,12 +279,12 @@ impl State {
             let under_way = self
                 .buffers
                 .iter()
-                .find_map(|b| b.syntax.as_ref().and_then(|s| s.job()));
+                .find_map(|b| b.syntax.as_ref().and_then(|s| s.jobs().first().copied()));
             if let Some(job) = under_way {
                 self.take_parses(Some(job));
                 // No tree came: the thread is gone. Parse on this one.
                 for syntax in self.buffers.iter_mut().filter_map(|b| b.syntax.as_mut()) {
-                    if syntax.job() == Some(job) {
+                    if syntax.jobs().contains(&job) {
                         syntax.forget_job();
                         self.languages.set_background(None);
                     }
@@ -290,7 +297,7 @@ impl State {
             let started = self
                 .buffers
                 .iter()
-                .any(|b| b.syntax.as_ref().is_some_and(|s| s.job().is_some()));
+                .any(|b| b.syntax.as_ref().is_some_and(|s| !s.jobs().is_empty()));
             if !started {
                 return;
             }
@@ -865,6 +872,14 @@ impl Editor {
         {
             syntax.forget_colors();
         }
+    }
+
+    /// Whether the syntax thread has parses of buffers under way.
+    pub fn is_parsing(&self) -> bool {
+        self.state()
+            .buffers
+            .iter()
+            .any(|b| b.syntax.as_ref().is_some_and(|s| !s.jobs().is_empty()))
     }
 
     /// Waits for the syntax thread to parse the shown buffers, for tests.
