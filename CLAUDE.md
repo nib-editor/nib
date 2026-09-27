@@ -4,8 +4,8 @@ WASM プラグインで全機能を構成するモーダルエディタ。標準
 
 ## 構成
 
-- `core/` — エディタ本体（crate: `nib-core`）。バッファ・選択・描画・プラグインホストだけを持つ
-- `tui/` — ターミナルのフロントエンド（crate: `nib-editor`、実行ファイル `nib`。crates.io の `nib` は別の人のもの）。`nib-core` は端末に依存しない
+- `core/` — エディタ本体（crate: `nib-editor-core`、ライブラリ名 `nib_core`）。バッファ・選択・描画・プラグインホストだけを持つ
+- `tui/` — ターミナルのフロントエンド（crate: `nib-editor`、実行ファイル `nib`。crates.io の `nib` は別の人のもの）。コアは端末に依存しない
 - `api/` — プラグイン API の WIT 定義。コアと全 SDK の唯一の正
 - `sdk/<lang>/` — 言語別プラグイン SDK
 - `plugins/` — 標準プラグイン（`plugins/test/` はテスト用）。公開 API だけで書く（コア内部に依存しない）。wasm32-wasip2 専用の別ワークスペース

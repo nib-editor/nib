@@ -61,7 +61,7 @@ fn highlights_and_follows_edits() {
 }
 
 /// Prints where startup time goes, without and with the compile cache. Run
-/// with `cargo test --release -p nib-core --test syntax -- --ignored --nocapture`,
+/// with `cargo test --release -p nib-editor-core --test syntax -- --ignored --nocapture`,
 /// and `NIB_STARTUP_FILE` set to open another Rust file than `src/render.rs`.
 #[test]
 #[ignore]

@@ -1,6 +1,6 @@
 # nib の配布
 
-> ステータス: 合意済み（2026-09-28）
+> ステータス: 合意済み（2026-09-28）。仕組みは用意したが、リリースは 1.0.0 から出す。それまでは、ソースから入れる（README の「Installing」）。tap と bucket のリポジトリは作ってあり、リリースがあるまでは何もしない。mise の一覧への PR は、広く使われてから（下の「入れ方」）。
 
 `nib` の実行ファイルを、mise、Homebrew、Scoop、cargo から入れられるようにする。プラグインの配布（[plugin-install.md](plugin-install.md)）とは別の話。
 
@@ -30,15 +30,15 @@
 | mise | `mise use github:nib-editor/nib`（一覧に載ったら `mise use nib`） | リリースをそのまま使う |
 | Homebrew | `brew install nib-editor/tap/nib` | tap のリポジトリ `nib-editor/homebrew-tap` の formula |
 | Scoop | `scoop bucket add nib-editor https://github.com/nib-editor/scoop-bucket` のあと `scoop install nib` | bucket のリポジトリ `nib-editor/scoop-bucket` の manifest |
-| cargo | `cargo install nib-editor`、または `cargo binstall nib-editor` | crates.io の `nib-editor` と `nib-core` |
+| cargo | `cargo install nib-editor`、または `cargo binstall nib-editor` | crates.io の `nib-editor` と `nib-editor-core` |
 
-- 名前だけで入れられる公式の一覧（mise の registry、homebrew-core、Scoop の main / extras）には、審査がある。mise の一覧には最初のリリースのあとで PR を出す。homebrew-core と Scoop の公式の bucket は、知名度の条件を満たしてから申請する。それまでは、tap と bucket を一度登録すれば名前で入る。
+- 名前だけで入れられる公式の一覧（mise の registry、homebrew-core、Scoop の main / extras）には、審査がある。mise の一覧は、新しく載せるものに「すでに広く使われている（GitHub のスターがふつうは数千）」ことを求め、版を表示させて照らし合わせる確認（`mise test-tool`）もするので、`nib --version` を足してから、条件を満たしたときに PR を出す。homebrew-core と Scoop の公式の bucket は、知名度の条件を満たしてから申請する。それまでは、tap と bucket を一度登録すれば名前で入る。
 - tap と bucket の中身は、それぞれのリポジトリのワークフローが、nib の最新のリリースを見て毎日更新する（手でも動かせる）。nib のリポジトリからほかのリポジトリへ書き込むための鍵を持たずに済む。Scoop の manifest は、Scoop の `checkver` / `autoupdate` の書き方に従う。
 - Homebrew の formula は、ビルド済みの実行ファイルを入れる（tap なので、ソースからのビルドにしなくてよい）。
 
 ## crates.io
 
-- パッケージの名前は `nib-editor`（`nib` は別の人のクレートが使っている）。入る実行ファイルは `nib`。コアの `nib-core` も公開する。
+- パッケージの名前は `nib-editor`（`nib` は別の人のクレートが使っている）。入る実行ファイルは `nib`。コアも `nib-editor-core` として公開する（`nib-core` だと、別の人の `nib` の一部に見えるため）。ライブラリの名前は `nib_core` のままで、コードは変わらない。
 - crates.io からソースでビルドするときは、標準プラグインを作る手順（`cargo xtask build-plugins`）が走らない。公開するクレートに、ビルド済みの標準プラグイン（WASM、合わせて約 5 MB）を同梱する。
   - `cargo xtask package` が、`target/plugins/` の標準プラグインを `tui/plugins/` に写す（git には入れない）。`tui/build.rs` は、`target/plugins/` がなければ `tui/plugins/` から埋め込む。ライセンスのファイルも、両方のクレートの隣に写す。
 - コアは WIT を `api/wit/` から読んでいたが、crates.io のクレートは自分の外を読めない。Go の SDK と同じく写しを `core/wit/` に置き、`api/wit/` と同じであることを CI で確かめる。
@@ -48,4 +48,4 @@
 ## 版
 
 - 実行ファイルの版は workspace の `version`。リリースのタグはそれに `v` を付けたもの。
-- `nib-editor` が使う `nib-core` の版は、workspace の `version` と同じにそろえる（`[workspace.dependencies]` に書く）。
+- `nib-editor` が使う `nib-editor-core` の版は、workspace の `version` と同じにそろえる（`[workspace.dependencies]` に書く）。

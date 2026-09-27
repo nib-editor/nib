@@ -13,4 +13,4 @@ homepage = "https://github.com/nib-editor/nib"
 
 [workspace.dependencies]
 # The same version as the workspace's, which crates.io needs.
-nib-core = { path = "core", version = "0.9.9" }
+nib-editor-core = { path = "core", version = "0.9.9" }

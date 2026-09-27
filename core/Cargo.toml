@@ -1,5 +1,7 @@
 [package]
-name = "nib-core"
+# nib-core would read as part of the unrelated nib crate. The library is
+# still nib_core.
+name = "nib-editor-core"
 description = "Core of the nib editor: buffers, selections, rendering, and the plugin host"
 version.workspace = true
 edition.workspace = true
@@ -11,6 +13,9 @@ readme = "../README.md"
 keywords = ["editor", "wasm", "plugins", "tree-sitter"]
 categories = ["text-editors"]
 include = ["src/**", "wit/**", "LICENSE-*"]
+
+[lib]
+name = "nib_core"
 
 [dependencies]
 # Line endings are normalized to LF on load, so only LF counts as a line break.

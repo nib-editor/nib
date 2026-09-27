@@ -156,7 +156,7 @@ fn plugins_load_together_in_order() {
 }
 
 /// Prints the cost of sending one key through a plugin. Run with
-/// `cargo test --release -p nib-core --test plugins -- --ignored --nocapture`.
+/// `cargo test --release -p nib-editor-core --test plugins -- --ignored --nocapture`.
 #[test]
 #[ignore]
 fn key_latency() {

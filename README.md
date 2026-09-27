@@ -25,24 +25,7 @@ What works today, all as plugins on the same public API:
 
 ## Installing
 
-Prebuilt binaries for macOS, Linux, and Windows are on the [releases](https://github.com/nib-editor/nib/releases), with the standard plugins built in.
-
-```sh
-mise use -g github:nib-editor/nib                  # mise
-brew install nib-editor/tap/nib                    # Homebrew
-cargo binstall nib-editor                          # cargo-binstall, or build it: cargo install nib-editor
-```
-
-```powershell
-scoop bucket add nib-editor https://github.com/nib-editor/scoop-bucket
-scoop install nib                                  # Scoop
-```
-
-The crate is `nib-editor`, as `nib` is taken on crates.io; the command is `nib`. Building from source needs CMake.
-
-## Building
-
-You need Rust with the `wasm32-wasip2` target, CMake, and `curl`:
+There are no prebuilt binaries yet; they come with 1.0.0. Build and install `nib` from source, with Rust and its `wasm32-wasip2` target, CMake, and `curl`:
 
 ```sh
 rustup target add wasm32-wasip2
