@@ -71,11 +71,13 @@ description = "Shows the buffer's word count in the status line (an example in G
 nib plugin search            # 一覧のすべて
 nib plugin search status     # 名前か説明に status を含むもの（大文字と小文字は区別しない）
 nib plugin add wordcount
+nib plugin add wordcount@v0.1.0   # そのタグのリリース
 ```
 
 - 一覧は、使うたびに `https://raw.githubusercontent.com/nib-editor/plugins/main/plugins.toml` から `curl` で取る。手元には保存しない。小さいファイルなので、毎回取っても困らない。
 - `add` は、引数に `/`、`\`、`:`、`@` がなく、`.nib.tar.gz` で終わらなければ名前とみなす。一覧でその名前の `source` を引き、あとは取得元を直接渡したときと同じ手順で入れる。
   - 記録ファイルの取得元には、名前ではなく引いた `source` を書く。身元はあくまで取得元で、一覧は近道でしかない。`update` も一覧を見ずに、記録した取得元から取る。
+  - 名前のあとに `@タグ` を付けると、一覧の `source` にそのタグを付けて入れる（`wordcount@v0.1.0` → `nib-editor/plugin-example@v0.1.0`）。記録にもタグつきの取得元が残るので、`update` の対象にならない。タグを選べるのは `source` が GitHub のリポジトリで、一覧がタグを決めていないときだけ。
   - 取ったプラグインのマニフェストの名前が一覧の名前と違えば、入れない。一覧が指す先を取り違えていても、別の名前のものが入らないようにするため。
 - 一覧への登録は PR で受ける。一覧のリポジトリの CI は、項目がそろっていること、名前が正しい形で重ならず名前順であることだけを確かめる。一覧に載っていても中身を保証するものではなく、守りはインストール時の権限の確認に任せる。
 - サンプルとして、Go で書いたプラグイン [nib-editor/plugin-example](https://github.com/nib-editor/plugin-example)（`wordcount`）を載せてある。タグを push するとリリースの `.nib.tar.gz` を作るワークフローも持つので、プラグインを公開するときのひな形になる。
@@ -117,6 +119,5 @@ nib plugin remove foo
 
 ## あとで足すもの
 
-- **名前とタグでの導入。** `nib plugin add foo@v0.2.0` のように、名前でもタグを指定できるようにする。
 - **別名での導入。** 同じ名前のプラグインを並べたくなったら、入れるときに名前を付け替える方法を考える。コマンドの名前空間が変わるので、実際に困ってから決める。
 - **エディタの中からの操作。** Ctrl-g のメニューから更新するなど。

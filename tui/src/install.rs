@@ -329,6 +329,37 @@ pub fn is_name(text: &str) -> bool {
     !text.is_empty() && !text.contains(['/', '\\', ':', '@']) && !text.ends_with(SUFFIX)
 }
 
+/// A name in the index, and a release's tag if one follows `@`:
+/// `wordcount@v0.2.0`.
+pub fn name_and_tag(text: &str) -> Option<(&str, Option<&str>)> {
+    let (name, tag) = match text.split_once('@') {
+        Some((name, tag)) => (name, Some(tag)),
+        None => (text, None),
+    };
+    let tag_ok = tag.is_none_or(|t| !t.is_empty() && !t.contains(['/', '\\', '@']));
+    (is_name(name) && tag_ok).then_some((name, tag))
+}
+
+/// The index's `source` for a plugin, at release `tag`: only a GitHub
+/// repository has tags to choose, and only one the index does not pin.
+pub fn at_tag(source: &str, tag: &str) -> Result<String, String> {
+    match Source::parse(source)? {
+        Source::GitHub {
+            owner,
+            repo,
+            tag: None,
+        } => Ok(format!("{owner}/{repo}@{tag}")),
+        Source::GitHub {
+            tag: Some(pinned), ..
+        } => Err(format!(
+            "the index pins {source} to {pinned}, so no other tag can be chosen"
+        )),
+        Source::Url(_) | Source::File(_) => Err(format!(
+            "{source} is an archive, with no releases to choose a tag from"
+        )),
+    }
+}
+
 fn sha256(path: &Path) -> Result<String, String> {
     use sha2::{Digest, Sha256};
     let bytes = fs::read(path).map_err(|err| format!("{}: {err}", path.display()))?;
@@ -616,6 +647,28 @@ mod tests {
     fn packed(root: &Path, name: &str, version: &str, capabilities: &str) -> String {
         let dir = plugin(root, name, version, capabilities, API_VERSION);
         pack(&dir, root).unwrap().to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn names_take_a_tag() {
+        assert_eq!(name_and_tag("wordcount"), Some(("wordcount", None)));
+        assert_eq!(
+            name_and_tag("wordcount@v0.2.0"),
+            Some(("wordcount", Some("v0.2.0")))
+        );
+        for not in ["owner/repo@v1", "wordcount@", "a@b@c", "x.nib.tar.gz", ""] {
+            assert_eq!(name_and_tag(not), None, "{not}");
+        }
+        assert_eq!(
+            at_tag("nib-editor/plugin-example", "v0.2.0").unwrap(),
+            "nib-editor/plugin-example@v0.2.0"
+        );
+        assert!(at_tag("a/b@v1", "v2").unwrap_err().contains("pins"));
+        assert!(
+            at_tag("https://x.test/a.nib.tar.gz", "v2")
+                .unwrap_err()
+                .contains("archive")
+        );
     }
 
     #[test]

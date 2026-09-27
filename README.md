@@ -47,7 +47,7 @@ Plugins made by others are installed as prebuilt `.nib.tar.gz` archives. nib sho
 
 ```sh
 nib plugin search [WORD]       # find plugins in the index
-nib plugin add wordcount       # install by name from the index
+nib plugin add wordcount       # install by name from the index, or wordcount@v0.1.0
 nib plugin add owner/repo      # or from a GitHub release, a URL, or a file
 nib plugin update
 nib plugin list
