@@ -1,0 +1,131 @@
+# Builds nib for each platform when a tag like v0.9.9 is pushed, and puts
+# the archives on the GitHub release, which mise, cargo-binstall, the
+# Homebrew tap, and the Scoop bucket take (docs/distribution.md).
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag is the workspace's version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          test "v$version" = "$GITHUB_REF_NAME" || {
+            echo "the tag is $GITHUB_REF_NAME, but Cargo.toml says $version"
+            exit 1
+          }
+
+  build:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-15-intel
+          # An older Ubuntu, so the binary runs with older glibc too.
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04-arm
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2, ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      # The standard plugins, which nib embeds.
+      - run: cargo xtask build-plugins
+      - run: cargo build --release --locked -p nib-editor --target ${{ matrix.target }}
+      - name: Pack
+        shell: bash
+        run: |
+          name="nib-$GITHUB_REF_NAME-${{ matrix.target }}"
+          mkdir "$name"
+          cp LICENSE-MIT LICENSE-APACHE README.md "$name/"
+          if [ "${{ runner.os }}" = Windows ]; then
+            cp "target/${{ matrix.target }}/release/nib.exe" "$name/"
+            archive="$name.zip"
+            7z a "$archive" "$name" > /dev/null
+          else
+            cp "target/${{ matrix.target }}/release/nib" "$name/"
+            archive="$name.tar.gz"
+            tar czf "$archive" "$name"
+          fi
+          # "<hash>  <file>", as sha256sum writes it.
+          if command -v sha256sum > /dev/null; then
+            sha256sum "$archive" > "$archive.sha256"
+          else
+            shasum -a 256 "$archive" > "$archive.sha256"
+          fi
+          echo "archive=$archive" >> "$GITHUB_ENV"
+      - name: Check it runs
+        shell: bash
+        run: |
+          dir="nib-$GITHUB_REF_NAME-${{ matrix.target }}"
+          "$dir/nib" --help
+          "$dir/nib" plugin list | grep -q helix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            ${{ env.archive }}
+            ${{ env.archive }}.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish the release
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # Publishes to crates.io with Trusted Publishing, once the crates exist
+  # and trust this workflow, as the repository variable PUBLISH_CRATES says.
+  crates:
+    needs: release
+    if: vars.PUBLISH_CRATES == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+      - run: cargo xtask build-plugins
+      # The standard plugins and the licenses go into the crates.
+      - run: cargo xtask package
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - run: cargo publish --locked -p nib-core -p nib-editor
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

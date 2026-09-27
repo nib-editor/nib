@@ -41,7 +41,8 @@ nib-core.workspace = true
 # `cargo binstall nib-editor` takes the release's archive.
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/nib-v{ version }-{ target }{ archive-suffix }"
-bin-dir = "{ bin }{ binary-ext }"
+# The archive holds a directory named as it is.
+bin-dir = "nib-v{ version }-{ target }/{ bin }{ binary-ext }"
 pkg-fmt = "tgz"
 
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
