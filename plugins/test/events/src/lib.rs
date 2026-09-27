@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use nib_plugin::exports::nib::plugin::guest::{Guest, KeyResult};
 use nib_plugin::nib::plugin::events::{self, Event};
 use nib_plugin::nib::plugin::process::{self, Child, Stream};
-use nib_plugin::nib::plugin::prompt::Line;
+use nib_plugin::nib::plugin::prompt::{Action, Choices, Line};
 use nib_plugin::nib::plugin::types::{Edit, KeyEvent, UndoMode};
 use nib_plugin::nib::plugin::{commands, editor, files, timers};
 
@@ -22,9 +22,10 @@ thread_local! {
     static LOG: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
     static PROGRAMS: RefCell<Vec<Program>> = const { RefCell::new(Vec::new()) };
     static PROMPT: RefCell<Option<Line>> = const { RefCell::new(None) };
+    static CHOICES: RefCell<Option<Choices>> = const { RefCell::new(None) };
 }
 
-const COMMANDS: [&str; 18] = [
+const COMMANDS: [&str; 19] = [
     "echo",
     "call",
     "log",
@@ -43,6 +44,7 @@ const COMMANDS: [&str; 18] = [
     "load",
     "prompt",
     "close-prompt",
+    "choices",
 ];
 
 struct Events;
@@ -145,6 +147,13 @@ impl Guest for Events {
             "close-prompt" => {
                 PROMPT.set(None);
                 Ok(String::new())
+            }
+            // Offers choices taking next and accept, and says their id.
+            "choices" => {
+                let choices = Choices::new(&[Action::Next, Action::Accept]);
+                let id = choices.id();
+                CHOICES.set(Some(choices));
+                Ok(id.to_string())
             }
             _ => Err(format!("no command {name}")),
         }

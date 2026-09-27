@@ -15,11 +15,10 @@ use nib_plugin::exports::nib::plugin::guest::{Guest, KeyResult};
 use nib_plugin::nib::plugin::editor::{self, Buffer};
 use nib_plugin::nib::plugin::events::{BufferChange, Event};
 use nib_plugin::nib::plugin::process::{self, Child, Stream};
-use nib_plugin::nib::plugin::types::{
-    Edit, KeyCode, KeyEvent, Modifiers, SelRange, Selection, Span, UndoMode,
-};
+use nib_plugin::nib::plugin::prompt::{Action, Choices};
+use nib_plugin::nib::plugin::types::{Edit, KeyEvent, SelRange, Selection, Span, UndoMode};
 use nib_plugin::nib::plugin::ui::{self, Decoration, Note, Popup, PopupAnchor, Side};
-use nib_plugin::nib::plugin::{commands, input, syntax, timers};
+use nib_plugin::nib::plugin::{commands, syntax, timers};
 use serde_json::{Value, json};
 
 /// Servers used unless `[settings.servers]` says otherwise.
@@ -85,6 +84,8 @@ struct Diagnostics {
 
 struct Completion {
     popup: Popup,
+    /// What keys can do to them, as the base in use maps its keys.
+    choices: Choices,
     uri: String,
     /// Where the word being completed starts.
     start: u64,
@@ -111,11 +112,9 @@ struct Lsp {
     /// Files to ask diagnostics for once typing pauses, and the timer.
     pull_waiting: HashSet<String>,
     pull_timer: Option<u64>,
-    /// Closed by the next key.
-    hover: Option<Popup>,
+    /// Closed by the next key, as its choices take none.
+    hover: Option<(Popup, Choices)>,
     completion: Option<Completion>,
-    /// An input layer is pushed while a hover or completions are shown.
-    layer: bool,
     /// The keymap is in insert mode, where completions come on their own.
     inserting: bool,
     /// The timer that asks for completions after a pause in typing.
@@ -176,7 +175,6 @@ impl Guest for Plugin {
                 pull_timer: None,
                 hover: None,
                 completion: None,
-                layer: false,
                 inserting: false,
                 timer: None,
             })
@@ -184,16 +182,8 @@ impl Guest for Plugin {
         Ok(())
     }
 
-    fn handle_key(ev: KeyEvent) -> KeyResult {
-        with_lsp(|lsp| {
-            if lsp.completion.is_some() && lsp.completion_key(ev) {
-                return KeyResult::Handled;
-            }
-            // Anything else closes what is shown, and still does what it
-            // would have done.
-            lsp.close_popups();
-            KeyResult::Pass
-        })
+    fn handle_key(_ev: KeyEvent) -> KeyResult {
+        KeyResult::Pass
     }
 
     fn run_command(name: String, _args: String) -> Result<String, String> {
@@ -273,7 +263,10 @@ impl Guest for Plugin {
                     }
                 }
             }
-            Event::FilesListed(_) | Event::PromptChanged(_) | Event::PromptAction(_) => {}
+            // A key the base turned into an action, or any other key, which
+            // closes what is shown and still does what it would have done.
+            Event::PromptAction(act) => lsp.acted(act.id, act.action),
+            Event::FilesListed(_) | Event::PromptChanged(_) => {}
         })
     }
 }
@@ -672,8 +665,8 @@ impl Lsp {
             return;
         }
         let lines: Vec<Vec<Span>> = lines.iter().map(|line| vec![span(line, "")]).collect();
-        self.hover = Some(Popup::new(PopupAnchor::Position(offset), &lines));
-        self.take_keys();
+        let popup = Popup::new(PopupAnchor::Position(offset), &lines);
+        self.hover = Some((popup, Choices::new(&[])));
     }
 
     /// One line per language: "<language> ready", "starting", or
@@ -690,20 +683,27 @@ impl Lsp {
         running.chain(stopped).collect::<Vec<_>>().join("\n")
     }
 
-    fn take_keys(&mut self) {
-        if !self.layer {
-            input::push_layer();
-            self.layer = true;
-        }
-    }
-
     fn close_popups(&mut self) {
         self.hover = None;
         self.completion = None;
-        if self.layer {
-            input::pop_layer();
-            self.layer = false;
+    }
+
+    fn acted(&mut self, id: u64, action: Action) {
+        if self.hover.as_ref().is_some_and(|(_, c)| c.id() == id) {
+            self.hover = None;
         }
+        let Some(completion) = self.completion.as_mut().filter(|c| c.choices.id() == id) else {
+            return;
+        };
+        let step = match action {
+            Action::Next => 1,
+            Action::Previous => -1,
+            Action::Accept => return self.accept(),
+            _ => return self.close_popups(),
+        };
+        let count = completion.shown.len().min(COMPLETION_ROWS) as isize;
+        completion.selected = (completion.selected as isize + step).rem_euclid(count) as usize;
+        completion.show();
     }
 
     /// The primary cursor in the shown buffer, where insert mode types.
@@ -790,6 +790,7 @@ impl Lsp {
         }
         self.completion = Some(Completion {
             popup: Popup::new(PopupAnchor::Position(start), &[]),
+            choices: Choices::new(&[Action::Next, Action::Previous, Action::Accept]),
             uri,
             start,
             language,
@@ -797,7 +798,6 @@ impl Lsp {
             shown: Vec::new(),
             selected: 0,
         });
-        self.take_keys();
         self.narrow();
     }
 
@@ -824,31 +824,6 @@ impl Lsp {
         }
         completion.selected = completion.selected.min(completion.shown.len() - 1);
         completion.show();
-    }
-
-    /// Handles a key while completions are shown. Returns whether it was
-    /// one of theirs.
-    fn completion_key(&mut self, ev: KeyEvent) -> bool {
-        let Some(completion) = &mut self.completion else {
-            return false;
-        };
-        let ctrl = ev.modifiers == Modifiers::CTRL;
-        let plain = ev.modifiers.is_empty();
-        let step = match ev.code {
-            KeyCode::Char('n') if ctrl => 1,
-            KeyCode::Char('p') if ctrl => -1,
-            KeyCode::Down if plain => 1,
-            KeyCode::Up if plain => -1,
-            KeyCode::Tab | KeyCode::Enter if plain => {
-                self.accept();
-                return true;
-            }
-            _ => return false,
-        };
-        let count = completion.shown.len().min(COMPLETION_ROWS) as isize;
-        completion.selected = (completion.selected as isize + step).rem_euclid(count) as usize;
-        completion.show();
-        true
     }
 
     /// Replaces the word with the selected completion.

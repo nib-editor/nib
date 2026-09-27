@@ -2,12 +2,12 @@
 
 package input
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.0".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.1".
 
-//go:wasmimport nib:plugin/input@0.5.0 push-layer
+//go:wasmimport nib:plugin/input@0.5.1 push-layer
 //go:noescape
 func wasmimport_PushLayer()
 
-//go:wasmimport nib:plugin/input@0.5.0 pop-layer
+//go:wasmimport nib:plugin/input@0.5.1 pop-layer
 //go:noescape
 func wasmimport_PopLayer()

@@ -2,12 +2,12 @@
 
 package timers
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.0".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.1".
 
-//go:wasmimport nib:plugin/timers@0.5.0 set
+//go:wasmimport nib:plugin/timers@0.5.1 set
 //go:noescape
 func wasmimport_Set(ms0 uint32) (result0 uint64)
 
-//go:wasmimport nib:plugin/timers@0.5.0 cancel
+//go:wasmimport nib:plugin/timers@0.5.1 cancel
 //go:noescape
 func wasmimport_Cancel(id0 uint64)

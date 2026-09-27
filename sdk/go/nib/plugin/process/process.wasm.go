@@ -6,28 +6,28 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.0".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.1".
 
-//go:wasmimport nib:plugin/process@0.5.0 [resource-drop]child
+//go:wasmimport nib:plugin/process@0.5.1 [resource-drop]child
 //go:noescape
 func wasmimport_ChildResourceDrop(self0 uint32)
 
-//go:wasmimport nib:plugin/process@0.5.0 [method]child.close-stdin
+//go:wasmimport nib:plugin/process@0.5.1 [method]child.close-stdin
 //go:noescape
 func wasmimport_ChildCloseStdin(self0 uint32)
 
-//go:wasmimport nib:plugin/process@0.5.0 [method]child.id
+//go:wasmimport nib:plugin/process@0.5.1 [method]child.id
 //go:noescape
 func wasmimport_ChildID(self0 uint32) (result0 uint64)
 
-//go:wasmimport nib:plugin/process@0.5.0 [method]child.kill
+//go:wasmimport nib:plugin/process@0.5.1 [method]child.kill
 //go:noescape
 func wasmimport_ChildKill(self0 uint32)
 
-//go:wasmimport nib:plugin/process@0.5.0 [method]child.write
+//go:wasmimport nib:plugin/process@0.5.1 [method]child.write
 //go:noescape
 func wasmimport_ChildWrite(self0 uint32, data0 *uint8, data1 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport nib:plugin/process@0.5.0 spawn
+//go:wasmimport nib:plugin/process@0.5.1 spawn
 //go:noescape
 func wasmimport_Spawn(command0 *uint8, command1 uint32, args0 *string, args1 uint32, cwd0 uint32, cwd1 *uint8, cwd2 uint32, result *cm.Result[string, Child, string])

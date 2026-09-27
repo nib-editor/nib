@@ -174,7 +174,7 @@ LSP プラグイン（[lsp.md](lsp.md)）のコマンドを呼ぶ。
 | `Space k` | `lsp.hover`（カーソル位置の説明） |
 | 挿入モードの `Ctrl-x` | `lsp.complete`（補完の候補を出す） |
 
-補完の一覧を開いているあいだのキーは、LSP プラグインが受け持つ（[lsp.md](lsp.md) の「補完」）。
+補完の一覧を開いているあいだは、helix が `Ctrl-n` / `↓`（次）、`Ctrl-p` / `↑`（前）、`Tab` / `Enter`（確定）を一覧への操作として送る（[plugin-api.md](plugin-api.md) の「文字を打つ欄のない一覧」、[lsp.md](lsp.md) の「補完」）。ほかのキーはふつうに効き、一覧は閉じる。
 
 ## M4.2 で足すキー
 

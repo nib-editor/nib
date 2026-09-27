@@ -292,3 +292,36 @@ fn the_base_edits_prompts_its_own_way() {
     // The keys never reached helix's own: nothing was typed into the text.
     assert_eq!(editor.buffer().text().to_string(), "");
 }
+
+#[test]
+fn choices_hear_the_base_and_cancel_on_other_keys() {
+    let mut editor = Editor::default();
+    editor.load_plugin(&plugin_dir("helix")).unwrap();
+    editor.load_plugin(&plugin_dir("test-events")).unwrap();
+    editor.call_command("test-events.edit", "abc").unwrap();
+    log(&mut editor);
+    let id = editor.call_command("test-events.choices", "").unwrap();
+    // Helix's keys for completions, when the choices take them.
+    editor.handle_key(KeyEvent::ctrl('n'));
+    editor.handle_key(KeyEvent::new(KeyCode::Enter));
+    // Previous is not theirs: the key does what it does, after a cancel.
+    editor.handle_key(KeyEvent::ctrl('p'));
+    type_keys(&mut editor, "ix");
+    let log = log(&mut editor);
+    let prompt: Vec<&String> = log.iter().filter(|e| e.starts_with("prompt")).collect();
+    let cancel = format!("prompt {id} Action::Cancel");
+    assert_eq!(
+        prompt,
+        [
+            &format!("prompt {id} Action::Next"),
+            &format!("prompt {id} Action::Accept"),
+            &cancel,
+            &cancel,
+            &cancel,
+        ]
+    );
+    // The cancel comes before the edit its key made.
+    let last_cancel = log.iter().rposition(|e| *e == cancel).unwrap();
+    let typed = log.iter().position(|e| e.contains("=x")).unwrap();
+    assert!(last_cancel < typed, "{log:#?}");
+}

@@ -1,4 +1,4 @@
-package nib:plugin@0.5.0;
+package nib:plugin@0.5.1;
 
 interface types {
     /// A UTF-8 byte offset into a buffer.
@@ -370,16 +370,33 @@ interface prompt {
         set-hint: func(hint: string);
     }
 
+    /// A list shown without a line to type into, such as completions, which
+    /// its owner draws. While it is the newest one open and no prompt is,
+    /// the base turns its own keys for `actions` into `prompt-action`
+    /// events for it. A key that does not act on it is handled as usual,
+    /// and sends `cancel` before the events it causes, as the list no
+    /// longer fits. Dropping it closes it.
+    resource choices {
+        constructor(actions: list<action>);
+        /// The id its events carry.
+        id: func() -> u64;
+    }
+
     /// The prompt keys go to; `mine` if the caller opened it.
     record state { id: u64, label: string, text: string, cursor: u32, mine: bool }
+
+    /// Choices keys may act on: their id, and the actions they take.
+    record offer { id: u64, actions: list<action> }
 
     /// For the base: the prompt keys go to, if one is open.
     active: func() -> option<state>;
     /// For the base: replaces the active prompt's text; its owner gets
     /// `prompt-changed`.
     edit: func(text: string, cursor: u32);
-    /// For the base: sends `action` to the active prompt's owner as
-    /// `prompt-action`.
+    /// For the base: the newest choices, while no prompt is open.
+    offered: func() -> option<offer>;
+    /// For the base: sends `action` as `prompt-action` to the owner of the
+    /// active prompt, or else of the offered choices.
     act: func(action: action);
 }
 

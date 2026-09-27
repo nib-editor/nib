@@ -16,7 +16,7 @@ use crate::history::UndoMode;
 use crate::input::{KeyCode, KeyEvent};
 use crate::layout;
 use crate::process::Stream;
-use crate::prompt::{Action, Prompt};
+use crate::prompt::{Action, Choices, Prompt};
 use crate::selection::{Range, Selection};
 use crate::syntax::{self as trees, NodeInfo};
 use crate::ui::{Panel, Popup, PopupAnchor, Side, Span, StatusItem, StyledLine};
@@ -37,6 +37,7 @@ pub(crate) mod bindings {
             "nib:plugin/ui.panel": super::PanelHandle,
             "nib:plugin/ui.popup": super::PopupHandle,
             "nib:plugin/prompt.line": super::PromptHandle,
+            "nib:plugin/prompt.choices": super::ChoicesHandle,
             "nib:plugin/process.child": super::ChildHandle,
         },
     });
@@ -62,6 +63,10 @@ pub struct PopupHandle;
 /// A prompt as seen by the plugin that opened it. The resource's rep is the
 /// prompt id.
 pub struct PromptHandle;
+
+/// Choices as seen by the plugin that opened them. The resource's rep is
+/// their id.
+pub struct ChoicesHandle;
 
 /// A program as seen by the plugin that started it. The resource's rep is
 /// the process id.
@@ -748,14 +753,7 @@ pub(crate) fn wit_event(event: &Event) -> events::Event {
         }),
         Event::PromptAction { prompt, action } => events::Event::PromptAction(events::PromptAct {
             id: u64::from(*prompt),
-            action: match action {
-                Action::Accept => wit_prompt::Action::Accept,
-                Action::Cancel => wit_prompt::Action::Cancel,
-                Action::Next => wit_prompt::Action::Next,
-                Action::Previous => wit_prompt::Action::Previous,
-                Action::Complete => wit_prompt::Action::Complete,
-                Action::CompleteBack => wit_prompt::Action::CompleteBack,
-            },
+            action: wit_action(*action),
         }),
     }
 }
@@ -997,6 +995,53 @@ impl wit_prompt::HostLine for PluginData {
     }
 }
 
+impl wit_prompt::HostChoices for PluginData {
+    fn new(&mut self, actions: Vec<wit_prompt::Action>) -> HostResult<Resource<ChoicesHandle>> {
+        let owner = self.plugin;
+        let state = self.state()?;
+        state.last_prompt_id += 1;
+        let id = state.last_prompt_id;
+        let actions = actions.into_iter().map(action).collect();
+        state.choices.push(Choices { id, owner, actions });
+        Ok(Resource::new_own(id))
+    }
+
+    fn id(&mut self, choices: Resource<ChoicesHandle>) -> HostResult<u64> {
+        Ok(u64::from(choices.rep()))
+    }
+
+    fn drop(&mut self, choices: Resource<ChoicesHandle>) -> HostResult<()> {
+        // Outside a call, the plugin is being stopped and its choices are
+        // removed anyway.
+        if let Some(state) = self.state.as_mut() {
+            state.choices.retain(|c| c.id != choices.rep());
+        }
+        Ok(())
+    }
+}
+
+fn action(action: wit_prompt::Action) -> Action {
+    match action {
+        wit_prompt::Action::Accept => Action::Accept,
+        wit_prompt::Action::Cancel => Action::Cancel,
+        wit_prompt::Action::Next => Action::Next,
+        wit_prompt::Action::Previous => Action::Previous,
+        wit_prompt::Action::Complete => Action::Complete,
+        wit_prompt::Action::CompleteBack => Action::CompleteBack,
+    }
+}
+
+fn wit_action(action: Action) -> wit_prompt::Action {
+    match action {
+        Action::Accept => wit_prompt::Action::Accept,
+        Action::Cancel => wit_prompt::Action::Cancel,
+        Action::Next => wit_prompt::Action::Next,
+        Action::Previous => wit_prompt::Action::Previous,
+        Action::Complete => wit_prompt::Action::Complete,
+        Action::CompleteBack => wit_prompt::Action::CompleteBack,
+    }
+}
+
 impl wit_prompt::Host for PluginData {
     fn active(&mut self) -> HostResult<Option<wit_prompt::State>> {
         let caller = self.plugin;
@@ -1025,24 +1070,31 @@ impl wit_prompt::Host for PluginData {
         Ok(())
     }
 
-    fn act(&mut self, action: wit_prompt::Action) -> HostResult<()> {
+    fn offered(&mut self) -> HostResult<Option<wit_prompt::Offer>> {
         let state = self.state()?;
-        let Some(prompt) = state.prompts.last() else {
-            return Ok(());
-        };
-        let action = match action {
-            wit_prompt::Action::Accept => Action::Accept,
-            wit_prompt::Action::Cancel => Action::Cancel,
-            wit_prompt::Action::Next => Action::Next,
-            wit_prompt::Action::Previous => Action::Previous,
-            wit_prompt::Action::Complete => Action::Complete,
-            wit_prompt::Action::CompleteBack => Action::CompleteBack,
+        if !state.prompts.is_empty() {
+            return Ok(None);
+        }
+        Ok(state.choices.last().map(|c| wit_prompt::Offer {
+            id: u64::from(c.id),
+            actions: c.actions.iter().copied().map(wit_action).collect(),
+        }))
+    }
+
+    fn act(&mut self, wanted: wit_prompt::Action) -> HostResult<()> {
+        let state = self.state()?;
+        let (id, owner) = match (state.prompts.last(), state.choices.last()) {
+            (Some(prompt), _) => (prompt.id, prompt.owner),
+            (None, Some(choices)) => {
+                state.choices_acted = true;
+                (choices.id, choices.owner)
+            }
+            (None, None) => return Ok(()),
         };
         let event = Event::PromptAction {
-            prompt: prompt.id,
-            action,
+            prompt: id,
+            action: action(wanted),
         };
-        let owner = prompt.owner;
         state.push_event(Some(owner), event);
         Ok(())
     }

@@ -93,7 +93,9 @@ Keys go down a stack of layers, top first. `input.push-layer()` puts one on top 
 
 A line to type into, such as a picker's query: `prompt.line(label)` opens one, drawn above the status line with `label` in front, and dropping it closes it. While it is the newest one open, keys go to the base in use (helix, by default), which edits the text its own way; you hear about it through events, only to you: `prompt-changed` with the text and cursor, and `prompt-action` for what a key asked, such as `accept` (Enter), `cancel` (Escape), `next` / `previous` (Down / Up), and `complete` / `complete-back` (Tab / Shift-Tab). Closing it on `accept` or `cancel` is yours to do. Lists of candidates are yours to draw, in a panel.
 
-A base answers keys while `prompt.active()` says a prompt is open: `prompt.edit(text, cursor)` changes its text, `prompt.act(action)` passes on an action, and a key it passes gets the core's default (typing, Backspace, arrows, Home, End, Enter, Escape, Tab).
+For a list without a line to type into, such as completions, open `prompt.choices(actions)` with the actions it takes (`next`, `previous`, `accept`) and draw it yourself. Keys go on as usual; the base turns its own keys for those actions into `prompt-action` events for you, and any other key is handled as usual and sends you `cancel` first, as the list no longer fits.
+
+A base answers keys while `prompt.active()` says a prompt is open: `prompt.edit(text, cursor)` changes its text, `prompt.act(action)` passes on an action, and a key it passes gets the core's default (typing, Backspace, arrows, Home, End, Enter, Escape, Tab). With no prompt open, `prompt.offered()` names the choices open and what they take, and `prompt.act` sends them its keys' actions.
 
 ### Commands
 
@@ -252,7 +254,7 @@ To make it findable by name, add it to [nib-editor/plugins](https://github.com/n
 crate-type = ["cdylib"]
 
 [dependencies]
-nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.5.0" }
+nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.5.1" }
 ```
 
 Implement `nib_plugin::exports::nib::plugin::guest::Guest` and export it with `nib_plugin::export!(YourType)`. The API is under `nib_plugin::nib::plugin::<interface>`. Build for `wasm32-wasip2`; `nib plugin build` does it.
@@ -263,4 +265,4 @@ Built with [TinyGo](https://tinygo.org/) 0.42 or later, since Go itself cannot m
 
 ### Versions
 
-SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.5.0`, `sdk/go/v0.5.0`.
+SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.5.1`, `sdk/go/v0.5.1`.

@@ -292,9 +292,16 @@ interface prompt {
         set-hint: func(hint: string); // 右端に出す。"3/10" など
     }
 
+    resource choices {
+        constructor(actions: list<action>);  // 補完の一覧など、文字を打つ欄のない一覧
+        id: func() -> u64;
+    }
+
     record state { id: u64, label: string, text: string, cursor: u32, mine: bool }
+    record offer { id: u64, actions: list<action> }
     active: func() -> option<state>;       // ベースが使う
     edit: func(text: string, cursor: u32); // ベースが使う
+    offered: func() -> option<offer>;      // ベースが使う
     act: func(action: action);             // ベースが使う
 }
 ```
@@ -309,6 +316,16 @@ interface prompt {
 - `set` は持ち主が補完などで文字列を書き換えるためのもので、`prompt-changed` は出ない。
 - 一覧（picker の候補、補完の候補）は、持ち主がパネルやポップアップで描く。欄が持つのは 1 行の文字と右端の hint だけ。
 
+### 文字を打つ欄のない一覧（choices）
+
+LSP の補完やホバーのように、文字は本文に打ちながら、一覧の操作だけを受けたいもの。
+
+- 持ち主は `prompt.choices(actions)` で、受け取る操作の意味を並べて開く（補完なら `next`、`previous`、`accept`）。捨てると閉じる。描くのは持ち主。
+- キーはいつもどおり入力スタックを流れる。ベースは `prompt.offered()` で開いている一覧と、それが受け取る操作を知り、自分の作法のキー（helix なら `C-n` / `C-p` / 上下 / Tab / Enter）を `prompt.act` で送る。入力欄が開いているあいだは、`offered` は何も返さない。
+- 一覧に操作を送らなかったキーは、ふつうに処理したうえで、コアが持ち主に `cancel` を送る。そのキーが起こしたイベント（本文の変更など）より前に届く。一覧はもう合わないので、持ち主は閉じる。操作を 1 つも受けない一覧（ホバー）は、次のキーで閉じる。
+- ベースが対応していなければ、どのキーでも閉じる。入力欄と違って既定のキーはない（キーの意味を本文の編集と取り合うため）。
+- 入力欄と id の数え方を共有し、同じ `prompt-action` で届く。
+- 入力スタックに層を積んでキーを先取りする方法は、プラグインの画面がベースの作法に合わなくなるので、一覧には使わない。
 ## イベント
 
 - イベントは guest の `on-event(ev)` で届く。

@@ -17,7 +17,7 @@ use crate::input::{KeyCode, KeyEvent};
 use crate::layout;
 use crate::plugin::{PluginId, Plugins};
 use crate::process::Processes;
-use crate::prompt::{Outcome, Prompt};
+use crate::prompt::{Action, Choices, Outcome, Prompt};
 use crate::selection::Selection;
 use crate::syntax::{BufferSyntax, Languages};
 use crate::ui::{Panel, Popup, StatusItem, Theme};
@@ -58,7 +58,12 @@ pub(crate) struct State {
     pub last_popup_id: u32,
     /// Prompts, oldest first; keys go to the last one.
     pub prompts: Vec<Prompt>,
+    /// Choices, oldest first; the base acts on the last one. They share
+    /// ids with prompts, as their events do.
+    pub choices: Vec<Choices>,
     pub last_prompt_id: u32,
+    /// The base acted on the last choices during the key being handled.
+    pub choices_acted: bool,
     /// Events waiting for the current call to end, with the plugin they
     /// are for, or `None` for every plugin that listens to their kind.
     pub events: VecDeque<(Option<PluginId>, Event)>,
@@ -808,6 +813,7 @@ impl State {
         self.panels.retain(|panel| panel.owner != plugin);
         self.popups.retain(|popup| popup.owner != plugin);
         self.prompts.retain(|prompt| prompt.owner != plugin);
+        self.choices.retain(|choices| choices.owner != plugin);
         for buffer in &mut self.buffers {
             buffer.remove_decorations(plugin);
         }
@@ -963,7 +969,9 @@ impl Default for Editor {
                 popups: Vec::new(),
                 last_popup_id: 0,
                 prompts: Vec::new(),
+                choices: Vec::new(),
                 last_prompt_id: 0,
+                choices_acted: false,
                 events: VecDeque::new(),
                 commands: Vec::new(),
                 timers: Vec::new(),
@@ -1133,7 +1141,7 @@ impl Editor {
             state.menu = Some(Menu::Main);
             state.menu_cursor = 0;
         } else if self.state().prompts.is_empty() {
-            self.send_to_plugins(key);
+            self.send_to_plugins_offering(key);
         } else {
             self.prompt_key(key);
         }
@@ -1469,6 +1477,27 @@ impl Editor {
         };
         let owner = prompt.owner;
         state.push_event(Some(owner), event);
+    }
+
+    /// Sends the key down the input stack. Choices the base did not act on
+    /// hear `cancel` before whatever the key caused, as they no longer fit.
+    fn send_to_plugins_offering(&mut self, key: KeyEvent) {
+        let state = self.state_mut();
+        let Some((id, owner)) = state.choices.last().map(|c| (c.id, c.owner)) else {
+            return self.send_to_plugins(key);
+        };
+        state.flush_changes();
+        let before = state.events.len();
+        state.choices_acted = false;
+        self.send_to_plugins(key);
+        let state = self.state_mut();
+        if !state.choices_acted && state.choices.iter().any(|c| c.id == id) {
+            let cancel = Event::PromptAction {
+                prompt: id,
+                action: Action::Cancel,
+            };
+            state.events.insert(before, (Some(owner), cancel));
+        }
     }
 
     fn send_to_plugins(&mut self, key: KeyEvent) {

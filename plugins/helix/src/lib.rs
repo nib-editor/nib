@@ -240,6 +240,13 @@ impl Helix {
         if prompts::active().is_some() {
             return prompt_key(ev);
         }
+        // Keys for a list another plugin shows, such as completions.
+        if let Some(offer) = prompts::offered()
+            && let Some(action) = choice_action(ev).filter(|a| offer.actions.contains(a))
+        {
+            prompts::act(action);
+            return KeyResult::Handled;
+        }
         let view = editor::active_view();
         let version = view.buffer().version();
         let was_inserting = self.mode == Mode::Insert;
@@ -1261,6 +1268,20 @@ fn prompt_key(ev: KeyEvent) -> KeyResult {
     };
     prompts::edit(&edited.0, edited.1 as u32);
     KeyResult::Handled
+}
+
+/// What a key does to a list shown without a line to type into, as in
+/// Helix's completion menu.
+fn choice_action(ev: KeyEvent) -> Option<Action> {
+    let plain = ev.modifiers.is_empty();
+    match (ctrl(&ev), ev.code) {
+        (Some('n'), _) => Some(Action::Next),
+        (Some('p'), _) => Some(Action::Previous),
+        (_, KeyCode::Down) if plain => Some(Action::Next),
+        (_, KeyCode::Up) if plain => Some(Action::Previous),
+        (_, KeyCode::Tab | KeyCode::Enter) if plain => Some(Action::Accept),
+        _ => None,
+    }
 }
 
 fn act(action: Action) -> KeyResult {

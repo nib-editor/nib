@@ -6,44 +6,60 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.0".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.1".
 
-//go:wasmimport nib:plugin/prompt@0.5.0 [resource-drop]line
+//go:wasmimport nib:plugin/prompt@0.5.1 [resource-drop]line
 //go:noescape
 func wasmimport_LineResourceDrop(self0 uint32)
 
-//go:wasmimport nib:plugin/prompt@0.5.0 [constructor]line
+//go:wasmimport nib:plugin/prompt@0.5.1 [constructor]line
 //go:noescape
 func wasmimport_NewLine(label0 *uint8, label1 uint32) (result0 uint32)
 
-//go:wasmimport nib:plugin/prompt@0.5.0 [method]line.cursor
+//go:wasmimport nib:plugin/prompt@0.5.1 [method]line.cursor
 //go:noescape
 func wasmimport_LineCursor(self0 uint32) (result0 uint32)
 
-//go:wasmimport nib:plugin/prompt@0.5.0 [method]line.id
+//go:wasmimport nib:plugin/prompt@0.5.1 [method]line.id
 //go:noescape
 func wasmimport_LineID(self0 uint32) (result0 uint64)
 
-//go:wasmimport nib:plugin/prompt@0.5.0 [method]line.set
+//go:wasmimport nib:plugin/prompt@0.5.1 [method]line.set
 //go:noescape
 func wasmimport_LineSet(self0 uint32, text0 *uint8, text1 uint32, cursor0 uint32)
 
-//go:wasmimport nib:plugin/prompt@0.5.0 [method]line.set-hint
+//go:wasmimport nib:plugin/prompt@0.5.1 [method]line.set-hint
 //go:noescape
 func wasmimport_LineSetHint(self0 uint32, hint0 *uint8, hint1 uint32)
 
-//go:wasmimport nib:plugin/prompt@0.5.0 [method]line.text
+//go:wasmimport nib:plugin/prompt@0.5.1 [method]line.text
 //go:noescape
 func wasmimport_LineText(self0 uint32, result *string)
 
-//go:wasmimport nib:plugin/prompt@0.5.0 active
+//go:wasmimport nib:plugin/prompt@0.5.1 [resource-drop]choices
+//go:noescape
+func wasmimport_ChoicesResourceDrop(self0 uint32)
+
+//go:wasmimport nib:plugin/prompt@0.5.1 [constructor]choices
+//go:noescape
+func wasmimport_NewChoices(actions0 *Action, actions1 uint32) (result0 uint32)
+
+//go:wasmimport nib:plugin/prompt@0.5.1 [method]choices.id
+//go:noescape
+func wasmimport_ChoicesID(self0 uint32) (result0 uint64)
+
+//go:wasmimport nib:plugin/prompt@0.5.1 active
 //go:noescape
 func wasmimport_Active(result *cm.Option[State])
 
-//go:wasmimport nib:plugin/prompt@0.5.0 edit
+//go:wasmimport nib:plugin/prompt@0.5.1 edit
 //go:noescape
 func wasmimport_Edit(text0 *uint8, text1 uint32, cursor0 uint32)
 
-//go:wasmimport nib:plugin/prompt@0.5.0 act
+//go:wasmimport nib:plugin/prompt@0.5.1 offered
+//go:noescape
+func wasmimport_Offered(result *cm.Option[Offer])
+
+//go:wasmimport nib:plugin/prompt@0.5.1 act
 //go:noescape
 func wasmimport_Act(action0 uint32)

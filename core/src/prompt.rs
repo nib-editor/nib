@@ -31,6 +31,15 @@ pub(crate) struct Prompt {
     pub hint: String,
 }
 
+/// A list without a line to type into, such as completions: keys the base
+/// turns into its actions go to its owner.
+#[derive(Clone, Debug)]
+pub(crate) struct Choices {
+    pub id: u32,
+    pub owner: PluginId,
+    pub actions: Vec<Action>,
+}
+
 /// What a key the base left did to a prompt.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Outcome {
