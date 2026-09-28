@@ -158,6 +158,15 @@ impl wit_buffer::Host for PluginData {
             .map_err(|err| format!("{path}: {err}")))
     }
 
+    fn create(&mut self, name: String) -> HostResult<Resource<BufferHandle>> {
+        let owner = self.plugin;
+        let state = self.state()?;
+        state.buffers.push(Buffer::owned(owner, name));
+        let index = state.buffers.len() - 1;
+        state.push_event(None, Event::BufferOpened(index));
+        Ok(Resource::new_own(index as u32))
+    }
+
     fn all(&mut self) -> HostResult<Vec<Resource<BufferHandle>>> {
         let buffers = &self.state()?.buffers;
         Ok((0..buffers.len())
@@ -244,6 +253,62 @@ impl wit_buffer::HostBuffer for PluginData {
             .map(|path| path.to_string_lossy().into_owned()))
     }
 
+    fn name(&mut self, buffer: Resource<BufferHandle>) -> HostResult<String> {
+        Ok(self.buffer(&buffer)?.name())
+    }
+
+    fn set_editable(&mut self, buffer: Resource<BufferHandle>, editable: bool) -> HostResult<()> {
+        let caller = self.plugin;
+        if let Some(plugin) = self.buffer(&buffer)?.plugin.as_mut()
+            && plugin.owner == caller
+        {
+            plugin.editable = editable;
+        }
+        Ok(())
+    }
+
+    fn set_keys(
+        &mut self,
+        buffer: Resource<BufferHandle>,
+        keys: Vec<(String, String)>,
+    ) -> HostResult<Result<(), String>> {
+        let caller = self.plugin;
+        let prefix = format!("{}.", self.plugin_name()?);
+        let Some(plugin) = self.buffer(&buffer)?.plugin.as_mut() else {
+            return Ok(Err("only a plugin's own buffers have keys".into()));
+        };
+        if plugin.owner != caller {
+            return Ok(Err(
+                "only the plugin that made a buffer gives it keys".into()
+            ));
+        }
+        for (key, command) in &keys {
+            if let Err(err) = key
+                .split_whitespace()
+                .map(str::parse::<KeyEvent>)
+                .collect::<Result<Vec<_>, _>>()
+            {
+                return Ok(Err(format!("{key}: {err}")));
+            }
+            if !command.starts_with(&prefix) {
+                return Ok(Err(format!(
+                    "{key}: {command} is not one of this plugin's commands"
+                )));
+            }
+        }
+        plugin.keys = keys;
+        Ok(Ok(()))
+    }
+
+    fn keys(&mut self, buffer: Resource<BufferHandle>) -> HostResult<Vec<(String, String)>> {
+        Ok(self
+            .buffer(&buffer)?
+            .plugin
+            .as_ref()
+            .map(|p| p.keys.clone())
+            .unwrap_or_default())
+    }
+
     fn modified(&mut self, buffer: Resource<BufferHandle>) -> HostResult<bool> {
         Ok(self.buffer(&buffer)?.is_modified())
     }
@@ -298,6 +363,48 @@ impl wit_buffer::HostBuffer for PluginData {
                 .and_then(|start| buffer.find_all(&pattern, start, pos(end)?))
                 .map(|found| found.into_iter().map(|(s, e)| range(s, e)).collect()),
         )
+    }
+
+    fn apply(
+        &mut self,
+        buffer: Resource<BufferHandle>,
+        base_version: u64,
+        edits: Vec<wit::Edit>,
+        undo: wit::UndoMode,
+    ) -> HostResult<Result<(), wit::Error>> {
+        let caller = self.plugin;
+        self.buffer(&buffer)?;
+        let index = buffer.rep() as usize;
+        let state = self.state()?;
+        let buffer = &state.buffers[index];
+        if !buffer.editable() && buffer.owner() != Some(caller) {
+            state.message = Some(format!("{} is read-only", state.buffers[index].name()));
+            return Ok(Err(wit::Error::ReadOnly));
+        }
+        let shown = state.view.buffer == index;
+        let selection = if shown {
+            state.view.selection.clone()
+        } else {
+            Selection::point(0)
+        };
+        let result = (|| {
+            let edits = edits
+                .into_iter()
+                .map(|edit| Ok(Edit::new(pos(edit.start)?, pos(edit.end)?, edit.text)))
+                .collect::<Result<Vec<_>, Error>>()?;
+            let mode = match undo {
+                wit::UndoMode::NewStep => UndoMode::NewStep,
+                wit::UndoMode::Merge => UndoMode::Merge,
+            };
+            state.buffers[index].apply(base_version, edits, &selection, None, mode)
+        })();
+        let result = result.map(|change| {
+            state.sync_views(index, &change.changes);
+            if shown {
+                state.view.selection = change.selection;
+            }
+        });
+        wit_result(result)
     }
 
     fn save(
@@ -438,6 +545,10 @@ impl wit_view::HostView for PluginData {
     ) -> HostResult<Result<(), wit::Error>> {
         let state = self.view_state(&view)?;
         let buffer = &mut state.buffers[state.view.buffer];
+        if !buffer.editable() {
+            state.message = Some(format!("{} is read-only", buffer.name()));
+            return Ok(Err(wit::Error::ReadOnly));
+        }
         let result = (|| {
             let edits = edits
                 .into_iter()
@@ -849,7 +960,10 @@ pub(crate) fn wit_event(event: &Event) -> events::Event {
     match event {
         Event::BufferOpened(index) => events::Event::BufferOpened(buffer(*index)),
         Event::BufferSaved(index) => events::Event::BufferSaved(buffer(*index)),
-        Event::BufferClosed(path) => events::Event::BufferClosed(path.clone()),
+        Event::BufferClosed { path, name } => events::Event::BufferClosed(events::ClosedBuffer {
+            path: path.clone(),
+            name: name.clone(),
+        }),
         Event::SyntaxUpdated {
             buffer: index,
             version,
@@ -1376,6 +1490,10 @@ impl PluginData {
         let state = self.view_state(view)?;
         let index = state.view.buffer;
         let buffer = &mut state.buffers[index];
+        if !buffer.editable() {
+            state.message = Some(format!("{} is read-only", buffer.name()));
+            return Ok(None);
+        }
         let Some(change) = (if undo { buffer.undo() } else { buffer.redo() }) else {
             return Ok(None);
         };
@@ -1424,6 +1542,7 @@ fn wit_result<T>(result: Result<T, Error>) -> HostResult<Result<T, wit::Error>> 
             Error::OverlappingEdits => wit::Error::OverlappingEdits,
             Error::InvalidSelection => wit::Error::InvalidSelection,
             Error::InvalidPattern(message) => wit::Error::InvalidPattern(message),
+            Error::ReadOnly => wit::Error::ReadOnly,
             other => return Err(wasmtime::Error::msg(other.to_string())),
         })),
     }

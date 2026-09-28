@@ -203,6 +203,31 @@ impl Guest for Plugin {
 
 nib_plugin::export!(Plugin);
 
+/// The keys a plugin's buffer cannot take from vim in normal mode:
+/// motions, counts, search, the command line, visual mode, yanking,
+/// windows, scrolling, marks, and the leader (docs/vim.md).
+fn vim_keeps(key: &KeyEvent, leader: &KeyEvent) -> bool {
+    if key == leader {
+        return true;
+    }
+    match (plain(key), ctrl(key), key.code) {
+        (Some(c), ..) => "hjklwWbBeE0123456789^$gG/?nN*#:fFtT;,%{}HMLvVy\"'`mz".contains(c),
+        (_, Some(c), _) => "wdufbeyoiv[c".contains(c),
+        (None, None, code) => matches!(
+            code,
+            KeyCode::Escape
+                | KeyCode::Up
+                | KeyCode::Down
+                | KeyCode::Left
+                | KeyCode::Right
+                | KeyCode::Home
+                | KeyCode::End
+                | KeyCode::PageUp
+                | KeyCode::PageDown
+        ),
+    }
+}
+
 fn space() -> KeyEvent {
     KeyEvent {
         code: KeyCode::Char(' '),
@@ -374,11 +399,21 @@ impl Vim {
         if !self.keys.is_empty() || self.replaying > 0 {
             return None;
         }
-        let keymap = match self.mode {
-            Mode::Normal => &self.keymaps.normal,
-            Mode::Insert | Mode::Replace => &self.keymaps.insert,
-            Mode::Visual(_) => &self.keymaps.visual,
+        let mut keymap = match self.mode {
+            Mode::Normal => self.keymaps.normal.clone(),
+            Mode::Insert | Mode::Replace => self.keymaps.insert.clone(),
+            Mode::Visual(_) => self.keymaps.visual.clone(),
         };
+        // In normal mode, the shown buffer's keys come before vim's own,
+        // but for those vim keeps; the settings' keys come first.
+        if self.mode == Mode::Normal && !self.sequence.is_waiting() {
+            let mut table = keys::buffer_keymap(&|key| vim_keeps(key, &self.leader));
+            if !table.is_empty() {
+                keys::merge(&mut table, keymap);
+                keymap = table;
+            }
+        }
+        let keymap = &keymap;
         let waiting = self.sequence.is_waiting();
         let in_leader = !waiting
             && ev == self.leader
@@ -406,7 +441,12 @@ impl Vim {
                 Some(true)
             }
             Step::Run(Binding::Command(name), _) => {
-                call_or_show(&name);
+                // Its own, as its listings' keys run: a call would find
+                // vim busy.
+                match name.as_str() {
+                    "vim.close-listing" => base_kit::close_listing(),
+                    _ => call_or_show(&name),
+                }
                 Some(true)
             }
             Step::Run(Binding::Keys(keys), _) => {

@@ -96,7 +96,7 @@ Vim と Neovim で既定が違うところは、Neovim に合わせる（`nvim -
 | `:norm[al] keys` | 行ごとに normal モードのキー |
 | `:w [path]` `:wq` `:x` `:q[!]` `:qa` `:wa` `:up` | 保存と終了 |
 | `:e path` `:sp` `:vs` `:on` `:clo` `:bn` `:bp` `:bd[!]` | ファイルとビュー |
-| `:reg` | レジスタの中身を出す |
+| `:reg` | レジスタの中身を `*registers*` に出す（下に分割して。`q` で閉じる） |
 | `:noh` | 何もしない（検索の強調がないため） |
 | `:config` `:config-reload`、`:lsp.definition` のような名前 | nib のコマンド（[base.md](base.md) の「コマンドを名前で呼ぶ」） |
 
@@ -107,6 +107,18 @@ Vim と Neovim で既定が違うところは、Neovim に合わせる（`nvim -
 ## リーダー
 
 `<leader>` は既定で Space。プラグインの `[keys]` の `f` は `Space f`、`c d` は `Space c d`。`plugins/vim.toml` の `leader` で変えられる（`leader = ","`）。Vim の Space（右へ動く）は、リーダーに譲る。
+
+## プラグインのバッファのキー
+
+プラグインのバッファ（[plugin-buffers.md](plugin-buffers.md)）が決めたキーは、normal モードでは vim のキーより先に効く。ただし、次のキーは vim のまま。プラグインの作者は、これを避けてキーを選ぶ（`Enter`、`q`、`s`、`d` のような、一覧の中では使わないキー）。
+
+- 動きと数: `h` `j` `k` `l` `w` `W` `b` `B` `e` `E` `0`〜`9` `^` `$` `g` `G` `f` `F` `t` `T` `;` `,` `%` `{` `}` `H` `M` `L`、矢印、`Home` `End` `PageUp` `PageDown`
+- 検索: `/` `?` `n` `N` `*` `#`
+- コマンドライン、visual モード、コピー、印: `:` `v` `V` `y` `"` `'` `` ` `` `m` `z`
+- Ctrl: `C-w`（ウィンドウ）、`C-d` `C-u` `C-f` `C-b` `C-e` `C-y`（スクロール）、`C-o` `C-i`（ジャンプ）、`C-v`、`C-[` `C-c`
+- `Esc` とリーダー
+
+`plugins/vim.toml` の `[settings.keys.*]` で決めたキーは、バッファのキーより先に効く。
 
 ## 設定
 

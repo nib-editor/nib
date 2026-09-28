@@ -73,7 +73,7 @@ fn the_nano_plugin_passes_its_tests() {
 
 #[test]
 fn the_vim_plugin_passes_its_tests() {
-    passes_its_tests("vim", "vim", 12);
+    passes_its_tests("vim", "vim", 13);
 }
 
 #[test]

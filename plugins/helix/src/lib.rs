@@ -237,6 +237,37 @@ impl Guest for Plugin {
 
 nib_plugin::export!(Plugin);
 
+/// The keys a plugin's buffer cannot take from helix in normal mode:
+/// motions, counts, search, the command line, selecting, yanking, the
+/// goto, match, and view prefixes, windows, scrolling, and the leader
+/// (docs/keymap.md).
+fn helix_keeps(key: &KeyEvent) -> bool {
+    let ctrl = |c| {
+        *key == KeyEvent {
+            code: KeyCode::Char(c),
+            modifiers: Modifiers::CTRL,
+        }
+    };
+    match key.code {
+        KeyCode::Char(c) if key.modifiers.is_empty() => {
+            "hjklwWbBeE0123456789gfFtT/?nN*:%vxX;,y[]mz ".contains(c)
+        }
+        KeyCode::Char(c) => ctrl(c) && "wdufboi".contains(c),
+        code => matches!(
+            code,
+            KeyCode::Escape
+                | KeyCode::Up
+                | KeyCode::Down
+                | KeyCode::Left
+                | KeyCode::Right
+                | KeyCode::Home
+                | KeyCode::End
+                | KeyCode::PageUp
+                | KeyCode::PageDown
+        ),
+    }
+}
+
 fn plain(ev: &KeyEvent) -> Option<char> {
     match ev.code {
         KeyCode::Char(c) if ev.modifiers.is_empty() => Some(c),
@@ -368,7 +399,16 @@ impl Helix {
             Mode::Insert => &self.keymaps.insert,
             Mode::Select => &self.keymaps.select,
         };
-        let binding = lookup(keymap, &ev)?.clone();
+        let binding = match lookup(keymap, &ev) {
+            Some(binding) => binding.clone(),
+            // In normal mode, the shown buffer's keys come before helix's
+            // own, but for those helix keeps.
+            None if self.mode == Mode::Normal && self.count.is_none() => {
+                let table = base_kit::keys::buffer_keymap(&helix_keeps);
+                lookup(&table, &ev)?.clone()
+            }
+            None => return None,
+        };
         Some(self.run_binding(view, binding, vec![ev]))
     }
 

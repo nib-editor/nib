@@ -1,7 +1,7 @@
 # Data only: a grammar and its queries, no plugin code.
 name = "bash"
 version = "0.1.0"
-api = "0.6"
+api = "0.7"
 
 [[languages]]
 name = "bash"

@@ -251,7 +251,7 @@ impl Guest for Plugin {
         set_ranges(&view, vec![point(r.head)], 0);
         with_emacs(|emacs| {
             let mut keymap = bind::keymap();
-            bind::merge(&mut keymap, user.clone());
+            keys::merge(&mut keymap, user.clone());
             emacs.keymap = keymap;
             emacs.user = user;
         });
@@ -335,6 +335,12 @@ pub fn key_label(key: &KeyEvent) -> String {
         )),
     }
     label
+}
+
+/// Shows `help` in `*Help*`, below, with the focus in it so `q` closes it
+/// (as with `help-window-select` on).
+fn show_help(help: &str) {
+    base_kit::show_listing("*Help*", help, &[("q", "emacs.quit-window")]);
 }
 
 fn keys_label(keys: &[KeyEvent]) -> String {
@@ -507,7 +513,18 @@ impl Emacs {
                 return;
             }
         }
-        match self.sequence.key(&self.keymap, ev) {
+        let buffer_keys = keys::buffer_keymap(&emacs_keeps);
+        let step = if buffer_keys.is_empty() {
+            self.sequence.key(&self.keymap, ev)
+        } else {
+            // The shown buffer's keys, as a major mode's, over the global
+            // ones; the settings' over both.
+            let mut table = self.keymap.clone();
+            keys::merge(&mut table, buffer_keys);
+            keys::merge(&mut table, self.user.clone());
+            self.sequence.key(&table, ev)
+        };
+        match step {
             Step::Wait => {}
             Step::Dropped(typed) => {
                 self.arg = Arg::None;
@@ -518,6 +535,11 @@ impl Emacs {
                     self.failed = true;
                     ui::show_message(&format!("{} is undefined", keys_label(&typed)));
                 }
+            }
+            // Its own, as its help's keys run: a call would find Emacs
+            // busy.
+            Step::Run(Binding::Command(name), _) if name.starts_with("emacs.") => {
+                self.execute(&name["emacs.".len()..], ev)
             }
             Step::Run(Binding::Command(name), _) if name.contains('.') => {
                 self.arg = Arg::None;
@@ -545,8 +567,14 @@ impl Emacs {
     /// `C-c`: plugins' keys, with the settings' `C-c` table over them.
     fn enter_leader(&mut self, ev: KeyEvent) {
         let mut table = leader::keymap(&[], input::leader_keys()).keymap;
+        // The shown buffer's keys under C-c, as C-c C-c in magit.
+        if let Some(Binding::Prefix(buffer)) =
+            keys::lookup(&keys::buffer_keymap(&emacs_keeps), &ev).cloned()
+        {
+            keys::merge(&mut table, buffer);
+        }
         if let Some(Binding::Prefix(user)) = keys::lookup(&self.user, &ev) {
-            bind::merge(&mut table, user.clone());
+            keys::merge(&mut table, user.clone());
         }
         self.sequence.enter(table, vec![ev]);
         self.show_hints();
@@ -1003,24 +1031,25 @@ impl Emacs {
                     }
                 }
                 Some(Binding::Command(name)) => {
-                    let what = bind::describe(name).unwrap_or("");
-                    let message = format!(
-                        "{} runs the command {name}{}",
-                        keys_label(&typed[..=i]),
-                        if what.is_empty() {
-                            String::new()
-                        } else {
-                            format!(": {what}")
-                        }
-                    );
-                    return ui::show_message(&message);
+                    let mut help =
+                        format!("{} runs the command {name}.\n", keys_label(&typed[..=i]));
+                    let bound = bind::keys_of(name);
+                    if !bound.is_empty() {
+                        help.push_str(&format!("\nIt is bound to {}.\n", bound.join(", ")));
+                    }
+                    if let Some(what) = bind::describe(name) {
+                        help.push_str(&format!("\n{what}.\n"));
+                    }
+                    return show_help(&help);
                 }
                 _ => break,
             }
         }
         let label = keys_label(&typed);
         if typed.len() == 1 && plain(&typed[0]).is_some() {
-            ui::show_message(&format!("{label} runs the command self-insert-command"));
+            show_help(&format!(
+                "{label} runs the command self-insert-command.\n\nInsert the character typed.\n"
+            ));
         } else {
             ui::show_message(&format!("{label} is undefined"));
         }
@@ -1094,6 +1123,12 @@ impl Emacs {
             ui::set_status("pending", Side::Right, -10, &line);
         }
     }
+}
+
+/// The keys a plugin's buffer cannot take from Emacs: quitting, `C-x`, and
+/// `M-x`.
+fn emacs_keeps(key: &KeyEvent) -> bool {
+    matches!(ctrl(key), Some('g' | 'x')) || meta(key) == Some('x')
 }
 
 /// What a key does to a list shown without a line to type into, such as

@@ -660,14 +660,13 @@ impl State {
     pub fn close_buffer_at(&mut self, index: usize, force: bool) -> Result<(), String> {
         let buffer = &self.buffers[index];
         if buffer.is_modified() && !force {
-            let name = buffer
-                .path()
-                .map_or("[scratch]".into(), |p| p.display().to_string());
+            let name = buffer.name();
             return Err(format!(
                 "{name} has unsaved changes; {{\"force\": true}} drops them"
             ));
         }
         let path = buffer.path().map(|p| p.to_string_lossy().into_owned());
+        let name = buffer.name();
         let previous = self.next_open(index, false);
         let shown = if previous == index {
             self.buffers.push(Buffer::default());
@@ -695,7 +694,7 @@ impl State {
             _ => true,
         });
         self.buffers[index] = Buffer::closed();
-        self.push_event(None, Event::BufferClosed(path));
+        self.push_event(None, Event::BufferClosed { path, name });
         Ok(())
     }
 
@@ -734,6 +733,10 @@ impl State {
             return;
         }
         let index = self.view.buffer;
+        if !self.buffers[index].editable() {
+            self.message = Some(format!("{} is read-only", self.buffers[index].name()));
+            return;
+        }
         let edits = self
             .view
             .selection
@@ -912,6 +915,12 @@ impl State {
         self.choices.retain(|choices| choices.owner != plugin);
         for buffer in &mut self.buffers {
             buffer.remove_decorations(plugin);
+        }
+        let owned: Vec<usize> = (0..self.buffers.len())
+            .filter(|&i| !self.buffers[i].is_closed() && self.buffers[i].owner() == Some(plugin))
+            .collect();
+        for index in owned {
+            let _ = self.close_buffer_at(index, true);
         }
         self.commands.retain(|command| command.owner != plugin);
         self.timers.retain(|timer| timer.owner != plugin);

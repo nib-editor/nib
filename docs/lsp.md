@@ -24,6 +24,7 @@ M3.4 の続きで作るもの:
 | `lsp.hover` | カーソル位置の説明をポップアップに出す（helix の `Space k`） |
 | `lsp.definition` | 定義へ移動する（helix の `gd`） |
 | `lsp.complete` | カーソルの前の語の補完を出す（helix の挿入モードの `Ctrl-x`） |
+| `lsp.diagnostics` | 開いているファイルの診断を `*diagnostics*` に並べ、下に分割して出す（`path:行:列: 重さ: メッセージ`）。診断が変わるたびに書き直す。一覧の中では `Enter`（`lsp.goto-diagnostic`）でその位置へ、上のビューで飛び、`q`（`lsp.close-diagnostics`）で閉じる（[plugin-buffers.md](plugin-buffers.md)） |
 | `lsp.status` | 動いているサーバーを、言語ごとに `rust ready` のような 1 行で返す（`starting` / `ready` / 落ちたものは `stopped`）。キーには割り当てていない。使うときは `plugins/helix.toml` の `[settings.keys.normal]`（[keymap.md](keymap.md) の「設定」）に、`space = { l = "lsp.status" }` のように書く |
 
 ## サーバーの設定

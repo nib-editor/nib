@@ -80,7 +80,7 @@ pub fn read_manifest(dir: &Path) -> Result<PluginManifest, Error> {
 const FALLBACK_BASE: &str = "helix";
 
 /// The version of `nib:plugin` this host implements.
-pub const API_VERSION: &str = "0.6";
+pub const API_VERSION: &str = "0.7";
 
 /// How often the epoch advances during a plugin call. Timeouts are
 /// accurate to about one tick.

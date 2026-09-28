@@ -35,7 +35,7 @@ pub fn keymap(own: &[KeyEvent], suggested: Vec<LeaderKey>) -> Leader {
 
 /// Puts `command` at `keys`, making tables on the way, unless something
 /// is there already or on the way.
-fn place(keymap: &mut Keymap, keys: &[KeyEvent], command: &str) -> bool {
+pub(crate) fn place(keymap: &mut Keymap, keys: &[KeyEvent], command: &str) -> bool {
     let (first, rest) = keys.split_first().expect("keys are never empty");
     let at = keymap.iter().position(|(key, _)| key == first);
     match (at, rest.is_empty()) {

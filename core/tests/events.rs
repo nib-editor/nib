@@ -374,3 +374,88 @@ fn plugins_put_keys_under_the_leader() {
     type_keys(&mut editor, "3d ");
     assert!(!screen(&editor).join("\n").contains("t  …"));
 }
+
+#[test]
+fn a_plugin_owns_the_buffers_it_makes() {
+    let mut editor = editor_with(&["test-events", "test-insert"]);
+    let call = |editor: &mut Editor, name: &str, args: &str| {
+        editor.call_command(&format!("test-events.{name}"), args)
+    };
+    call(&mut editor, "own", "*mine*").unwrap();
+    // Written while not shown, then shown.
+    call(&mut editor, "own-write", "listed\n").unwrap();
+    assert_eq!(editor.buffer().text().to_string(), "");
+    call(&mut editor, "own-show", "").unwrap();
+    assert_eq!(editor.buffer().text().to_string(), "listed\n");
+    assert_eq!(call(&mut editor, "name", ""), Ok("*mine*".into()));
+    assert!(log(&mut editor).contains(&"opened *mine*".to_string()));
+
+    // Others cannot write it until its owner says so.
+    type_keys(&mut editor, "x");
+    assert_eq!(editor.buffer().text().to_string(), "listed\n");
+    assert_eq!(editor.message(), Some("*mine* is read-only"));
+    call(&mut editor, "own-editable", "true").unwrap();
+    type_keys(&mut editor, "x");
+    assert_eq!(editor.buffer().text().to_string(), "xlisted\n");
+    // Never modified, so quitting does not ask.
+    assert_eq!(call(&mut editor, "modified", ""), Ok("false".into()));
+
+    // Keys name its own commands.
+    call(
+        &mut editor,
+        "own-keys",
+        "ret=test-events.echo,C-c C-c=test-events.log",
+    )
+    .unwrap();
+    assert_eq!(
+        call(&mut editor, "keys", ""),
+        Ok("ret=test-events.echo,C-c C-c=test-events.log".into())
+    );
+    assert!(call(&mut editor, "own-keys", "q=picker.files").is_err());
+    assert!(call(&mut editor, "own-keys", "nokey=test-events.echo").is_err());
+
+    // It closes when its owner stops.
+    log(&mut editor);
+    assert!(call(&mut editor, "panic", "").is_err());
+    assert_eq!(editor.buffer().text().to_string(), "");
+    assert!(log(&mut editor).contains(&"closed *mine*".to_string()));
+}
+
+#[test]
+fn bases_give_a_plugin_buffer_its_keys_but_those_they_keep() {
+    // The base, a key it keeps, and one it gives up.
+    for (base, kept, given) in [
+        ("helix", 'j', 'q'),
+        ("vim", 'j', 'q'),
+        ("nano", '\0', 'j'),
+        ("emacs", '\0', 'j'),
+    ] {
+        let mut editor = Editor::default();
+        let mut config = Config::default();
+        config.core.base = base.into();
+        editor.apply_config(config);
+        for name in [base, "test-events"] {
+            editor.load_plugin(&plugin_dir(name)).unwrap();
+        }
+        editor.resize(40, 6);
+        for (name, args) in [
+            ("own", "*mine*"),
+            ("own-write", "a\nb\n"),
+            ("own-keys", "q=test-events.note,j=test-events.note"),
+            ("own-show", ""),
+        ] {
+            editor
+                .call_command(&format!("test-events.{name}"), args)
+                .unwrap();
+        }
+        log(&mut editor);
+        editor.handle_key(key(given));
+        assert_eq!(log(&mut editor), ["note "], "{base}");
+        if kept != '\0' {
+            editor.handle_key(key(kept));
+            assert!(log(&mut editor).is_empty(), "{base}");
+            let cursor = editor.view().cursor(editor.buffer().text());
+            assert_eq!(editor.buffer().line_of(cursor).unwrap(), 1, "{base}");
+        }
+    }
+}

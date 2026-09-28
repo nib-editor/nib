@@ -18,8 +18,9 @@ use nib_plugin::nib::plugin::process::{self, Child, Stream};
 use nib_plugin::nib::plugin::prompt::{Action, Choices};
 use nib_plugin::nib::plugin::types::{Edit, KeyEvent, SelRange, Selection, Span, UndoMode};
 use nib_plugin::nib::plugin::ui::{self, Decoration, Note, Popup, PopupAnchor, Side};
+use nib_plugin::nib::plugin::view::{self, Direction, Toward};
 use nib_plugin::nib::plugin::{commands, syntax, timers};
-use nib_plugin::nib::plugin::{editor, input, view};
+use nib_plugin::nib::plugin::{editor, input};
 use serde_json::{Value, json};
 
 /// Servers used unless `[settings.servers]` says otherwise.
@@ -43,6 +44,8 @@ const COMPLETION_DELAY_MS: u32 = 150;
 /// How long typing pauses before diagnostics are asked for again, from
 /// servers that give them when asked.
 const PULL_DELAY_MS: u32 = 200;
+/// The buffer that lists diagnostics.
+const LIST_NAME: &str = "*diagnostics*";
 
 struct Server {
     language: String,
@@ -83,6 +86,19 @@ struct Diagnostics {
     items: Vec<Value>,
 }
 
+/// The `*diagnostics*` buffer, and where each of its lines points.
+struct List {
+    buffer: Buffer,
+    places: Vec<Place>,
+}
+
+struct Place {
+    uri: String,
+    line: u32,
+    character: u32,
+    utf8: bool,
+}
+
 struct Completion {
     popup: Popup,
     /// What keys can do to them, as the base in use maps its keys.
@@ -120,6 +136,7 @@ struct Lsp {
     inserting: bool,
     /// The timer that asks for completions after a pause in typing.
     timer: Option<u64>,
+    list: Option<List>,
 }
 
 thread_local! {
@@ -163,6 +180,9 @@ impl Guest for Plugin {
         commands::register("definition", "Go to the definition at the cursor");
         commands::register("complete", "Show completions for the word at the cursor");
         commands::register("status", "Say which language servers run");
+        commands::register("diagnostics", "List the diagnostics of open files");
+        commands::register("goto-diagnostic", "Go to the diagnostic on this line");
+        commands::register("close-diagnostics", "Close the list of diagnostics");
         LSP.with_borrow_mut(|lsp| {
             *lsp = Some(Lsp {
                 commands: servers,
@@ -178,6 +198,7 @@ impl Guest for Plugin {
                 completion: None,
                 inserting: input::current_mode().typing,
                 timer: None,
+                list: None,
             })
         });
         Ok(())
@@ -201,6 +222,15 @@ impl Guest for Plugin {
                 .map(|()| "null".into()),
             "complete" => lsp.complete(false).map(|()| "null".into()),
             "status" => Ok(lsp.status()),
+            "diagnostics" => {
+                lsp.open_list();
+                Ok("null".into())
+            }
+            "goto-diagnostic" => lsp.goto_listed().map(|()| "null".into()),
+            "close-diagnostics" => {
+                lsp.close_list();
+                Ok("null".into())
+            }
             _ => Err(format!("no command {name}")),
         })
     }
@@ -243,7 +273,11 @@ impl Guest for Plugin {
                 });
                 lsp.failed.insert(server.language);
             }
-            Event::BufferClosed(Some(path)) => lsp.closed(&path),
+            Event::BufferClosed(closed) => match closed.path {
+                Some(path) => lsp.closed(&path),
+                None if closed.name == LIST_NAME => lsp.list = None,
+                None => {}
+            },
             // Whichever base runs: completions come while typing.
             Event::ModeChanged(mode) => {
                 lsp.inserting = mode.typing;
@@ -268,8 +302,7 @@ impl Guest for Plugin {
             // A key the base turned into an action, or any other key, which
             // closes what is shown and still does what it would have done.
             Event::PromptAction(act) => lsp.acted(act.id, act.action),
-            Event::BufferClosed(None)
-            | Event::SyntaxUpdated(_)
+            Event::SyntaxUpdated(_)
             | Event::Custom(_)
             | Event::FilesListed(_)
             | Event::PromptChanged(_) => {}
@@ -372,6 +405,7 @@ impl Lsp {
         self.pulled.remove(&uri);
         self.counts.remove(&uri);
         self.pull_waiting.remove(&uri);
+        self.write_list();
     }
 
     fn changed(&mut self, change: &BufferChange) {
@@ -632,6 +666,143 @@ impl Lsp {
         }
         self.counts.insert(uri.to_string(), counts);
         self.show_counts();
+        self.write_list();
+    }
+
+    /// Shows the list of diagnostics below the focused view, made if need
+    /// be.
+    fn open_list(&mut self) {
+        if self.list.is_none() {
+            let buffer = buffer::create(LIST_NAME);
+            let keys = [
+                ("ret", "lsp.goto-diagnostic"),
+                ("q", "lsp.close-diagnostics"),
+            ];
+            let keys: Vec<(String, String)> = keys
+                .iter()
+                .map(|(key, command)| (key.to_string(), command.to_string()))
+                .collect();
+            buffer
+                .set_keys(&keys)
+                .expect("keys of this plugin's commands");
+            self.list = Some(List {
+                buffer,
+                places: Vec::new(),
+            });
+            self.write_list();
+        }
+        let list = self.list.as_ref().expect("made above");
+        if view::active().buffer().name() != LIST_NAME {
+            view::split(Direction::Horizontal);
+            view::active().show(&list.buffer);
+        }
+    }
+
+    /// Writes every diagnostic into the list, if it is open: a line each,
+    /// by file and position.
+    fn write_list(&mut self) {
+        let Some(list) = &mut self.list else {
+            return;
+        };
+        let mut entries = Vec::new();
+        for diagnostics in [&self.pushed, &self.pulled] {
+            for (uri, found) in diagnostics {
+                for item in &found.items {
+                    let start = &item["range"]["start"];
+                    let place = Place {
+                        uri: uri.clone(),
+                        line: start["line"].as_u64().unwrap_or(0) as u32,
+                        character: start["character"].as_u64().unwrap_or(0) as u32,
+                        utf8: found.utf8,
+                    };
+                    let severity = item["severity"]
+                        .as_u64()
+                        .map_or(0, |s| (s.clamp(1, 4) - 1) as usize);
+                    let message = first_line(item["message"].as_str().unwrap_or_default());
+                    entries.push((place, severity, message.to_string()));
+                }
+            }
+        }
+        entries.sort_by(|(a, ..), (b, ..)| {
+            (&a.uri, a.line, a.character).cmp(&(&b.uri, b.line, b.character))
+        });
+        let mut text = String::new();
+        let mut decorations = Vec::new();
+        for (place, severity, message) in &entries {
+            let path = uri_to_path(&place.uri, &self.cwd);
+            let path = path
+                .strip_prefix(&format!("{}/", self.cwd))
+                .unwrap_or(&path);
+            text.push_str(&format!(
+                "{path}:{}:{}: ",
+                place.line + 1,
+                place.character + 1
+            ));
+            let name = SEVERITIES[*severity];
+            let start = text.len() as u64;
+            text.push_str(name);
+            decorations.push(Decoration {
+                start,
+                end: text.len() as u64,
+                style: format!("diagnostic.{name}"),
+            });
+            text.push_str(&format!(": {message}\n"));
+        }
+        if entries.is_empty() {
+            text.push_str("no diagnostics\n");
+        }
+        list.places = entries.into_iter().map(|(place, ..)| place).collect();
+        let buffer = &list.buffer;
+        let old = buffer.slice(0, buffer.len()).unwrap_or_default();
+        // Only what differs, so the cursor stays on its line.
+        let (start, end, new) = difference(&old, &text);
+        if start != end || !new.is_empty() {
+            let edit = Edit {
+                start: start as u64,
+                end: end as u64,
+                text: new.to_string(),
+            };
+            let _ = buffer.apply(buffer.version(), &[edit], UndoMode::NewStep);
+        }
+        ui::set_decorations(buffer, "lsp", &decorations);
+    }
+
+    /// Goes to the diagnostic on the cursor's line of the list, in the view
+    /// the list was opened from.
+    fn goto_listed(&mut self) -> Result<(), String> {
+        let list = self.list.as_ref().ok_or("no list of diagnostics")?;
+        let (buffer, cursor) = Self::cursor();
+        if buffer.name() != LIST_NAME {
+            return Err("not in the list of diagnostics".into());
+        }
+        let line = buffer.line_of(cursor).unwrap_or(0) as usize;
+        let Some(place) = list.places.get(line) else {
+            return Ok(());
+        };
+        let (uri, line, character, utf8) =
+            (place.uri.clone(), place.line, place.character, place.utf8);
+        view::focus(Toward::Next);
+        let target = buffer::open(&uri_to_path(&uri, &self.cwd))?;
+        let view = view::active();
+        view.show(&target);
+        let at = position::from_lsp(&target, line, character, utf8);
+        let head = target.next_grapheme(at).unwrap_or(at);
+        let _ = view.set_selection(&Selection {
+            ranges: vec![SelRange { anchor: at, head }],
+            primary: 0,
+        });
+        Ok(())
+    }
+
+    /// Closes the list and, when it is in a view of its own, the view.
+    fn close_list(&mut self) {
+        let Some(list) = self.list.take() else {
+            return;
+        };
+        if view::active().buffer().name() == LIST_NAME {
+            let _ = view::close();
+        }
+        let _ = list.buffer.close(true);
     }
 
     /// Errors and warnings in every file, in the status line.
@@ -1027,6 +1198,31 @@ fn hover_lines(contents: &Value) -> Vec<String> {
     lines
 }
 
+/// Where `old` and `new` differ: the byte range in `old` and what replaces
+/// it.
+fn difference<'a>(old: &str, new: &'a str) -> (usize, usize, &'a str) {
+    let mut start = old
+        .bytes()
+        .zip(new.bytes())
+        .take_while(|(a, b)| a == b)
+        .count();
+    while !old.is_char_boundary(start) || !new.is_char_boundary(start) {
+        start -= 1;
+    }
+    let most = old.len().min(new.len()) - start;
+    let mut common = old
+        .bytes()
+        .rev()
+        .zip(new.bytes().rev())
+        .take(most)
+        .take_while(|(a, b)| a == b)
+        .count();
+    while !old.is_char_boundary(old.len() - common) || !new.is_char_boundary(new.len() - common) {
+        common -= 1;
+    }
+    (start, old.len() - common, &new[start..new.len() - common])
+}
+
 fn first_line(text: &str) -> &str {
     text.lines().next().unwrap_or_default()
 }
@@ -1112,6 +1308,15 @@ mod tests {
         let windows = path_to_uri("C:\\work\\x.rs");
         assert_eq!(windows, "file:///C:/work/x.rs");
         assert_eq!(uri_to_path(&windows, "C:\\work"), "x.rs");
+    }
+
+    #[test]
+    fn differences_cover_what_changed() {
+        assert_eq!(difference("a\nb\nc\n", "a\nx\nc\n"), (2, 3, "x"));
+        assert_eq!(difference("ab", "ab"), (2, 2, ""));
+        assert_eq!(difference("", "ab"), (0, 0, "ab"));
+        assert_eq!(difference("aab", "ab"), (1, 2, ""));
+        assert_eq!(difference("é", "è"), (0, 2, "è"));
     }
 
     #[test]

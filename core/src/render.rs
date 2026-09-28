@@ -188,9 +188,7 @@ impl Editor {
                 // The name of the view above.
                 Separator::Row { x, y, width, view } => {
                     let buffer = &state.buffers[state.view_by_id(view).buffer];
-                    let name = buffer
-                        .path()
-                        .map_or("[scratch]".into(), |p| p.display().to_string());
+                    let name = buffer.name();
                     let end = x + width;
                     let mut at = put_clipped(grid, x, y, "── ", style, end);
                     at = put_clipped(grid, at, y, &name, style, end);
@@ -580,9 +578,7 @@ impl Editor {
         for item in items(Side::Left) {
             x = put_line(grid, &state.theme, x, y, &item.content, style);
         }
-        let name = buffer
-            .path()
-            .map_or_else(|| "[scratch]".into(), |path| path.display().to_string());
+        let name = buffer.name();
         let modified = if buffer.is_modified() { " [+]" } else { "" };
         let message = self.message().map(|message| format!("  {message}"));
         // Shorten a long path from the left so the modified mark stays

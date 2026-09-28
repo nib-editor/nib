@@ -33,8 +33,11 @@ pub(crate) enum Event {
         version: u64,
         changes: Vec<TextChange>,
     },
-    /// The path of a buffer that was closed.
-    BufferClosed(Option<String>),
+    /// A buffer was closed: its path, and its name.
+    BufferClosed {
+        path: Option<String>,
+        name: String,
+    },
     SyntaxUpdated {
         buffer: usize,
         version: u64,
@@ -79,7 +82,7 @@ impl Event {
             Event::BufferOpened(_) => "buffer-opened",
             Event::BufferSaved(_) => "buffer-saved",
             Event::BufferChanged { .. } => "buffer-changed",
-            Event::BufferClosed(_) => "buffer-closed",
+            Event::BufferClosed { .. } => "buffer-closed",
             Event::SyntaxUpdated { .. } => "syntax-updated",
             Event::ModeChanged(_) => "mode-changed",
             Event::Custom { name, .. } => name,

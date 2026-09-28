@@ -259,10 +259,17 @@ impl Nano {
                 modifiers: Modifiers::empty(),
             };
             self.sequence.key(&table, plain)
-        } else if self.keymap.is_empty() && !self.sequence.is_waiting() {
-            return None;
-        } else {
+        } else if self.sequence.is_waiting() {
             self.sequence.key(&self.keymap, ev)
+        } else {
+            // The shown buffer's keys come before nano's own; the settings'
+            // before both.
+            let mut table = keys::buffer_keymap(&|_| false);
+            keys::merge(&mut table, self.keymap.clone());
+            if table.is_empty() {
+                return None;
+            }
+            self.sequence.key(&table, ev)
         };
         match step {
             Step::NotMine if leader_key => {

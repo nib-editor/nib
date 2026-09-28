@@ -1,4 +1,4 @@
 name = "test-go"
 version = "0.0.0"
-api = "0.6"
+api = "0.7"
 events = ["test-events.ping"]

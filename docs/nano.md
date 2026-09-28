@@ -46,6 +46,10 @@ GNU nano の操作感のベース（`plugins/nano`、プラグイン名 `nano`�
 
 nano の `M-` のうち nano 自身が使わないものを、プラグインのキーの置き場にする。プラグインの `[keys]` の `f` は `M-F`、`c d` は `M-C` のあと `d`。nano 自身が使う `M-A` `M-E` `M-Q` `M-U` `M-W` `M-X` `M-6` `M-]` `M-\` `M-/` `M-Space` は取らない。
 
+## プラグインのバッファのキー
+
+プラグインのバッファ（[plugin-buffers.md](plugin-buffers.md)）が決めたキーは、nano のキーより先に効く。文字は打てないので、文字のキーも使える。`plugins/nano.toml` の `[settings.keys]` で決めたキーは、バッファのキーより先に効く。
+
 ## 設定
 
 `plugins/nano.toml` の `[settings.keys.global]` で上書きする。右辺はコマンドの名前か、nano の機能の名前（nanorc の `bind` で使う名前: `exit`、`writeout`、`insert`、`whereis`、`replace`、`cut`、`paste`、`copy`、`mark`、`undo`、`redo`、`location`、`gotoline`、`execute` など）。

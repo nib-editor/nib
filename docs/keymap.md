@@ -67,6 +67,18 @@
 
 端末に貼り付けたものは、挿入モードでは打ったように各カーソルに入れる。ノーマルと選択モードでは `pass` を返し、コアが各選択の前に入れる（[plugin-api.md](plugin-api.md) の「入力」）。
 
+### プラグインのバッファのキー
+
+プラグインのバッファ（[plugin-buffers.md](plugin-buffers.md)）が決めたキーは、ノーマルモードで数を打っていないときに、helix のキーより先に効く。ただし、次のキーは helix のまま。プラグインの作者は、これを避けてキーを選ぶ。
+
+- 動き: `h` `j` `k` `l` `w` `W` `b` `B` `e` `E` `g` `f` `F` `t` `T` `%` `[` `]`、数、矢印、`Home` `End` `PageUp` `PageDown`
+- 検索: `/` `?` `n` `N` `*`
+- 選択とコピー: `v` `x` `X` `;` `,` `y` `m` `z`、`Space`（リーダー）、`:`
+- Ctrl: `C-w`、`C-d` `C-u` `C-f` `C-b`、`C-o` `C-i`
+- `Esc`
+
+`plugins/helix.toml` の `[settings.keys.*]` で決めたキーは、バッファのキーより先に効く。
+
 ## 設定
 
 `~/.config/nib/plugins/helix.toml` の `[settings]` に書く。キーの書き方は Helix の `[keys.*]` と同じにする。タブ幅やインデントはコアの設定（`[core]`）なので、ここには書かない。

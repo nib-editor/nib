@@ -80,12 +80,21 @@ keys = "<C-x><C-z>"
 message = "C-x C-z is undefined"
 
 [[test]]
-name = "C-h k says what a key runs"
+name = "C-h k says what a key runs in *Help*, which q closes"
 text = "abc\n"
-keys = "<C-h>k<C-x><C-s>"
 
-[test.expect]
-message = "C-x C-s runs the command save-buffer: Save the buffer"
+[[test.step]]
+keys = "<C-h>k<C-x><C-s>"
+expect.text = "C-x C-s runs the command save-buffer.\n\nIt is bound to C-x C-s.\n\nSave the buffer.\n"
+expect.screen = ["*Help*"]
+
+[[test.step]]
+keys = "x"
+expect.message = "*Help* is read-only"
+
+[[test.step]]
+keys = "q"
+expect.text = "abc\n"
 
 [[test]]
 name = "M-x completes names with TAB and lists them"

@@ -1,6 +1,6 @@
 name = "nano"
 version = "0.1.0"
-api = "0.6"
+api = "0.7"
 # The whole way of editing (docs/base.md); only one base runs.
 base = true
 # Help in nano, the core menu here.

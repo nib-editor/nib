@@ -129,7 +129,7 @@ GNU Emacs の操作感のベース（`plugins/emacs`、プラグイン名 `emacs
 | `M-.` / `M-,` | 定義へ（`lsp.definition`）/ 戻る |
 | `M-x` | コマンドを名前で呼ぶ。Emacs の名前（`kill-line` など）と nib の名前（`lsp.definition`） |
 | 貼り付け | ポイントに入れ、始めにマークを置く（`xterm-paste`）。isearch の中では検索の文字列に、ミニバッファでは欄に入れる |
-| `C-h k` | キーが何をするかを出す |
+| `C-h k` | キーが何をするかを `*Help*` に出す（下に分割して、フォーカスを移す。`q` で閉じる） |
 | `F10` | コアのメニュー（Emacs ではメニューバー。`plugin.toml` の `menu-key`） |
 
 ## ミニバッファ
@@ -147,6 +147,12 @@ GNU Emacs の操作感のベース（`plugins/emacs`、プラグイン名 `emacs
 ## リーダー
 
 `C-c` をプラグインのキーの置き場にする。プラグインの `[keys]` の `f` は `C-c f`、`c d` は `C-c c d`。Emacs でも `C-c` と文字 1 つは、ユーザーのためのキー。
+
+## プラグインのバッファのキー
+
+プラグインのバッファ（[plugin-buffers.md](plugin-buffers.md)）が決めたキーは、メジャーモードの表のように、グローバルなキーより先に効く。文字は打てないので、`n` `p` `q` のような文字のキーも使える。`C-g`、`C-x` と `M-x` だけは Emacs のまま。バッファの `C-c` から始まるキーは、プラグインのキーの `C-c` の表に足す（magit の `C-c C-c` のように）。
+
+`plugins/emacs.toml` の `[settings.keys]` で決めたキーは、バッファのキーより先に効く。
 
 ## 設定
 

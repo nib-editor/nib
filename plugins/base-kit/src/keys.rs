@@ -89,6 +89,39 @@ fn parse_table(
     }
 }
 
+/// Puts `over` on top of `keymap`: its tables go into the tables there,
+/// and its keys win.
+pub fn merge(keymap: &mut Keymap, over: Keymap) {
+    for (key, binding) in over {
+        match keymap.iter_mut().find(|(k, _)| *k == key) {
+            Some((_, Binding::Prefix(table))) if matches!(binding, Binding::Prefix(_)) => {
+                let Binding::Prefix(more) = binding else {
+                    unreachable!()
+                };
+                merge(table, more);
+            }
+            Some((_, old)) => *old = binding,
+            None => keymap.push((key, binding)),
+        }
+    }
+}
+
+/// The keys the maker of the shown buffer gave it (docs/plugin-buffers.md),
+/// as a table, leaving out those that start with a key the base `keeps`.
+pub fn buffer_keymap(keeps: &dyn Fn(&KeyEvent) -> bool) -> Keymap {
+    let buffer = nib_plugin::nib::plugin::view::active().buffer();
+    let mut keymap = Keymap::new();
+    for (keys, command) in buffer.keys() {
+        let Ok(keys) = parse_keys(&keys) else {
+            continue;
+        };
+        if keys.first().is_some_and(|key| !keeps(key)) {
+            crate::leader::place(&mut keymap, &keys, &command);
+        }
+    }
+    keymap
+}
+
 pub fn lookup<'a>(keymap: &'a Keymap, key: &KeyEvent) -> Option<&'a Binding> {
     keymap.iter().find(|(k, _)| k == key).map(|(_, b)| b)
 }

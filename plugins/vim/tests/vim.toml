@@ -135,3 +135,20 @@ expect.screen = [":s/two/2/"]
 [[test.step]]
 keys = "<ret>"
 expect.text = "one\n  2 abc\n"
+
+[[test]]
+name = ":registers lists them in a buffer, which q closes"
+text = "#[|]#abc def\n"
+
+[[test.step]]
+keys = "yiw:reg<ret>"
+expect.text = "Type Name Content\n  c  \"\"   abc\n  c  \"0   abc\n"
+expect.screen = ["*registers*"]
+
+[[test.step]]
+keys = "jx"
+expect.message = "*registers* is read-only"
+
+[[test.step]]
+keys = "q"
+expect.text = "abc def\n"

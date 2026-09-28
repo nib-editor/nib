@@ -13,7 +13,8 @@ pub mod line_edit;
 pub mod text;
 pub mod tree;
 
-use nib_plugin::nib::plugin::types::{Error, Span};
+use nib_plugin::nib::plugin::types::{Edit, Error, Selection, Span, UndoMode};
+use nib_plugin::nib::plugin::view::Direction;
 use nib_plugin::nib::plugin::{buffer, commands, ui, view};
 
 pub fn span(text: &str, style: &str) -> Span {
@@ -67,6 +68,53 @@ pub fn open_file(path: &str) -> Result<(), String> {
     let buffer = buffer::open(path)?;
     view::active().show(&buffer);
     Ok(())
+}
+
+/// Shows `text` in this plugin's buffer `name`, made if need be, in a new
+/// view below the focused one unless that shows it: help and lists too
+/// long for a message. `keys` work in it, as `buffer.set-keys` takes them.
+pub fn show_listing(name: &str, text: &str, keys: &[(&str, &str)]) {
+    let rewrite = |buffer: &buffer::Buffer| {
+        let edit = Edit {
+            start: 0,
+            end: buffer.len(),
+            text: text.into(),
+        };
+        buffer.apply(buffer.version(), &[edit], UndoMode::NewStep)
+    };
+    // Ours if we may write it: other plugins' buffers are read-only to us.
+    let buffer = buffer::all()
+        .into_iter()
+        .filter(|b| b.path().is_none() && b.name() == name)
+        .find(|b| rewrite(b).is_ok())
+        .unwrap_or_else(|| {
+            let buffer = buffer::create(name);
+            rewrite(&buffer).expect("a plugin writes its own buffer");
+            buffer
+        });
+    let keys: Vec<(String, String)> = keys
+        .iter()
+        .map(|(key, command)| (key.to_string(), command.to_string()))
+        .collect();
+    buffer
+        .set_keys(&keys)
+        .expect("keys of this plugin's commands");
+    if view::active().buffer().name() != name {
+        view::split(Direction::Horizontal);
+        view::active().show(&buffer);
+    }
+    let _ = view::active().set_selection(&Selection {
+        ranges: vec![edit::point(0)],
+        primary: 0,
+    });
+}
+
+/// Closes the focused view, unless it is the last, and the listing it
+/// shows.
+pub fn close_listing() {
+    let buffer = view::active().buffer();
+    let _ = view::close();
+    let _ = buffer.close(true);
 }
 
 /// `s` as a JSON string, for command arguments.

@@ -90,6 +90,20 @@ pub struct Buffer {
     /// Closed with `buffer.close`. Buffers keep their place in the list,
     /// empty, so indices, which plugins hold as handles, never move.
     closed: bool,
+    /// A plugin's own buffer (docs/plugin-buffers.md).
+    pub(crate) plugin: Option<PluginBuffer>,
+}
+
+/// What makes a buffer a plugin's: its name, who may change it, and the
+/// keys that work in it.
+#[derive(Clone, Debug)]
+pub(crate) struct PluginBuffer {
+    pub owner: PluginId,
+    pub name: String,
+    /// Others may change it too.
+    pub editable: bool,
+    /// Keys as settings write them, and the owner's commands they run.
+    pub keys: Vec<(String, String)>,
 }
 
 impl Default for Buffer {
@@ -124,7 +138,42 @@ impl Buffer {
             overrides: Overrides::default(),
             change_log: Vec::new(),
             closed: false,
+            plugin: None,
         }
+    }
+
+    /// An empty buffer of plugin `owner`'s, named `name`.
+    pub(crate) fn owned(owner: PluginId, name: String) -> Self {
+        Self {
+            plugin: Some(PluginBuffer {
+                owner,
+                name,
+                editable: false,
+                keys: Vec::new(),
+            }),
+            ..Self::default()
+        }
+    }
+
+    /// What the status line and plugins call it: its path as opened, the
+    /// name its plugin gave it, or `[scratch]`.
+    pub fn name(&self) -> String {
+        match (&self.path, &self.plugin) {
+            (Some(path), _) => path.display().to_string(),
+            (None, Some(plugin)) => plugin.name.clone(),
+            (None, None) => "[scratch]".into(),
+        }
+    }
+
+    /// Whether editing in a view may change it: a plugin's buffer only
+    /// when its owner allows it. The owner writes it with `buffer.apply`.
+    pub(crate) fn editable(&self) -> bool {
+        self.plugin.as_ref().is_none_or(|p| p.editable)
+    }
+
+    /// The plugin that made it, if one did.
+    pub(crate) fn owner(&self) -> Option<PluginId> {
+        self.plugin.as_ref().map(|p| p.owner)
     }
 
     /// Opens the file at `path`. A missing file gives an empty buffer that
@@ -219,8 +268,9 @@ impl Buffer {
         self.path.as_deref()
     }
 
+    /// Plugins' buffers are never saved, so never count as modified.
     pub fn is_modified(&self) -> bool {
-        self.history.state() != self.saved_state
+        self.plugin.is_none() && self.history.state() != self.saved_state
     }
 
     pub fn slice(&self, start: usize, end: usize) -> Result<String, Error> {

@@ -1,6 +1,6 @@
 name = "helix"
 version = "0.1.18"
-api = "0.6"
+api = "0.7"
 # The whole way of editing (docs/base.md); only one base runs.
 base = true
 menu-key = "C-g"

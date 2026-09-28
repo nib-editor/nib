@@ -457,6 +457,11 @@ pub const COMMANDS: &[(&str, &[&str], &str)] = &[
         "Run a command by its name",
     ),
     ("describe-key", &["C-h k"], "Say what a key runs"),
+    (
+        "quit-window",
+        &[],
+        "Close the window, or show the buffer before",
+    ),
 ];
 
 /// The commands that move the point: with Shift, they select as they go.
@@ -488,6 +493,14 @@ pub const MOTIONS: &[&str] = &[
 
 pub fn is_command(name: &str) -> bool {
     COMMANDS.iter().any(|(n, _, _)| *n == name)
+}
+
+/// The keys `name` is bound to, as settings write them.
+pub fn keys_of(name: &str) -> &'static [&'static str] {
+    COMMANDS
+        .iter()
+        .find(|(n, _, _)| *n == name)
+        .map_or(&[], |(_, keys, _)| *keys)
 }
 
 pub fn describe(name: &str) -> Option<&'static str> {
@@ -527,23 +540,6 @@ fn place(keymap: &mut Keymap, keys: &[KeyEvent], name: &str) {
     }
 }
 
-/// Puts `over` on top of `keymap`: its tables go into the tables there,
-/// and its keys win.
-pub fn merge(keymap: &mut Keymap, over: Keymap) {
-    for (key, binding) in over {
-        match keymap.iter_mut().find(|(k, _)| *k == key) {
-            Some((_, Binding::Prefix(table))) if matches!(binding, Binding::Prefix(_)) => {
-                let Binding::Prefix(more) = binding else {
-                    unreachable!()
-                };
-                merge(table, more);
-            }
-            Some((_, old)) => *old = binding,
-            None => keymap.push((key, binding)),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -575,7 +571,7 @@ mod tests {
             ),
             (key("C-z"), Binding::Command("undo".into())),
         ];
-        merge(&mut keymap, over);
+        keys::merge(&mut keymap, over);
         let Some(Binding::Prefix(cx)) = keys::lookup(&keymap, &key("C-x")) else {
             panic!("C-x is a table");
         };

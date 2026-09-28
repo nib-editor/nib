@@ -70,6 +70,12 @@ func lift_OptionString(f0 uint32, f1 *uint8, f2 uint32) (v cm.Option[string]) {
 	return (cm.Option[string])(cm.Some[string](cm.LiftString[string]((*uint8)(f1), (uint32)(f2))))
 }
 
+func lift_ClosedBuffer(f0 uint32, f1 *uint8, f2 uint32, f3 *uint8, f4 uint32) (v events.ClosedBuffer) {
+	v.Path = lift_OptionString(f0, f1, f2)
+	v.Name = cm.LiftString[string](f3, f4)
+	return
+}
+
 func lift_SyntaxUpdate(f0 uint32, f1 uint64) (v events.SyntaxUpdate) {
 	v.Buffer = cm.Reinterpret[events.Buffer](f0)
 	v.Version = (uint64)(f1)
@@ -138,7 +144,7 @@ func lift_Event(f0 uint32, f1 uint64, f2 uint64, f3 uint32, f4 uint32, f5 uint32
 	case 2:
 		return cm.New[events.Event](2, lift_BufferChange((uint32)(f1), (uint64)(f2), cm.U32ToPointer[events.TextChange](f3), (uint32)(f4)))
 	case 3:
-		return cm.New[events.Event](3, lift_OptionString((uint32)(f1), cm.U64ToPointer[uint8](f2), (uint32)(f3)))
+		return cm.New[events.Event](3, lift_ClosedBuffer((uint32)(f1), cm.U64ToPointer[uint8](f2), (uint32)(f3), cm.U32ToPointer[uint8](f4), (uint32)(f5)))
 	case 4:
 		return cm.New[events.Event](4, lift_SyntaxUpdate((uint32)(f1), (uint64)(f2)))
 	case 5:

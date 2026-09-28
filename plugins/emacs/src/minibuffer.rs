@@ -3,6 +3,7 @@
 //! ask them. Every key is read here, so a macro replays them the same.
 
 use base_kit::{cmdline, line_edit, span};
+use nib_plugin::nib::plugin::buffer::Buffer;
 use nib_plugin::nib::plugin::prompt::Line;
 use nib_plugin::nib::plugin::types::{KeyCode, KeyEvent, Modifiers};
 use nib_plugin::nib::plugin::ui::{self, Panel};
@@ -43,8 +44,8 @@ pub enum Ask {
 /// What a question of `y`, `n`, `yes`, or `no` decides.
 #[derive(Clone, Debug)]
 pub enum Confirm {
-    /// Close the buffer at this path though it has changes.
-    KillBuffer(Option<String>),
+    /// Close the buffer of this name though it has changes.
+    KillBuffer(String),
     /// `C-x C-c`: quit without saving?
     QuitAnyway,
 }
@@ -86,30 +87,25 @@ fn file_name(path: &str) -> &str {
 }
 
 /// A buffer's name, as the minibuffer shows it: its path from the working
-/// directory, or else its file's name, or `*scratch*` without a file.
-pub fn buffer_name(path: Option<&str>) -> String {
-    let Some(path) = path else {
-        return "*scratch*".into();
-    };
-    relative(path).unwrap_or_else(|| file_name(path).to_string())
+/// directory, or else its file's name; the name a plugin gave its buffer;
+/// or `*scratch*`.
+pub fn buffer_name(buffer: &Buffer) -> String {
+    match buffer.path() {
+        Some(path) => relative(&path).unwrap_or_else(|| file_name(&path).to_string()),
+        None if buffer.name() == "[scratch]" => "*scratch*".into(),
+        None => buffer.name(),
+    }
 }
 
-/// The path of the open buffer named `name`, or `name` as a path.
-fn buffer_path(name: &str) -> String {
-    buffer::all()
-        .into_iter()
-        .filter_map(|b| b.path())
-        .find(|p| buffer_name(Some(p)) == name)
-        .unwrap_or_else(|| name.to_string())
+/// The open buffer the minibuffer calls `name`.
+fn buffer_named(name: &str) -> Option<Buffer> {
+    buffer::all().into_iter().find(|b| buffer_name(b) == name)
 }
 
 impl Confirm {
     pub fn question(&self) -> String {
         match self {
-            Confirm::KillBuffer(path) => format!(
-                "Buffer {} modified; kill anyway?",
-                buffer_name(path.as_deref())
-            ),
+            Confirm::KillBuffer(name) => format!("Buffer {name} modified; kill anyway?"),
             Confirm::QuitAnyway => "Modified buffers exist; exit anyway?".into(),
         }
     }
@@ -534,15 +530,21 @@ impl Emacs {
                 if text.is_empty() {
                     return Ok(());
                 }
-                base_kit::open_file(&buffer_path(&text))
+                match buffer_named(&text) {
+                    Some(buffer) => {
+                        view.show(&buffer);
+                        Ok(())
+                    }
+                    None => base_kit::open_file(&text),
+                }
             }
             Ask::KillBuffer => {
                 let buffer = match text.is_empty() {
                     true => view.buffer(),
-                    false => buffer::open(&buffer_path(&text))?,
+                    false => buffer_named(&text).ok_or(format!("No such buffer {text}"))?,
                 };
                 if buffer.close(false).is_err() {
-                    let confirm = Confirm::KillBuffer(buffer.path());
+                    let confirm = Confirm::KillBuffer(buffer_name(&buffer));
                     let question = format!("{} (yes or no) ", confirm.question());
                     self.ask(Ask::YesOrNo(confirm), &question, "");
                 }
@@ -573,9 +575,9 @@ impl Emacs {
     /// What was answered to a question of `y` or `n`, or `yes` or `no`.
     pub fn confirmed(&mut self, confirm: Confirm, yes: bool) {
         let result = match (confirm, yes) {
-            (Confirm::KillBuffer(path), true) => match path {
-                Some(path) => buffer::open(&path).and_then(|buffer| buffer.close(true)),
-                None => view::active().buffer().close(true),
+            (Confirm::KillBuffer(name), true) => match buffer_named(&name) {
+                Some(buffer) => buffer.close(true),
+                None => Ok(()),
             },
             (Confirm::QuitAnyway, true) => editor::quit(true),
             (_, false) => Ok(()),
@@ -640,7 +642,7 @@ impl Emacs {
     /// Commands for files, buffers, and windows.
     pub fn run_file_command(&mut self, view: &View, name: &str, _arg: Arg) -> Result<(), String> {
         let full = view.buffer().path();
-        let path = full.as_deref().map(|p| buffer_name(Some(p)));
+        let path = Some(buffer_name(&view.buffer()));
         let here = full
             .as_deref()
             .map(|p| relative(p).unwrap_or_else(|| p.to_string()));
@@ -682,9 +684,8 @@ impl Emacs {
             }
             "switch-to-buffer" => {
                 let other = buffer::all()
-                    .into_iter()
-                    .filter_map(|b| b.path())
-                    .map(|p| buffer_name(Some(&p)))
+                    .iter()
+                    .map(buffer_name)
                     .find(|p| Some(p) != path.as_ref());
                 self.ask_with_default(Ask::SwitchBuffer, "Switch to buffer", other);
                 Ok(())
@@ -782,9 +783,8 @@ fn candidates(ask: &Ask, text: &str) -> Vec<(String, String)> {
         }
         Ask::FindFile | Ask::WriteFile | Ask::InsertFile => files(text),
         Ask::SwitchBuffer | Ask::KillBuffer => buffer::all()
-            .into_iter()
-            .filter_map(|b| b.path())
-            .map(|p| (buffer_name(Some(&p)), String::new()))
+            .iter()
+            .map(|b| (buffer_name(b), String::new()))
             .collect(),
         _ => Vec::new(),
     };

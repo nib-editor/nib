@@ -34,7 +34,7 @@ fn main() {
         eprintln!("\nerror: not installed\nmore detail");
         process::exit(1);
     }
-    let tests: [(&str, fn()); 9] = [
+    let tests: [(&str, fn()); 10] = [
         ("diagnostics_follow_edits", diagnostics_follow_edits),
         (
             "diagnostics_asked_for_follow_edits",
@@ -55,6 +55,10 @@ fn main() {
         (
             "closed_buffers_close_on_the_server",
             closed_buffers_close_on_the_server,
+        ),
+        (
+            "the_diagnostics_list_goes_to_each",
+            the_diagnostics_list_goes_to_each,
         ),
     ];
     let mut failed = 0;
@@ -164,6 +168,32 @@ fn check_diagnostics(server: &str) {
     wait_until(&mut editor, "the diagnostic to go", |e| {
         !shows(e, "found error") && !screen(e).last().unwrap().contains("E1")
     });
+    fs::remove_dir_all(dir).unwrap();
+}
+
+fn the_diagnostics_list_goes_to_each() {
+    let (mut editor, dir) = fake("list", "fn main() {}\nlet error = 1;\n");
+    wait_until(&mut editor, "the diagnostic", |e| shows(e, "found error"));
+    editor.call_command("lsp.diagnostics", "").unwrap();
+    let listed = editor.buffer().text().to_string();
+    assert!(
+        listed.ends_with("main.rs:2:5: error: found error\n"),
+        "{listed}"
+    );
+    // Enter goes there in the view below.
+    type_keys(&mut editor, "<ret>");
+    assert_eq!(line(&editor, 1), "let error = 1;\n");
+    assert_eq!(cursor(&editor), 17);
+    // Rewritten as the diagnostics change.
+    type_keys(&mut editor, "xd");
+    wait_until(&mut editor, "the list to empty", |e| {
+        shows(e, "no diagnostics")
+    });
+    // q closes it and its view.
+    editor.handle_key(KeyEvent::ctrl('w'));
+    type_keys(&mut editor, "wq");
+    assert!(!shows(&editor, "diagnostics"), "{:#?}", screen(&editor));
+    assert_eq!(line(&editor, 0), "fn main() {}\n");
     fs::remove_dir_all(dir).unwrap();
 }
 

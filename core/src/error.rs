@@ -15,6 +15,8 @@ pub enum Error {
     /// A selection must contain at least one range, and the primary index must be in bounds.
     InvalidSelection,
     InvalidPattern(String),
+    /// A plugin's buffer, which only its owner may change.
+    ReadOnly,
     /// The buffer has no file path to save to.
     NoPath,
     Io(io::Error),
@@ -34,6 +36,7 @@ impl fmt::Display for Error {
             Error::OverlappingEdits => f.write_str("edits overlap"),
             Error::InvalidSelection => f.write_str("invalid selection"),
             Error::InvalidPattern(msg) => write!(f, "invalid pattern: {msg}"),
+            Error::ReadOnly => f.write_str("the buffer is read-only"),
             Error::NoPath => f.write_str("buffer has no path"),
             Error::Io(err) => err.fmt(f),
             Error::Plugin(msg) => f.write_str(msg),

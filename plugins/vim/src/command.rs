@@ -525,7 +525,11 @@ impl Vim {
             _ if is("bdelete", 2) => view::active().buffer().close(ex.bang),
             _ if is("set", 2) => Err("nib's settings are in config.toml; :config opens it".into()),
             _ if is("registers", 3) || is("display", 2) => {
-                ui::show_message(&self.registers_summary());
+                base_kit::show_listing(
+                    "*registers*",
+                    &self.registers_listing(),
+                    &[("q", "vim.close-listing")],
+                );
                 Ok(())
             }
             _ => cmdline::run(line.trim()),
@@ -866,15 +870,21 @@ impl Vim {
         Ok(())
     }
 
-    fn registers_summary(&self) -> String {
-        let mut shown = Vec::new();
+    /// `:registers`: a line each, as vim lists them.
+    fn registers_listing(&self) -> String {
+        let mut listing = String::from("Type Name Content\n");
         for c in "\"0123456789-abcdefghijklmnopqrstuvwxyz".chars() {
             if let Ok(Some(value)) = self.registers.get(Some(c)) {
-                let text: String = value.text.chars().take(20).collect();
-                shown.push(format!("\"{c} {}", text.replace('\n', "^J")));
+                let shape = match value.shape {
+                    Shape::Chars => 'c',
+                    Shape::Lines => 'l',
+                    Shape::Block => 'b',
+                };
+                let text = value.text.replace('\n', "^J");
+                listing.push_str(&format!("  {shape}  \"{c}   {text}\n"));
             }
         }
-        shown.join("  ")
+        listing
     }
 }
 

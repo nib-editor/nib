@@ -525,6 +525,12 @@ impl Emacs {
                 ui::show_message("Describe the following key: ");
                 Ok(())
             }
+            "quit-window" => {
+                if nib_plugin::nib::plugin::view::close().is_err() {
+                    view.show_previous();
+                }
+                Ok(())
+            }
             "what-cursor-position" => {
                 what_cursor_position(view, self.point(view));
                 Ok(())

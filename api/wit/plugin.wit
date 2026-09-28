@@ -1,4 +1,4 @@
-package nib:plugin@0.6.0;
+package nib:plugin@0.7.0;
 
 interface types {
     /// A UTF-8 byte offset into a buffer.
@@ -63,12 +63,15 @@ interface types {
         /// A selection needs at least one range and a primary index in bounds.
         invalid-selection,
         invalid-pattern(string),
+        /// A plugin's buffer, which only its owner changes, with
+        /// `buffer.apply`.
+        read-only,
         other(string),
     }
 }
 
 interface buffer {
-    use types.{offset, range, error};
+    use types.{offset, range, edit, undo-mode, error};
 
     resource buffer {
         /// Increases on every change, including undo and redo.
@@ -82,6 +85,9 @@ interface buffer {
         next-grapheme: func(pos: offset) -> result<offset, error>;
         prev-grapheme: func(pos: offset) -> result<offset, error>;
         path: func() -> option<string>;
+        /// What it is called: its path as opened, the name the plugin that
+        /// made it gave it, or "[scratch]".
+        name: func() -> string;
         /// Changed since it was last saved or opened. Undoing back to that
         /// state makes it unchanged again.
         modified: func() -> bool;
@@ -101,13 +107,36 @@ interface buffer {
         set-marks: func(namespace: string, marks: list<offset>);
         /// The positions this plugin keeps in `namespace`, in the order set.
         marks: func(namespace: string) -> list<offset>;
+        /// Changes it as `view.apply` does, without a view: for a buffer
+        /// that may not be shown, such as a plugin's own. The selections of
+        /// the views on it move with the change.
+        apply: func(base-version: u64, edits: list<edit>, undo: undo-mode) -> result<_, error>;
         /// Saves it, or with `path`, saves it there and makes that its path.
         save: func(path: option<string>) -> result<_, string>;
         /// Closes it; views that showed it show the buffer before. Without
         /// `force`, fails when it has unsaved changes. Its handles can no
         /// longer be used.
         close: func(force: bool) -> result<_, string>;
+
+        /// For the plugin that made it with `create`: lets editing in views
+        /// change it, as `view.apply` and undo do, or back to only its
+        /// owner's `apply`. Others' calls do nothing.
+        set-editable: func(editable: bool);
+        /// For the plugin that made it: the keys that work in it, as
+        /// settings write them ("ret", "s", "C-c C-c"), and the commands of
+        /// its own they run. The base takes them over its own keys, but for
+        /// those it keeps, such as vim's motions (docs/plugin-buffers.md).
+        set-keys: func(keys: list<tuple<string, string>>) -> result<_, string>;
+        /// For the base: the keys its maker gave it.
+        keys: func() -> list<tuple<string, string>>;
     }
+
+    /// Makes an empty buffer of this plugin's, without a path, named
+    /// `name`, such as "*diagnostics*", without showing it. Only this plugin
+    /// may change it, with `buffer.apply`: editing it in a view fails with
+    /// `read-only`, the owner's too, until it says otherwise. It is never
+    /// saved, and it closes when this plugin stops.
+    create: func(name: string) -> buffer;
 
     /// Opens a file, or finds the buffer that has it open, without showing
     /// it.
@@ -305,6 +334,9 @@ interface events {
         changes: list<text-change>,
     }
 
+    /// A buffer that was closed: its path, if it had one, and its name.
+    record closed-buffer { path: option<string>, name: string }
+
     /// The buffer's syntax tree is up to date with `version` after the
     /// parse that follows an edit.
     record syntax-update { buffer: buffer, version: u64 }
@@ -334,8 +366,8 @@ interface events {
         buffer-opened(buffer),
         buffer-saved(buffer),
         buffer-changed(buffer-change),
-        /// The path of a buffer that was closed; its handles no longer work.
-        buffer-closed(option<string>),
+        /// A buffer was closed; its handles no longer work.
+        buffer-closed(closed-buffer),
         syntax-updated(syntax-update),
         /// The base said what mode it is in (`input.set-mode`).
         mode-changed(mode),

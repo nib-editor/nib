@@ -23,9 +23,11 @@ thread_local! {
     static PROGRAMS: RefCell<Vec<Program>> = const { RefCell::new(Vec::new()) };
     static PROMPT: RefCell<Option<Line>> = const { RefCell::new(None) };
     static CHOICES: RefCell<Option<Choices>> = const { RefCell::new(None) };
+    /// The buffer it made with `own`.
+    static OWN: RefCell<Option<buffer::Buffer>> = const { RefCell::new(None) };
 }
 
-const COMMANDS: [&str; 23] = [
+const COMMANDS: [&str; 32] = [
     "echo",
     "call",
     "log",
@@ -49,6 +51,15 @@ const COMMANDS: [&str; 23] = [
     "groups",
     "undo",
     "redo",
+    "own",
+    "own-write",
+    "own-show",
+    "own-editable",
+    "own-keys",
+    "keys",
+    "name",
+    "panic",
+    "note",
 ];
 
 struct Events;
@@ -188,13 +199,64 @@ impl Guest for Events {
                 CHOICES.set(Some(choices));
                 Ok(id.to_string())
             }
+            // Makes a buffer of its own named `args`.
+            "own" => {
+                OWN.set(Some(buffer::create(&args)));
+                Ok(String::new())
+            }
+            // Inserts the text at the start of its buffer, shown or not.
+            "own-write" => with_own(|own| {
+                let edit = Edit {
+                    start: 0,
+                    end: 0,
+                    text: args,
+                };
+                own.apply(own.version(), &[edit], UndoMode::NewStep)
+                    .map(|()| String::new())
+                    .map_err(|err| format!("{err:?}"))
+            }),
+            "own-show" => with_own(|own| {
+                view::active().show(own);
+                Ok(String::new())
+            }),
+            "own-editable" => with_own(|own| {
+                own.set_editable(args == "true");
+                Ok(String::new())
+            }),
+            // "key=command,key=command"
+            "own-keys" => with_own(|own| {
+                let keys: Vec<(String, String)> = args
+                    .split(',')
+                    .filter_map(|pair| pair.split_once('='))
+                    .map(|(key, command)| (key.to_string(), command.to_string()))
+                    .collect();
+                own.set_keys(&keys).map(|()| String::new())
+            }),
+            // The shown buffer's keys, as `own-keys` takes them.
+            "keys" => Ok(view::active()
+                .buffer()
+                .keys()
+                .iter()
+                .map(|(key, command)| format!("{key}={command}"))
+                .collect::<Vec<_>>()
+                .join(",")),
+            "name" => Ok(view::active().buffer().name()),
+            "panic" => panic!("asked to panic"),
+            // Writes down that it ran, as keys bound to it do.
+            "note" => {
+                LOG.with_borrow_mut(|log| log.push(format!("note {args}")));
+                Ok(String::new())
+            }
             _ => Err(format!("no command {name}")),
         }
     }
 
     fn on_event(ev: Event) {
         let entry = match ev {
-            Event::BufferOpened(buffer) => format!("opened {}", name(buffer.path())),
+            Event::BufferOpened(buffer) => match buffer.path() {
+                Some(path) => format!("opened {}", name(Some(path))),
+                None => format!("opened {}", buffer.name()),
+            },
             Event::BufferSaved(buffer) => format!("saved {}", name(buffer.path())),
             Event::BufferChanged(change) => {
                 let changes: Vec<String> = change
@@ -215,7 +277,10 @@ impl Guest for Events {
                     .collect();
                 format!("changed v{} {}", change.version, changes.join(";"))
             }
-            Event::BufferClosed(path) => format!("closed {}", name(path)),
+            Event::BufferClosed(closed) => match closed.path {
+                Some(path) => format!("closed {}", name(Some(path))),
+                None => format!("closed {}", closed.name),
+            },
             Event::SyntaxUpdated(update) => {
                 format!("syntax {} v{}", name(update.buffer.path()), update.version)
             }
@@ -270,6 +335,10 @@ impl Guest for Events {
         };
         LOG.with_borrow_mut(|log| log.push(entry));
     }
+}
+
+fn with_own(f: impl FnOnce(&buffer::Buffer) -> Result<String, String>) -> Result<String, String> {
+    OWN.with_borrow(|own| f(own.as_ref().ok_or("no buffer of its own")?))
 }
 
 /// Runs `f` on the program with id `id`.

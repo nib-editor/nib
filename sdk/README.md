@@ -31,7 +31,7 @@ wordcount/
 ```toml
 name = "wordcount"        # also the prefix of its commands and events
 version = "0.1.0"
-api = "0.6"               # the nib:plugin version it is built for
+api = "0.7"               # the nib:plugin version it is built for
 capabilities = []         # what it may do beyond the editor API
 events = ["buffer-opened", "buffer-changed"]
 
@@ -90,6 +90,14 @@ Positions are UTF-8 byte offsets into a buffer. Screen rows and columns are the 
 - `move-vertically` and `scroll` do what `j`, `k`, and `Ctrl-d` need. `move-vertically` returns the column it aimed for; pass it back on the next move to keep the column across short lines.
 - Using a buffer or view handle after it closed traps the plugin.
 
+#### A plugin's own buffers
+
+A list of diagnostics, a help text, or search results can be a buffer the plugin writes, which people move around, search, and copy from with their usual keys.
+
+- `buffer.create(name)` makes an empty buffer without a path, named `name` (`*diagnostics*`), without showing it; `view.split` and `view.show` show it. It is never saved nor `modified`, and it closes when the plugin stops.
+- Its maker writes it with `buffer.apply(base-version, edits, undo)`, shown or not. Editing it in a view (`view.apply`, undo, redo) fails with `read-only`, the maker's too, unless the maker calls `set-editable(true)`.
+- `set-keys` gives it keys, written as settings write them (`ret`, `q`, `C-c C-c`), that run the maker's own commands; a command learns which line it ran on from `view.active().selection()`. The base decides which keys it gives up: Emacs and nano give up all but a few, while vim and helix keep their motions, search, and the like (each base's page in `docs/` lists them). Keys the user sets in settings come first.
+
 ### Input
 
 Keys go down a stack of layers, top first. `input.push-layer()` puts one on top for the plugin and `input.pop-layer()` takes it off; a keymap pushes its layer in `init` and keeps it. A plugin without a layer gets no keys. The menu key (Ctrl-g unless the user changes it) never reaches plugins.
@@ -134,7 +142,7 @@ A plugin gets the kinds of events listed under `events` in its manifest:
 |-------|------|
 | `buffer-opened`, `buffer-saved` | A buffer was opened, saved. Buffers opened before the plugin loaded are announced after it does |
 | `buffer-changed` | A buffer changed. The changes come in the order that turns the old text into the new, each with its line and column, as LSP's `didChange` wants them |
-| `buffer-closed` | A buffer was closed. Its handles no longer work, so the event has its path |
+| `buffer-closed` | A buffer was closed. Its handles no longer work, so the event has its path and its name |
 | `syntax-updated` | A buffer's syntax tree caught up with its edits, with the version it parsed |
 | `mode-changed` | The base changed modes (`input.set-mode`) |
 | `<plugin>.<name>` | A plugin called `events.emit(name, json)` |
@@ -264,7 +272,7 @@ To make it findable by name, add it to [nib-editor/plugins](https://github.com/n
 crate-type = ["cdylib"]
 
 [dependencies]
-nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.6.0" }
+nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.7.0" }
 ```
 
 Implement `nib_plugin::exports::nib::plugin::guest::Guest` and export it with `nib_plugin::export!(YourType)`. The API is under `nib_plugin::nib::plugin::<interface>`. Build for `wasm32-wasip2`; `nib plugin build` does it.
@@ -275,4 +283,4 @@ Built with [TinyGo](https://tinygo.org/) 0.42 or later, since Go itself cannot m
 
 ### Versions
 
-SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.6.0`, `sdk/go/v0.6.0`.
+SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.7.0`, `sdk/go/v0.7.0`.

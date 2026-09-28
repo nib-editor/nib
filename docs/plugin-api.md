@@ -28,7 +28,7 @@ helix-keymap/
 ```toml
 name = "helix"            # コマンドの名前空間にもなる
 version = "0.1.0"
-api = "0.6"               # 対応する nib:plugin のバージョン（メジャー.マイナー）
+api = "0.7"               # 対応する nib:plugin のバージョン（メジャー.マイナー）
 
 capabilities = []         # "fs-read" / "fs-write" / "process" / "network"
 events = ["buffer-changed"]
@@ -67,7 +67,7 @@ WIT パッケージは `nib:plugin`。プラグインは `plugin` world に対�
 | interface | 中身 |
 |-----------|------|
 | `types` | 位置（バイトオフセット）、範囲（`range`）、選択、編集、キー、表示の文字列、失敗の種類（`error`） |
-| `buffer` | バッファ（resource）の読み出し、検索（`find`、`find-groups`、`find-all`）、位置の印、保存、閉じる、変更済みか。`buffer.open`（表示せずに開く）と `buffer.all` |
+| `buffer` | バッファ（resource）の読み出し、検索（`find`、`find-groups`、`find-all`）、位置の印、保存、閉じる、変更済みか。`buffer.open`（表示せずに開く）、`buffer.all`、`buffer.create`（プラグインのバッファ） |
 | `view` | ビュー（resource）の選択、編集の適用、undo と redo（変わった範囲を返す）、縦移動、スクロール、表示するバッファ。`view.active` と分割（`split`、`close`、`only`、`focus`） |
 | `editor` | エディタ全体: 作業ディレクトリ、終了、設定を開く・読み直す、コアメニュー |
 | `input` | 入力スタックの層、リーダーの下のキー、ベースのモード（`set-mode`、`current-mode`） |
@@ -99,6 +99,17 @@ WIT パッケージは `nib:plugin`。プラグインは `plugin` world に対�
   - 名前空間はプラグインごとに別で、ほかのプラグインの印は読めない。順番は置いたとおりに保つので、リストをそのままリング（マークリング）やジャンプリストに使える。
   - プラグインが止まると消える。ベースを切り替えると、前のベースの印も消える。
 - 縦移動（`j` / `k`）、スクロール、表示範囲は、画面の配置を知っているコアが計算する。プラグインは画面の行と列を知らないまま、これらの操作を書ける。
+
+## プラグインのバッファ
+
+診断の一覧、ヘルプ、grep の結果のように、プラグインが中身を書くバッファ（[plugin-buffers.md](plugin-buffers.md)）。
+
+- `buffer.create(name)` で作る。パスはなく、`name`（`*diagnostics*` など）がステータスラインとバッファの一覧に出る。表示は `view.show`。
+- 中身は、作ったプラグイン（持ち主）が `buffer.apply` で書く。表示していなくても書ける。
+- ビューでの編集（`view.apply`、undo、redo、コアの貼り付け）は、持ち主のものも含めて `read-only` で断り、「`<name>` is read-only」と知らせる。ベースが持ち主のときも、ベースの編集のキーで中身が変わらないようにするため。持ち主が `set-editable(true)` にすると、ビューで編集できる。
+- 保存せず、変更済みにもならない。持ち主が止まると、コアが閉じる。
+- `buffer.set-keys` で、そのバッファでだけ効くキーと、持ち主のコマンドの組を渡す。ベースが `buffer.keys` で読み、自分の作法で組み込む（どのキーを譲るかは、各ベースの文書）。
+  - ベースは、自分のバッファのキーが自分のコマンドを指すとき、コマンドとして呼ばずに自分で動かす。呼び出し中のプラグインを呼び返すことはできないため。
 
 ## 構文木
 
@@ -264,7 +275,7 @@ events = ["buffer-opened", "buffer-changed", "mode-changed", "wordcount.counted"
 |----------|------|--------|
 | `buffer-opened` / `buffer-saved` | バッファを開いた・保存した | `events` に書いたプラグイン |
 | `buffer-changed` | バッファの変更。変更後のバージョンと、変更の列 | 同上 |
-| `buffer-closed` | バッファを閉じた。閉じたバッファの handle は使えないので、パスを渡す | 同上 |
+| `buffer-closed` | バッファを閉じた。閉じたバッファの handle は使えないので、パスと名前を渡す | 同上 |
 | `syntax-updated` | バッファの構文木が、編集のあとの解析で最新になった。バッファと、解析した時点のバージョン | 同上 |
 | `mode-changed` | ベースがモードを知らせた（`input.set-mode`）。ベース、モードの名前、`typing` | 同上 |
 | `<plugin>.<name>` | プラグインが `events.emit(name, json)` で出したもの（custom イベント） | 同上 |
