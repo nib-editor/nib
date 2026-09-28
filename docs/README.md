@@ -7,7 +7,7 @@
 | [vision.md](vision.md) | 目的と目的外。既存エディタに対して何を変えるか |
 | [architecture.md](architecture.md) | コアとプラグインの境界、データモデル、描画、プロセスモデル |
 | [plugin-api.md](plugin-api.md) | WIT の設計方針、イベントとコマンドの流れ、ライフサイクル、権限 |
-| [api-1.0.md](api-1.0.md) | 1.0 で API を固めるための見直し: 1.x で足せるもの、足すもの、揃えるもの |
+| [api-0.6.md](api-0.6.md) | プラグイン API 0.6 の改革: コアの操作とイベントを型に、interface の分け直し、足したもの。1.0 で固めるときの決まり |
 | [keymap.md](keymap.md) | モーダルの扱い、キーマップをプラグインで実現するしくみ |
 | [nano.md](nano.md) | nano ベースのキーと、nano との違い |
 | [vim.md](vim.md) | vim ベースのキー、コマンドライン、Neovim との比べ方と違い |

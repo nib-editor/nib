@@ -3,12 +3,11 @@
 use base_kit::doc::{Doc, FindKind};
 use base_kit::edit::indent_unit;
 use base_kit::{call_or_show, regex_escape};
-use nib_plugin::nib::plugin::commands;
-use nib_plugin::nib::plugin::editor::{self, ScrollAmount, View};
 use nib_plugin::nib::plugin::prompt as prompts;
 use nib_plugin::nib::plugin::settings;
 use nib_plugin::nib::plugin::types::{Edit, KeyEvent};
 use nib_plugin::nib::plugin::ui;
+use nib_plugin::nib::plugin::view::{self, Direction, ScrollAmount, Toward, View};
 
 use crate::motion::{self, Kind};
 use crate::object::{self, Object};
@@ -33,7 +32,7 @@ impl Vim {
         if self.keys.is_empty() {
             // Other plugins may have left a selection, or the cursor on a
             // line break; normal mode starts from a point on a char.
-            let view = editor::active_view();
+            let view = view::active();
             let pos = self.cursor(&view);
             let doc = Doc::new(view.buffer());
             let selection = view.selection();
@@ -74,12 +73,12 @@ impl Vim {
     /// Runs a command of normal mode, and keeps it for `.` if it changed
     /// the text.
     pub fn run(&mut self, cmd: Cmd) {
-        let view = editor::active_view();
+        let view = view::active();
         let version = view.buffer().version();
         self.step_open = false;
         let change = is_change(&cmd.action);
         self.execute(&view, &cmd);
-        let view = editor::active_view();
+        let view = view::active();
         match self.mode {
             Mode::Insert | Mode::Replace => {
                 if change && let Some(session) = &mut self.session {
@@ -380,7 +379,8 @@ impl Vim {
                 (p != pos).then_some((p, Kind::Exclusive))
             }
             Motion::ScreenTop | Motion::ScreenMiddle | Motion::ScreenBottom => {
-                let (start, end) = view.visible_range();
+                let shown = view.visible_range();
+                let (start, end) = (shown.start, shown.end);
                 let top = doc.line_of(start);
                 let bottom = doc
                     .line_of(end.saturating_sub(1).max(start))
@@ -422,7 +422,7 @@ impl Vim {
             Motion::SearchPrompt { .. } => None,
             Motion::Mark { name, exact } => {
                 let p = self.mark(view, *name)?;
-                let view = editor::active_view();
+                let view = view::active();
                 let doc = Doc::new(view.buffer());
                 if *exact {
                     Some((p.min(doc.len), Kind::Exclusive))
@@ -473,7 +473,7 @@ impl Vim {
             }
         }
         let (target, kind) = self.target(view, pos, motion, count, true)?;
-        let view = editor::active_view();
+        let view = view::active();
         let doc = Doc::new(view.buffer());
         let (from, to) = (pos.min(target), pos.max(target));
         let span = match kind {
@@ -731,9 +731,7 @@ impl Vim {
         let doc = Doc::new(view.buffer());
         let unit = indent_unit();
         let width = if unit == "\t" {
-            settings::get("tab-width")
-                .and_then(|w| w.parse().ok())
-                .unwrap_or(8)
+            settings::tab_width(&view.buffer()) as usize
         } else {
             unit.len()
         };
@@ -1104,7 +1102,7 @@ impl Vim {
     fn undo(&mut self, view: &View, n: u64, redo: bool) {
         for i in 0..n {
             let done = if redo { view.redo() } else { view.undo() };
-            if !done {
+            if done.is_none() {
                 if i == 0 {
                     ui::show_message(if redo {
                         "Already at newest change"
@@ -1204,14 +1202,12 @@ impl Vim {
         if c.is_ascii_uppercase()
             && let Some(path) = self.file_marks.get(&c).cloned()
             && view.buffer().path().unwrap_or_default() != path
+            && let Err(err) = base_kit::open_file(&path)
         {
-            let args = format!(r#"{{"path":{}}}"#, base_kit::json_string(&path));
-            if let Err(err) = commands::call("buffer.open", &args) {
-                ui::show_message(&err);
-                return None;
-            }
+            ui::show_message(&err);
+            return None;
         }
-        let view = editor::active_view();
+        let view = view::active();
         let found = view.buffer().marks(&name).first().copied();
         if found.is_none() {
             ui::show_message("E20: Mark not set");
@@ -1266,7 +1262,8 @@ impl Vim {
         let doc = Doc::new(view.buffer());
         let pos = self.cursor(view);
         let line = doc.line_of(pos);
-        let (start, end) = view.visible_range();
+        let shown = view.visible_range();
+        let (start, end) = (shown.start, shown.end);
         let top = doc.line_of(start);
         let bottom = doc.line_of(end.saturating_sub(1).max(start));
         let amount = match scroll {
@@ -1282,7 +1279,8 @@ impl Vim {
         };
         let lines = view.scroll(amount);
         let moves_cursor = matches!(scroll, Scroll::HalfPage(_) | Scroll::Page(_));
-        let (start, end) = view.visible_range();
+        let shown = view.visible_range();
+        let (start, end) = (shown.start, shown.end);
         let top = doc.line_of(start);
         let bottom = doc
             .line_of(end.saturating_sub(1).max(start))
@@ -1321,11 +1319,11 @@ impl Vim {
         for _ in 0..n {
             let found = if backward {
                 let all = buffer.find_all(&regex, 0, buffer.len()).unwrap_or_default();
-                match all.iter().rev().find(|(s, _)| *s < at) {
-                    Some(&(s, _)) => Some(s),
+                match all.iter().rev().find(|r| r.start < at) {
+                    Some(r) => Some(r.start),
                     None => {
                         wrapped = true;
-                        all.last().map(|&(s, _)| s)
+                        all.last().map(|r| r.start)
                     }
                 }
             } else {
@@ -1338,10 +1336,14 @@ impl Vim {
                     }
                 };
                 match hit {
-                    Some((s, _)) => Some(s),
+                    Some(r) => Some(r.start),
                     None => {
                         wrapped = true;
-                        buffer.find(&regex, 0, false).ok().flatten().map(|(s, _)| s)
+                        buffer
+                            .find(&regex, 0, false)
+                            .ok()
+                            .flatten()
+                            .map(|r| r.start)
                     }
                 }
             };
@@ -1571,20 +1573,21 @@ fn number_at(line: &str, at: usize) -> Option<(usize, usize, i64, u32, usize)> {
 
 /// Ctrl-w and a key: splitting and moving between views.
 fn window(c: char) {
-    let (command, args) = match c {
-        'v' => ("view.split", r#"{"direction":"vertical"}"#),
-        's' => ("view.split", r#"{"direction":"horizontal"}"#),
-        'w' => ("view.focus", r#"{"to":"next"}"#),
-        'h' => ("view.focus", r#"{"to":"left"}"#),
-        'j' => ("view.focus", r#"{"to":"down"}"#),
-        'k' => ("view.focus", r#"{"to":"up"}"#),
-        'l' => ("view.focus", r#"{"to":"right"}"#),
-        'q' | 'c' => ("view.close", ""),
-        'o' => ("view.only", ""),
-        _ => return,
-    };
-    if let Err(err) = commands::call(command, args) {
-        ui::show_message(&err);
+    match c {
+        'v' => view::split(Direction::Vertical),
+        's' => view::split(Direction::Horizontal),
+        'w' => view::focus(Toward::Next),
+        'h' => view::focus(Toward::Left),
+        'j' => view::focus(Toward::Down),
+        'k' => view::focus(Toward::Up),
+        'l' => view::focus(Toward::Right),
+        'q' | 'c' => {
+            if let Err(err) = view::close() {
+                ui::show_message(&err);
+            }
+        }
+        'o' => view::only(),
+        _ => {}
     }
 }
 

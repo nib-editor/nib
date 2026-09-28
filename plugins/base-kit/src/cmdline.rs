@@ -2,10 +2,8 @@
 //! `:w` and `:config`, and any command by its full name, as in
 //! `:lsp.definition` or `:buffer.open path=src/main.rs`.
 
-use nib_plugin::nib::plugin::{commands, editor, ui};
+use nib_plugin::nib::plugin::{commands, editor, ui, view};
 use serde_json::{Map, Value};
-
-use crate::json_string;
 
 /// The short names, for completion: the name, and what it does.
 pub const ALIASES: &[(&str, &str)] = &[
@@ -30,20 +28,14 @@ pub fn run(input: &str) -> Result<(), String> {
         "q" | "quit" => quit(false),
         "q!" | "quit!" => quit(true),
         "wq" | "x" => save().and_then(|()| quit(false)),
-        "bc" | "buffer-close" => call("buffer.close", r#"{"force":false}"#),
-        "bc!" | "buffer-close!" => call("buffer.close", r#"{"force":true}"#),
-        "config" => match arg {
-            "" => call("config.open", "{}"),
-            name => call(
-                "config.open",
-                &format!(r#"{{"plugin":{}}}"#, json_string(name)),
-            ),
-        },
-        "config-reload" => call("config.reload", "{}"),
-        "o" | "open" | "e" | "edit" if !arg.is_empty() => call(
-            "buffer.open",
-            &format!(r#"{{"path":{}}}"#, json_string(arg)),
-        ),
+        "bc" | "buffer-close" => view::active().buffer().close(false),
+        "bc!" | "buffer-close!" => view::active().buffer().close(true),
+        "config" => editor::open_config((!arg.is_empty()).then_some(arg)),
+        "config-reload" => {
+            editor::reload_config();
+            Ok(())
+        }
+        "o" | "open" | "e" | "edit" if !arg.is_empty() => crate::open_file(arg),
         "o" | "open" | "e" | "edit" => Err(format!(":{command} needs a path")),
         "" => Ok(()),
         name if name.contains('.') => call(name, &args(arg)?),
@@ -91,14 +83,15 @@ fn call(name: &str, args: &str) -> Result<(), String> {
 }
 
 fn save() -> Result<(), String> {
-    call("buffer.save", "{}")?;
-    let path = editor::active_view().buffer().path().unwrap_or_default();
+    let buffer = view::active().buffer();
+    buffer.save(None)?;
+    let path = buffer.path().unwrap_or_default();
     ui::show_message(&format!("{path} written"));
     Ok(())
 }
 
 fn quit(force: bool) -> Result<(), String> {
-    call("editor.quit", &format!(r#"{{"force":{force}}}"#))
+    editor::quit(force)
 }
 
 #[cfg(test)]

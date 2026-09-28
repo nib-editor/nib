@@ -23,14 +23,14 @@ use base_kit::leader::{self, Leader};
 use base_kit::{call_or_show, line_edit, regex_escape, span, tree};
 use keys::Keymaps;
 use nib_plugin::exports::nib::plugin::guest::{Guest, KeyResult};
-use nib_plugin::nib::plugin::editor::{ScrollAmount, View};
-use nib_plugin::nib::plugin::events::{self, Event};
+use nib_plugin::nib::plugin::events::Event;
 use nib_plugin::nib::plugin::prompt::{self as prompts, Action, Line};
 use nib_plugin::nib::plugin::types::{
     CursorShape, Edit, KeyCode, KeyEvent, Modifiers, SelRange, Selection, UndoMode,
 };
 use nib_plugin::nib::plugin::ui::{Panel, Popup, PopupAnchor, Side};
-use nib_plugin::nib::plugin::{clipboard, commands, editor, input, settings, ui};
+use nib_plugin::nib::plugin::view::{self, Direction, ScrollAmount, Toward, View};
+use nib_plugin::nib::plugin::{clipboard, input, settings, ui};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Mode {
@@ -191,13 +191,26 @@ impl Guest for Plugin {
         HELIX.with_borrow_mut(|helix| {
             helix.keymaps = keymaps;
             helix.set_mode(Mode::Normal);
-            to_blocks(&editor::active_view());
+            to_blocks(&view::active());
         });
         Ok(())
     }
 
     fn handle_key(ev: KeyEvent) -> KeyResult {
         HELIX.with_borrow_mut(|helix| helix.handle_key(ev))
+    }
+
+    /// Typed in insert mode; before each selection otherwise, which the
+    /// core does, as it does in a prompt.
+    fn handle_paste(text: String) -> KeyResult {
+        HELIX.with_borrow_mut(|helix| {
+            if helix.mode != Mode::Insert || prompts::active().is_some() {
+                return KeyResult::Pass;
+            }
+            let view = view::active();
+            helix.insert_text(&view, &text);
+            KeyResult::Handled
+        })
     }
 
     fn run_command(name: String, _args: String) -> Result<String, String> {
@@ -208,8 +221,8 @@ impl Guest for Plugin {
         match ev {
             // The tree caught up with an edit: the bracket match waited
             // for it.
-            Event::Custom(event) if event.name == "editor.syntax_updated" => {
-                highlight_match(&editor::active_view());
+            Event::SyntaxUpdated(_) => {
+                highlight_match(&view::active());
             }
             Event::PromptChanged(change) => {
                 HELIX.with_borrow_mut(|helix| helix.prompt_changed(change.id))
@@ -251,7 +264,7 @@ impl Helix {
             prompts::act(action);
             return KeyResult::Handled;
         }
-        let view = editor::active_view();
+        let view = view::active();
         let version = view.buffer().version();
         let was_inserting = self.mode == Mode::Insert;
         let handled = match self.remapped(&view, ev) {
@@ -266,9 +279,9 @@ impl Helix {
         self.register_fresh = false;
         self.show_hints();
         // After an edit, reading the tree would wait for it to be parsed;
-        // editor.syntax_updated says when it is. The key may also have
+        // the syntax-updated event says when it is. The key may also have
         // switched buffers.
-        let active = editor::active_view();
+        let active = view::active();
         if active.buffer().version() == version {
             highlight_match(&active);
         }
@@ -383,10 +396,11 @@ impl Helix {
             Mode::Select => ("select", " SEL ", "ui.mode.select", CursorShape::Block),
             Mode::Insert => ("insert", " INS ", "ui.mode.insert", CursorShape::Bar),
         };
-        editor::active_view().set_cursor_shape(shape);
+        view::active().set_cursor_shape(shape);
         ui::set_status("mode", Side::Left, 0, &[span(label, style)]);
-        // For other plugins, such as a status line that shows the mode.
-        events::emit("mode_changed", &format!("\"{name}\""));
+        // For other plugins, such as a status line that shows the mode, or
+        // completions that come while typing.
+        input::set_mode(name, mode == Mode::Insert);
     }
 
     /// Normal and select mode. Returns whether the key was used.
@@ -546,12 +560,12 @@ impl Helix {
             '<' => indent(view, false),
             'J' => join_lines(view),
             'u' => {
-                if view.undo() {
+                if view.undo().is_some() {
                     to_blocks(view);
                 }
             }
             'U' => {
-                if view.redo() {
+                if view.redo().is_some() {
                     to_blocks(view);
                 }
             }
@@ -664,23 +678,22 @@ impl Helix {
                     self.pending = Some(Pending::Window);
                 }
             }
-            Pending::Window => {
-                let (command, args) = match c {
-                    'v' => ("view.split", r#"{"direction":"vertical"}"#),
-                    's' => ("view.split", r#"{"direction":"horizontal"}"#),
-                    'w' => ("view.focus", r#"{"to":"next"}"#),
-                    'h' => ("view.focus", r#"{"to":"left"}"#),
-                    'j' => ("view.focus", r#"{"to":"down"}"#),
-                    'k' => ("view.focus", r#"{"to":"up"}"#),
-                    'l' => ("view.focus", r#"{"to":"right"}"#),
-                    'q' => ("view.close", ""),
-                    'o' => ("view.only", ""),
-                    _ => return,
-                };
-                if let Err(err) = commands::call(command, args) {
-                    ui::show_message(&err);
+            Pending::Window => match c {
+                'v' => view::split(Direction::Vertical),
+                's' => view::split(Direction::Horizontal),
+                'w' => view::focus(Toward::Next),
+                'h' => view::focus(Toward::Left),
+                'j' => view::focus(Toward::Down),
+                'k' => view::focus(Toward::Up),
+                'l' => view::focus(Toward::Right),
+                'q' => {
+                    if let Err(err) = view::close() {
+                        ui::show_message(&err);
+                    }
                 }
-            }
+                'o' => view::only(),
+                _ => {}
+            },
             Pending::Goto => {
                 let goto: fn(&Doc, u64, Option<u64>) -> u64 = match c {
                     'g' => |doc, _, count| doc.line_start(count.map_or(0, |n| n.saturating_sub(1))),
@@ -700,13 +713,12 @@ impl Helix {
                         return;
                     }
                     'n' | 'p' => {
-                        let command = if c == 'n' {
-                            "buffer.next"
+                        if c == 'n' {
+                            view.show_next();
                         } else {
-                            "buffer.previous"
-                        };
-                        let _ = commands::call(command, "");
-                        to_blocks(&editor::active_view());
+                            view.show_previous();
+                        }
+                        to_blocks(&view::active());
                         return;
                     }
                     _ => return,
@@ -820,14 +832,12 @@ impl Helix {
     fn scroll(&mut self, view: &View, amount: ScrollAmount) {
         let lines = view.scroll(amount);
         let doc = Doc::new(view.buffer());
-        let (start, end) = view.visible_range();
+        let shown = view.visible_range();
+        let (start, end) = (shown.start, shown.end);
         let top = doc.line_of(start);
         let bottom = doc.line_of(end.saturating_sub(1).max(start));
         let rows = bottom - top + 1;
-        let margin: u64 = settings::get("scroll-margin")
-            .and_then(|m| m.parse().ok())
-            .unwrap_or(0)
-            .min(rows.saturating_sub(1) / 2);
+        let margin = u64::from(settings::scroll_margin()).min(rows.saturating_sub(1) / 2);
         // No margin is needed where the view cannot scroll further.
         let low = if top == 0 { 0 } else { top + margin };
         let high = if bottom >= doc.last_line() {
@@ -1173,14 +1183,14 @@ impl Helix {
     }
 
     fn run_prompt(&mut self, prompt: Prompt, input: String) {
-        let view = editor::active_view();
+        let view = view::active();
         match prompt {
             Prompt::Command => {
                 if let Err(err) = cmdline::run(input.trim()) {
                     ui::show_message(&err);
                 }
                 // Another buffer may be shown now, with its cursor a point.
-                points_to_blocks(&editor::active_view());
+                points_to_blocks(&view::active());
             }
             _ if input.is_empty() => {}
             Prompt::Search { backward } => {

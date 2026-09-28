@@ -1,10 +1,10 @@
 //! Selections and edits over every selection at once, the same whichever
 //! way a base places its cursors.
 
-use nib_plugin::nib::plugin::editor::View;
-use nib_plugin::nib::plugin::settings;
+use nib_plugin::nib::plugin::settings::{self, Indentation};
 use nib_plugin::nib::plugin::types::{Edit, SelRange, Selection, UndoMode};
 use nib_plugin::nib::plugin::ui::{self, Decoration};
+use nib_plugin::nib::plugin::view::{self, View};
 
 use crate::doc::{self, Doc};
 use crate::{error_message, tree};
@@ -128,12 +128,11 @@ pub fn replace_with(view: &View, c: char) {
     apply_placing(view, changes, UndoMode::NewStep);
 }
 
-/// The text Tab inserts, from the core's indent setting.
+/// The text Tab inserts, from the shown buffer's indentation.
 pub fn indent_unit() -> String {
-    match settings::get("indent").as_deref() {
-        Some("\"tab\"") => "\t".to_string(),
-        Some(n) => " ".repeat(n.parse().unwrap_or(4)),
-        None => "    ".to_string(),
+    match settings::indent(&view::active().buffer()) {
+        Indentation::Tab => "\t".to_string(),
+        Indentation::Spaces(n) => " ".repeat(n as usize),
     }
 }
 
@@ -234,9 +233,9 @@ pub fn find(view: &View, pattern: &str, backward: bool) -> Option<(u64, u64)> {
         (to, 0)
     };
     let found = match buffer.find(pattern, start, backward) {
-        Ok(Some(found)) => Some((found, false)),
+        Ok(Some(found)) => Some(((found.start, found.end), false)),
         Ok(None) => match buffer.find(pattern, wrap_start, backward) {
-            Ok(found) => found.map(|found| (found, true)),
+            Ok(found) => found.map(|found| ((found.start, found.end), true)),
             Err(err) => {
                 ui::show_message(&error_message(err));
                 return None;
@@ -266,8 +265,8 @@ pub fn select_matches(view: &View, pattern: &str) {
             Ok(found) => ranges.extend(
                 found
                     .into_iter()
-                    .filter(|(start, end)| start < end)
-                    .map(|(start, end)| range(start, end)),
+                    .filter(|r| r.start < r.end)
+                    .map(|r| range(r.start, r.end)),
             ),
             Err(err) => return ui::show_message(&error_message(err)),
         }

@@ -109,3 +109,29 @@ keys = ":noh<tab>"
 
 [test.expect]
 screen = [":nohlsearch"]
+
+[[test]]
+name = "a paste goes after the cursor in normal mode, as Neovim puts it"
+text = "#[|]#abc\n"
+paste = "xy"
+
+[test.expect]
+selections = "ax#[|]#ybc\n"
+
+[[test]]
+name = "a paste in insert mode is typed, and in the command line goes into it"
+text = "#[|]#abc\n"
+
+[[test.step]]
+keys = "i"
+paste = "one\n  two "
+expect.text = "one\n  two abc\n"
+
+[[test.step]]
+keys = "<esc>:"
+paste = "s/two/2/"
+expect.screen = [":s/two/2/"]
+
+[[test.step]]
+keys = "<ret>"
+expect.text = "one\n  2 abc\n"

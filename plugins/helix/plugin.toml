@@ -1,10 +1,10 @@
 name = "helix"
 version = "0.1.18"
-api = "0.5"
+api = "0.6"
 # The whole way of editing (docs/base.md); only one base runs.
 base = true
 menu-key = "C-g"
 # For the + register and Space y / Space p.
 capabilities = ["clipboard"]
 # Bracket matching waits for the tree after an edit.
-events = ["editor.syntax_updated"]
+events = ["syntax-updated"]

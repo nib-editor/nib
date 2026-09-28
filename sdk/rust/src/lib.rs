@@ -12,5 +12,5 @@ wit_bindgen::generate!({
     // Plugins compare keys and other values, so make that possible.
     additional_derives: [PartialEq, Eq, Hash],
     // These hold resources, which cannot be compared.
-    additional_derives_ignore: ["buffer-change", "event"],
+    additional_derives_ignore: ["buffer-change", "syntax-update", "event"],
 });

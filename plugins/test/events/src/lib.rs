@@ -9,7 +9,7 @@ use nib_plugin::nib::plugin::events::{self, Event};
 use nib_plugin::nib::plugin::process::{self, Child, Stream};
 use nib_plugin::nib::plugin::prompt::{Action, Choices, Line};
 use nib_plugin::nib::plugin::types::{Edit, KeyEvent, UndoMode};
-use nib_plugin::nib::plugin::{commands, editor, files, timers};
+use nib_plugin::nib::plugin::{buffer, commands, files, timers, view};
 
 /// A program it started, and what it printed so far.
 struct Program {
@@ -25,7 +25,7 @@ thread_local! {
     static CHOICES: RefCell<Option<Choices>> = const { RefCell::new(None) };
 }
 
-const COMMANDS: [&str; 19] = [
+const COMMANDS: [&str; 23] = [
     "echo",
     "call",
     "log",
@@ -45,6 +45,10 @@ const COMMANDS: [&str; 19] = [
     "prompt",
     "close-prompt",
     "choices",
+    "modified",
+    "groups",
+    "undo",
+    "redo",
 ];
 
 struct Events;
@@ -58,6 +62,10 @@ impl Guest for Events {
     }
 
     fn handle_key(_ev: KeyEvent) -> KeyResult {
+        KeyResult::Pass
+    }
+
+    fn handle_paste(_text: String) -> KeyResult {
         KeyResult::Pass
     }
 
@@ -92,7 +100,7 @@ impl Guest for Events {
             }
             // Inserts the text at the start of the shown buffer.
             "edit" => {
-                let view = editor::active_view();
+                let view = view::active();
                 let edit = Edit {
                     start: 0,
                     end: 0,
@@ -103,7 +111,32 @@ impl Guest for Events {
                     .map_err(|err| format!("{err:?}"))?;
                 Ok(String::new())
             }
-            "buffers" => Ok(editor::buffers().len().to_string()),
+            "buffers" => Ok(buffer::all().len().to_string()),
+            "modified" => Ok(view::active().buffer().modified().to_string()),
+            // The groups of the first match of the pattern, as start-end or
+            // "none", with spaces between.
+            "groups" => {
+                let found = view::active()
+                    .buffer()
+                    .find_groups(&args, 0, false)
+                    .map_err(|err| format!("{err:?}"))?;
+                Ok(found.map_or("no match".into(), |groups| {
+                    groups
+                        .iter()
+                        .map(|g| g.map_or("none".into(), |r| format!("{}-{}", r.start, r.end)))
+                        .collect::<Vec<String>>()
+                        .join(" ")
+                }))
+            }
+            "undo" | "redo" => {
+                let view = view::active();
+                let changed = if name == "undo" {
+                    view.undo()
+                } else {
+                    view.redo()
+                };
+                Ok(changed.map_or("none".into(), |r| format!("{}-{}", r.start, r.end)))
+            }
             // The command and its arguments, one per line.
             "spawn" => {
                 let mut words = args.lines().map(String::from);
@@ -182,6 +215,11 @@ impl Guest for Events {
                     .collect();
                 format!("changed v{} {}", change.version, changes.join(";"))
             }
+            Event::BufferClosed(path) => format!("closed {}", name(path)),
+            Event::SyntaxUpdated(update) => {
+                format!("syntax {} v{}", name(update.buffer.path()), update.version)
+            }
+            Event::ModeChanged(mode) => format!("mode {} {} {}", mode.base, mode.name, mode.typing),
             Event::Custom(custom) => {
                 // Answers itself forever, to check the host stops it.
                 if custom.name == "test-events.loop" {

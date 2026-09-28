@@ -678,7 +678,7 @@ fn other_base(dir: &std::path::Path) -> std::path::PathBuf {
     .unwrap();
     let manifest = format!(
         "name = \"other\"\nversion = \"0.1.0\"\napi = \"{API_VERSION}\"\nbase = true\n\
-         menu-key = \"F10\"\nevents = [\"editor.syntax_updated\"]\n"
+         menu-key = \"F10\"\nevents = [\"syntax-updated\"]\n"
     );
     fs::write(other.join("plugin.toml"), manifest).unwrap();
     other

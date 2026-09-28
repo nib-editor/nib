@@ -8,7 +8,7 @@
 //	  --wit-world plugin -o plugin.wasm .
 //
 // The editor's API is in the generated packages under nib/plugin/, one per
-// WIT interface, such as nib/plugin/editor.
+// WIT interface, such as nib/plugin/buffer.
 package nib
 
 import (
@@ -28,6 +28,10 @@ type Plugin interface {
 	// HandleKey gets a key that reached one of the plugin's input layers,
 	// and reports whether it used it; otherwise the layer below gets it.
 	HandleKey(ev types.KeyEvent) bool
+	// HandlePaste gets text pasted into the terminal that reached one of
+	// the plugin's input layers, as one piece, and reports whether it used
+	// it.
+	HandlePaste(text string) bool
 	// RunCommand runs one of the plugin's registered commands, by the name
 	// it was registered with. Arguments and the result are JSON.
 	RunCommand(name, args string) (string, error)
@@ -42,6 +46,8 @@ type Base struct{}
 func (Base) Init(string) error { return nil }
 
 func (Base) HandleKey(types.KeyEvent) bool { return false }
+
+func (Base) HandlePaste(string) bool { return false }
 
 func (Base) RunCommand(name, _ string) (string, error) {
 	return "", errors.New("no command " + name)
@@ -59,6 +65,12 @@ func Register(p Plugin) {
 	}
 	guest.Exports.HandleKey = func(ev types.KeyEvent) guest.KeyResult {
 		if p.HandleKey(ev) {
+			return guest.KeyResultHandled
+		}
+		return guest.KeyResultPass
+	}
+	guest.Exports.HandlePaste = func(text string) guest.KeyResult {
+		if p.HandlePaste(text) {
 			return guest.KeyResultHandled
 		}
 		return guest.KeyResultPass

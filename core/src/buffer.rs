@@ -39,6 +39,33 @@ pub struct Change {
     pub selection: Selection,
 }
 
+impl Change {
+    /// Where the text changed first, in the text after the change: the
+    /// edit that comes first, as it ended up.
+    pub fn first_range(&self) -> Option<std::ops::Range<usize>> {
+        let mut first: Option<std::ops::Range<usize>> = None;
+        for (i, set) in self.changes.iter().enumerate() {
+            let mut delta = 0isize;
+            for edit in set.edits() {
+                let start = edit.start.saturating_add_signed(delta);
+                let end = start + edit.text.len();
+                delta += edit.text.len() as isize - (edit.end - edit.start) as isize;
+                let later = &self.changes[i + 1..];
+                let start = later
+                    .iter()
+                    .fold(start, |pos, set| set.map_pos(pos, Assoc::Before));
+                let end = later
+                    .iter()
+                    .fold(end, |pos, set| set.map_pos(pos, Assoc::After));
+                if first.as_ref().is_none_or(|f| start < f.start) {
+                    first = Some(start..end);
+                }
+            }
+        }
+        first
+    }
+}
+
 /// A text buffer. Line endings are normalized to LF in memory and restored
 /// on save, so offsets never point between `\r` and `\n`.
 pub struct Buffer {
@@ -247,6 +274,16 @@ impl Buffer {
         end: usize,
     ) -> Result<Vec<(usize, usize)>, Error> {
         search::find_all(&self.text, pattern, start, end)
+    }
+
+    /// See [`search::find_groups`].
+    pub fn find_groups(
+        &self,
+        pattern: &str,
+        start: usize,
+        backward: bool,
+    ) -> Result<Option<search::Groups>, Error> {
+        search::find_groups(&self.text, pattern, start, backward)
     }
 
     /// Applies `edits` atomically: on error, nothing changes.

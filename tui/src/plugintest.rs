@@ -45,12 +45,14 @@ struct Case {
     step: Vec<Step>,
 }
 
-/// Keys to send, then a command to call, then expectations to check,
-/// waiting up to `wait` ms for them.
+/// Keys to send, then text to paste, then a command to call, then
+/// expectations to check, waiting up to `wait` ms for them.
 #[derive(Deserialize, Default)]
 struct Step {
     #[serde(default)]
     keys: String,
+    /// Pasted into the terminal after the keys, as one piece.
+    paste: Option<String>,
     command: Option<String>,
     args: Option<String>,
     wait: Option<u64>,
@@ -61,6 +63,7 @@ struct Step {
 impl Step {
     fn is_empty(&self) -> bool {
         self.keys.is_empty()
+            && self.paste.is_none()
             && self.command.is_none()
             && self.wait.is_none()
             && self.expect.is_empty()
@@ -235,7 +238,8 @@ fn run_case(setup: &Setup, case: &Case) -> Result<(), Vec<String>> {
         (true, false) => case.step.iter().collect(),
         (false, false) => {
             return Err(fail(
-                "put keys, command, wait, and expect in the steps when there are steps".into(),
+                "put keys, paste, command, wait, and expect in the steps when there are steps"
+                    .into(),
             ));
         }
     };
@@ -328,6 +332,10 @@ fn run_step(editor: &mut Editor, step: &Step) -> Result<(), Vec<String>> {
     let keys = parse_keys(&step.keys).map_err(|err| vec![format!("keys: {err}")])?;
     for key in keys {
         editor.handle_key(key);
+        settle(editor);
+    }
+    if let Some(text) = &step.paste {
+        editor.handle_paste(text);
         settle(editor);
     }
     let call = |editor: &mut Editor| {

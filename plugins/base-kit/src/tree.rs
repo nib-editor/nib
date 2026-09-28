@@ -2,7 +2,7 @@
 //! matching pairs. Everything returns `None` for buffers without a tree, so
 //! callers can fall back to working on the text.
 
-use nib_plugin::nib::plugin::editor::Buffer;
+use nib_plugin::nib::plugin::buffer::Buffer;
 use nib_plugin::nib::plugin::syntax::{self, Node};
 
 /// Pairs the tree can match, as node kinds.
@@ -31,6 +31,7 @@ pub fn object_name(key: char) -> Option<&'static str> {
 pub fn object_around(buffer: &Buffer, capture: &str, pos: u64) -> Option<(u64, u64)> {
     syntax::captures(buffer, "textobjects", capture, pos, pos + 1)
         .into_iter()
+        .map(|r| (r.start, r.end))
         .filter(|&(start, end)| start <= pos && pos < end)
         .min_by_key(|&(start, end)| end - start)
 }
@@ -55,7 +56,10 @@ pub fn next_object(
         } else {
             (pos.saturating_sub(window), pos)
         };
-        let found = syntax::captures(buffer, "textobjects", capture, start, end);
+        let found: Vec<(u64, u64)> = syntax::captures(buffer, "textobjects", capture, start, end)
+            .into_iter()
+            .map(|r| (r.start, r.end))
+            .collect();
         let hit = if forward {
             found.into_iter().filter(|&(s, _)| s > pos).nth(skip)
         } else {

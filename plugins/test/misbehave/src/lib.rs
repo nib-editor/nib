@@ -21,6 +21,10 @@ impl Guest for Misbehave {
         Ok(())
     }
 
+    fn handle_paste(_text: String) -> KeyResult {
+        KeyResult::Pass
+    }
+
     fn handle_key(ev: KeyEvent) -> KeyResult {
         match ev.code {
             KeyCode::Char('l') => loop {

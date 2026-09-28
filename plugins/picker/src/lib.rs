@@ -13,7 +13,7 @@ use nib_plugin::nib::plugin::events::Event;
 use nib_plugin::nib::plugin::prompt::{Action, Line};
 use nib_plugin::nib::plugin::types::{KeyEvent, Span};
 use nib_plugin::nib::plugin::ui::{self, Panel};
-use nib_plugin::nib::plugin::{commands, files};
+use nib_plugin::nib::plugin::{buffer, commands, files, view};
 
 /// Candidates shown at once.
 const ROWS: usize = 10;
@@ -72,6 +72,10 @@ impl Guest for Plugin {
         KeyResult::Pass
     }
 
+    fn handle_paste(_text: String) -> KeyResult {
+        KeyResult::Pass
+    }
+
     fn run_command(name: String, _args: String) -> Result<String, String> {
         let kind = match name.as_str() {
             "files" => Kind::Files,
@@ -93,6 +97,8 @@ impl Guest for Plugin {
                 Event::PromptAction(act) if act.id == open.line.id() => match act.action {
                     Action::Next | Action::Complete => open.select(1),
                     Action::Previous | Action::CompleteBack => open.select(-1),
+                    Action::PageNext => open.select(ROWS as isize),
+                    Action::PagePrevious => open.select(-(ROWS as isize)),
                     Action::Cancel => {
                         close(picker);
                         return None;
@@ -126,10 +132,7 @@ impl Guest for Plugin {
         // open a picker again.
         if let Some((kind, text)) = chosen {
             let done = match kind {
-                Kind::Files => {
-                    let args = format!("{{\"path\":{}}}", json_string(&text));
-                    commands::call("buffer.open", &args).map(|_| ())
-                }
+                Kind::Files => open_file(&text),
                 Kind::Commands => run(&text),
             };
             if let Err(err) = done {
@@ -169,6 +172,12 @@ fn open(kind: Kind) -> Result<(), String> {
         open.show();
         Ok(())
     })
+}
+
+fn open_file(path: &str) -> Result<(), String> {
+    let buffer = buffer::open(path)?;
+    view::active().show(&buffer);
+    Ok(())
 }
 
 /// Runs a chosen command. This plugin's own are run here: calling them
@@ -262,20 +271,6 @@ fn span(text: &str, style: &str) -> Span {
         text: text.into(),
         style: style.into(),
     }
-}
-
-fn json_string(text: &str) -> String {
-    let mut out = String::from("\"");
-    for c in text.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
 }
 
 nib_plugin::export!(Plugin);

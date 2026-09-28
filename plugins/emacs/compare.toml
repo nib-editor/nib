@@ -727,15 +727,12 @@ keys = "x<C-f>y<C-/><C-/>"
 [[case]]
 text = "#[|]#abc\n"
 keys = "xy<C-/><C-?>"
-differs = "redo leaves the point where the edit left it; Emacs's at the start of the change"
 [[case]]
 text = "#[|]#abc\n"
 keys = "xy<C-/><C-A-_>"
-differs = "redo leaves the point where the edit left it; Emacs's at the start of the change"
 [[case]]
 text = "#[|]#abc\n"
 keys = "x<C-f>y<C-/><C-/><C-A-_>"
-differs = "redo leaves the point where the edit left it; Emacs's at the start of the change"
 [[case]]
 text = "#[|]#abc\n"
 keys = "x<C-x>u"
@@ -1055,3 +1052,11 @@ keys = "<C-e><A-/>"
 [[case]]
 text = "#[|]#a b\n"
 keys = "<C-x>h<C-x>h<C-w>"
+
+# Groups in replacements
+[[case]]
+text = "#[|]#ab ab\ncd\n"
+keys = "<C-A-%>\\(a\\)\\(b\\)<ret>\\2\\1<ret>!"
+[[case]]
+text = "#[|]#key = value\n"
+keys = "<A-x>replace-regexp<ret>\\(\\w+\\) = \\(\\w+\\)<ret>\\2 := \\1<ret>"

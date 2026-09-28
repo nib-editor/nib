@@ -154,6 +154,7 @@ fn vim_notation(keys: &[KeyEvent]) -> String {
                 KeyCode::Tab => "Tab".into(),
                 KeyCode::Backspace => "BS".into(),
                 KeyCode::Delete => "Del".into(),
+                KeyCode::Insert => "Insert".into(),
                 KeyCode::Up => "Up".into(),
                 KeyCode::Down => "Down".into(),
                 KeyCode::Left => "Left".into(),
@@ -196,6 +197,7 @@ fn emacs_notation(keys: &[KeyEvent]) -> String {
                 }
                 KeyCode::Backspace => "DEL".into(),
                 KeyCode::Delete => "<deletechar>".into(),
+                KeyCode::Insert => "<insert>".into(),
                 KeyCode::Up => "<up>".into(),
                 KeyCode::Down => "<down>".into(),
                 KeyCode::Left => "<left>".into(),

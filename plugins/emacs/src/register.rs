@@ -1,10 +1,8 @@
 //! Registers: text, rectangles, positions, and numbers kept under a char.
 
 use base_kit::doc::Doc;
-use base_kit::json_string;
-use nib_plugin::nib::plugin::commands;
-use nib_plugin::nib::plugin::editor::{self, View};
 use nib_plugin::nib::plugin::types::{KeyCode, KeyEvent};
+use nib_plugin::nib::plugin::view::{self, View};
 
 use crate::{Arg, Emacs};
 
@@ -89,14 +87,13 @@ impl Emacs {
                         "Register doesn’t contain a buffer position or configuration".into(),
                     );
                 };
-                if path.is_some() && *path != view.buffer().path() {
-                    let path = path.clone().expect("checked above");
-                    commands::call(
-                        "buffer.open",
-                        &format!(r#"{{"path":{}}}"#, json_string(&path)),
-                    )?;
+                if let Some(path) = path
+                    .as_ref()
+                    .filter(|p| Some(*p) != view.buffer().path().as_ref())
+                {
+                    base_kit::open_file(path)?;
                 }
-                let view = editor::active_view();
+                let view = view::active();
                 let at = view
                     .buffer()
                     .marks(&namespace(name))

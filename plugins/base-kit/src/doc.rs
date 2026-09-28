@@ -1,7 +1,7 @@
 //! Reading a buffer around a position, and the motions computed from its
 //! text. Only the lines needed are copied out of the editor.
 
-use nib_plugin::nib::plugin::editor::Buffer;
+use nib_plugin::nib::plugin::buffer::Buffer;
 
 /// Lines copied at first when looking around a position; doubled while a
 /// motion runs past the copied text.

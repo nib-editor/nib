@@ -8,8 +8,9 @@ use wasmtime_wasi::{WasiCtxView, WasiView};
 
 use super::PluginData;
 use crate::buffer::Buffer;
-use crate::editor::{CORE_COMMANDS, ScrollAmount, State};
-use crate::events::{Command, Event, Timer};
+use crate::config::Indent;
+use crate::editor::{CORE_COMMANDS, ScrollAmount, State, Toward};
+use crate::events::{Command, Event, Mode, Timer};
 use crate::grapheme;
 use crate::grid::CursorShape;
 use crate::history::UndoMode;
@@ -32,8 +33,8 @@ pub(crate) mod bindings {
         // handle to a buffer that no longer exists.
         imports: { default: trappable },
         with: {
-            "nib:plugin/editor.buffer": super::BufferHandle,
-            "nib:plugin/editor.view": super::ViewHandle,
+            "nib:plugin/buffer.buffer": super::BufferHandle,
+            "nib:plugin/view.view": super::ViewHandle,
             "nib:plugin/ui.panel": super::PanelHandle,
             "nib:plugin/ui.popup": super::PopupHandle,
             "nib:plugin/prompt.line": super::PromptHandle,
@@ -44,14 +45,14 @@ pub(crate) mod bindings {
 }
 
 use bindings::nib::plugin::{
-    clipboard, commands, editor, events, files, input, process, prompt as wit_prompt, settings,
-    syntax, timers, types as wit, ui as wit_ui,
+    buffer as wit_buffer, clipboard, commands, editor, events, files, input, process,
+    prompt as wit_prompt, settings, syntax, timers, types as wit, ui as wit_ui, view as wit_view,
 };
 
 /// A buffer as seen by a plugin. The resource's rep is the buffer index.
 pub struct BufferHandle;
 
-/// A view as seen by a plugin. There is one view for now, with rep 0.
+/// A view as seen by a plugin: the focused view, with rep 0.
 pub struct ViewHandle;
 
 /// A panel as seen by a plugin. The resource's rep is the panel id.
@@ -124,25 +125,49 @@ impl PluginData {
 impl wit::Host for PluginData {}
 
 impl editor::Host for PluginData {
-    fn active_view(&mut self) -> HostResult<Resource<ViewHandle>> {
-        Ok(Resource::new_own(0))
+    fn working_directory(&mut self) -> HostResult<String> {
+        let dir = std::env::current_dir().unwrap_or_default();
+        Ok(dir.to_string_lossy().into_owned())
     }
 
-    fn buffers(&mut self) -> HostResult<Vec<Resource<BufferHandle>>> {
+    fn quit(&mut self, force: bool) -> HostResult<Result<(), String>> {
+        Ok(self.state()?.quit(force))
+    }
+
+    fn open_config(&mut self, plugin: Option<String>) -> HostResult<Result<(), String>> {
+        Ok(self.state()?.open_config(plugin.as_deref()))
+    }
+
+    fn reload_config(&mut self) -> HostResult<()> {
+        self.state()?.reload_config = true;
+        Ok(())
+    }
+
+    fn open_menu(&mut self) -> HostResult<()> {
+        self.state()?.open_menu();
+        Ok(())
+    }
+}
+
+impl wit_buffer::Host for PluginData {
+    fn open(&mut self, path: String) -> HostResult<Result<Resource<BufferHandle>, String>> {
+        Ok(self
+            .state()?
+            .open_buffer(&path)
+            .map(|index| Resource::new_own(index as u32))
+            .map_err(|err| format!("{path}: {err}")))
+    }
+
+    fn all(&mut self) -> HostResult<Vec<Resource<BufferHandle>>> {
         let buffers = &self.state()?.buffers;
         Ok((0..buffers.len())
             .filter(|&i| !buffers[i].is_closed())
             .map(|i| Resource::new_own(i as u32))
             .collect())
     }
-
-    fn working_directory(&mut self) -> HostResult<String> {
-        let dir = std::env::current_dir().unwrap_or_default();
-        Ok(dir.to_string_lossy().into_owned())
-    }
 }
 
-impl editor::HostBuffer for PluginData {
+impl wit_buffer::HostBuffer for PluginData {
     fn version(&mut self, buffer: Resource<BufferHandle>) -> HostResult<u64> {
         Ok(self.buffer(&buffer)?.version())
     }
@@ -156,7 +181,7 @@ impl editor::HostBuffer for PluginData {
         buffer: Resource<BufferHandle>,
         start: u64,
         end: u64,
-    ) -> HostResult<Result<String, editor::Error>> {
+    ) -> HostResult<Result<String, wit::Error>> {
         let buffer = self.buffer(&buffer)?;
         wit_result(pos(start).and_then(|start| buffer.slice(start, pos(end)?)))
     }
@@ -177,7 +202,7 @@ impl editor::HostBuffer for PluginData {
         &mut self,
         buffer: Resource<BufferHandle>,
         at: u64,
-    ) -> HostResult<Result<u64, editor::Error>> {
+    ) -> HostResult<Result<u64, wit::Error>> {
         let buffer = self.buffer(&buffer)?;
         wit_result(
             pos(at)
@@ -190,7 +215,7 @@ impl editor::HostBuffer for PluginData {
         &mut self,
         buffer: Resource<BufferHandle>,
         at: u64,
-    ) -> HostResult<Result<u64, editor::Error>> {
+    ) -> HostResult<Result<u64, wit::Error>> {
         let buffer = self.buffer(&buffer)?;
         wit_result(
             pos(at)
@@ -203,7 +228,7 @@ impl editor::HostBuffer for PluginData {
         &mut self,
         buffer: Resource<BufferHandle>,
         at: u64,
-    ) -> HostResult<Result<u64, editor::Error>> {
+    ) -> HostResult<Result<u64, wit::Error>> {
         let buffer = self.buffer(&buffer)?;
         wit_result(
             pos(at)
@@ -219,18 +244,44 @@ impl editor::HostBuffer for PluginData {
             .map(|path| path.to_string_lossy().into_owned()))
     }
 
+    fn modified(&mut self, buffer: Resource<BufferHandle>) -> HostResult<bool> {
+        Ok(self.buffer(&buffer)?.is_modified())
+    }
+
     fn find(
         &mut self,
         buffer: Resource<BufferHandle>,
         pattern: String,
         start: u64,
         backward: bool,
-    ) -> HostResult<Result<Option<(u64, u64)>, editor::Error>> {
+    ) -> HostResult<Result<Option<wit::Range>, wit::Error>> {
         let buffer = self.buffer(&buffer)?;
         wit_result(
             pos(start)
                 .and_then(|start| buffer.find(&pattern, start, backward))
-                .map(|found| found.map(|(s, e)| (s as u64, e as u64))),
+                .map(|found| found.map(|(s, e)| range(s, e))),
+        )
+    }
+
+    fn find_groups(
+        &mut self,
+        buffer: Resource<BufferHandle>,
+        pattern: String,
+        start: u64,
+        backward: bool,
+    ) -> HostResult<Result<Option<Vec<Option<wit::Range>>>, wit::Error>> {
+        let buffer = self.buffer(&buffer)?;
+        wit_result(
+            pos(start)
+                .and_then(|start| buffer.find_groups(&pattern, start, backward))
+                .map(|found| {
+                    found.map(|groups| {
+                        groups
+                            .into_iter()
+                            .map(|group| group.map(|(s, e)| range(s, e)))
+                            .collect()
+                    })
+                }),
         )
     }
 
@@ -240,18 +291,33 @@ impl editor::HostBuffer for PluginData {
         pattern: String,
         start: u64,
         end: u64,
-    ) -> HostResult<Result<Vec<(u64, u64)>, editor::Error>> {
+    ) -> HostResult<Result<Vec<wit::Range>, wit::Error>> {
         let buffer = self.buffer(&buffer)?;
         wit_result(
             pos(start)
                 .and_then(|start| buffer.find_all(&pattern, start, pos(end)?))
-                .map(|found| {
-                    found
-                        .into_iter()
-                        .map(|(s, e)| (s as u64, e as u64))
-                        .collect()
-                }),
+                .map(|found| found.into_iter().map(|(s, e)| range(s, e)).collect()),
         )
+    }
+
+    fn save(
+        &mut self,
+        buffer: Resource<BufferHandle>,
+        path: Option<String>,
+    ) -> HostResult<Result<(), String>> {
+        self.buffer(&buffer)?;
+        let index = buffer.rep() as usize;
+        Ok(self.state()?.save_buffer(index, path.as_deref()))
+    }
+
+    fn close(
+        &mut self,
+        buffer: Resource<BufferHandle>,
+        force: bool,
+    ) -> HostResult<Result<(), String>> {
+        self.buffer(&buffer)?;
+        let index = buffer.rep() as usize;
+        Ok(self.state()?.close_buffer_at(index, force))
     }
 
     fn set_marks(
@@ -282,10 +348,64 @@ impl editor::HostBuffer for PluginData {
     }
 }
 
-impl editor::HostView for PluginData {
+impl wit_view::Host for PluginData {
+    fn active(&mut self) -> HostResult<Resource<ViewHandle>> {
+        Ok(Resource::new_own(0))
+    }
+
+    fn split(&mut self, direction: wit_view::Direction) -> HostResult<()> {
+        let side_by_side = direction == wit_view::Direction::Vertical;
+        self.state()?.split(side_by_side);
+        Ok(())
+    }
+
+    fn close(&mut self) -> HostResult<Result<(), String>> {
+        Ok(self.state()?.close_view())
+    }
+
+    fn only(&mut self) -> HostResult<()> {
+        self.state()?.only_view();
+        Ok(())
+    }
+
+    fn focus(&mut self, toward: wit_view::Toward) -> HostResult<()> {
+        let toward = match toward {
+            wit_view::Toward::Next => Toward::Next,
+            wit_view::Toward::Left => Toward::Left,
+            wit_view::Toward::Right => Toward::Right,
+            wit_view::Toward::Up => Toward::Up,
+            wit_view::Toward::Down => Toward::Down,
+        };
+        self.state()?.focus_toward(toward);
+        Ok(())
+    }
+}
+
+impl wit_view::HostView for PluginData {
     fn buffer(&mut self, view: Resource<ViewHandle>) -> HostResult<Resource<BufferHandle>> {
         let state = self.view_state(&view)?;
         Ok(Resource::new_own(state.view.buffer as u32))
+    }
+
+    fn show(
+        &mut self,
+        view: Resource<ViewHandle>,
+        buffer: Resource<BufferHandle>,
+    ) -> HostResult<()> {
+        self.buffer(&buffer)?;
+        let index = buffer.rep() as usize;
+        self.view_state(&view)?.show(index);
+        Ok(())
+    }
+
+    fn show_next(&mut self, view: Resource<ViewHandle>) -> HostResult<()> {
+        self.view_state(&view)?.show_next(true);
+        Ok(())
+    }
+
+    fn show_previous(&mut self, view: Resource<ViewHandle>) -> HostResult<()> {
+        self.view_state(&view)?.show_next(false);
+        Ok(())
     }
 
     fn selection(&mut self, view: Resource<ViewHandle>) -> HostResult<wit::Selection> {
@@ -297,7 +417,7 @@ impl editor::HostView for PluginData {
         &mut self,
         view: Resource<ViewHandle>,
         selection: wit::Selection,
-    ) -> HostResult<Result<(), editor::Error>> {
+    ) -> HostResult<Result<(), wit::Error>> {
         let state = self.view_state(&view)?;
         let buffer = &state.buffers[state.view.buffer];
         let result = from_wit_selection(selection)
@@ -315,7 +435,7 @@ impl editor::HostView for PluginData {
         edits: Vec<wit::Edit>,
         after: Option<wit::Selection>,
         undo: wit::UndoMode,
-    ) -> HostResult<Result<(), editor::Error>> {
+    ) -> HostResult<Result<(), wit::Error>> {
         let state = self.view_state(&view)?;
         let buffer = &mut state.buffers[state.view.buffer];
         let result = (|| {
@@ -338,28 +458,12 @@ impl editor::HostView for PluginData {
         wit_result(result)
     }
 
-    fn undo(&mut self, view: Resource<ViewHandle>) -> HostResult<bool> {
-        let state = self.view_state(&view)?;
-        let index = state.view.buffer;
-        let change = state.buffers[index].undo();
-        Ok(change
-            .map(|change| {
-                state.sync_views(index, &change.changes);
-                state.view.selection = change.selection;
-            })
-            .is_some())
+    fn undo(&mut self, view: Resource<ViewHandle>) -> HostResult<Option<wit::Range>> {
+        self.undo_or_redo(&view, true)
     }
 
-    fn redo(&mut self, view: Resource<ViewHandle>) -> HostResult<bool> {
-        let state = self.view_state(&view)?;
-        let index = state.view.buffer;
-        let change = state.buffers[index].redo();
-        Ok(change
-            .map(|change| {
-                state.sync_views(index, &change.changes);
-                state.view.selection = change.selection;
-            })
-            .is_some())
+    fn redo(&mut self, view: Resource<ViewHandle>) -> HostResult<Option<wit::Range>> {
+        self.undo_or_redo(&view, false)
     }
 
     fn move_vertically(
@@ -368,7 +472,7 @@ impl editor::HostView for PluginData {
         at: u64,
         lines: i32,
         column: Option<u32>,
-    ) -> HostResult<Result<(u64, u32), editor::Error>> {
+    ) -> HostResult<Result<(u64, u32), wit::Error>> {
         let state = self.view_state(&view)?;
         let tab_width = state.tab_width(state.view.buffer);
         let text = state.buffers[state.view.buffer].text();
@@ -385,19 +489,19 @@ impl editor::HostView for PluginData {
     fn scroll(
         &mut self,
         view: Resource<ViewHandle>,
-        amount: editor::ScrollAmount,
+        amount: wit_view::ScrollAmount,
     ) -> HostResult<i32> {
         let state = self.view_state(&view)?;
         Ok(state.scroll(match amount {
-            editor::ScrollAmount::Lines(n) => ScrollAmount::Lines(n),
-            editor::ScrollAmount::HalfPage(n) => ScrollAmount::HalfPage(n),
-            editor::ScrollAmount::Page(n) => ScrollAmount::Page(n),
+            wit_view::ScrollAmount::Lines(n) => ScrollAmount::Lines(n),
+            wit_view::ScrollAmount::HalfPage(n) => ScrollAmount::HalfPage(n),
+            wit_view::ScrollAmount::Page(n) => ScrollAmount::Page(n),
         }))
     }
 
-    fn visible_range(&mut self, view: Resource<ViewHandle>) -> HostResult<(u64, u64)> {
+    fn visible_range(&mut self, view: Resource<ViewHandle>) -> HostResult<wit::Range> {
         let (start, end) = self.view_state(&view)?.visible_range();
-        Ok((start as u64, end as u64))
+        Ok(range(start, end))
     }
 
     fn set_cursor_shape(
@@ -478,17 +582,14 @@ impl syntax::Host for PluginData {
         capture: String,
         start: u64,
         end: u64,
-    ) -> HostResult<Vec<(u64, u64)>> {
-        let (index, range) = self.buffer_range(&buffer, start, end)?;
+    ) -> HostResult<Vec<wit::Range>> {
+        let (index, span) = self.buffer_range(&buffer, start, end)?;
         let state = self.state()?;
         let found = state.with_syntax(index, |languages, syntax, text| {
-            languages.captures_in(syntax, &query, &capture, text, range)
+            languages.captures_in(syntax, &query, &capture, text, span)
         });
         match found {
-            Some(Ok(found)) => Ok(found
-                .into_iter()
-                .map(|r| (r.start as u64, r.end as u64))
-                .collect()),
+            Some(Ok(found)) => Ok(found.into_iter().map(|r| range(r.start, r.end)).collect()),
             // A broken query is the language plugin's bug, not the caller's.
             Some(Err(err)) => {
                 state.message = Some(format!("syntax: {err}"));
@@ -537,6 +638,24 @@ impl input::Host for PluginData {
                 command: key.command.clone(),
             })
             .collect())
+    }
+
+    fn set_mode(&mut self, name: String, typing: bool) -> HostResult<()> {
+        if !self.is_base {
+            return Ok(());
+        }
+        let base = self.plugin_name()?.to_string();
+        let state = self.state()?;
+        let mode = Mode { base, name, typing };
+        if state.mode != mode {
+            state.mode = mode.clone();
+            state.push_event(None, Event::ModeChanged(mode));
+        }
+        Ok(())
+    }
+
+    fn current_mode(&mut self) -> HostResult<input::Mode> {
+        Ok(wit_mode(&self.state()?.mode))
     }
 
     fn pop_layer(&mut self) -> HostResult<()> {
@@ -730,6 +849,15 @@ pub(crate) fn wit_event(event: &Event) -> events::Event {
     match event {
         Event::BufferOpened(index) => events::Event::BufferOpened(buffer(*index)),
         Event::BufferSaved(index) => events::Event::BufferSaved(buffer(*index)),
+        Event::BufferClosed(path) => events::Event::BufferClosed(path.clone()),
+        Event::SyntaxUpdated {
+            buffer: index,
+            version,
+        } => events::Event::SyntaxUpdated(events::SyntaxUpdate {
+            buffer: buffer(*index),
+            version: *version,
+        }),
+        Event::ModeChanged(mode) => events::Event::ModeChanged(wit_mode(mode)),
         Event::BufferChanged {
             buffer: index,
             version,
@@ -795,31 +923,47 @@ pub(crate) fn wit_event(event: &Event) -> events::Event {
 }
 
 impl settings::Host for PluginData {
-    fn get(&mut self, key: String) -> HostResult<Option<String>> {
-        let state = self.state()?;
-        Ok(state.setting_json(state.view.buffer, &key))
-    }
-
-    fn get_for(
-        &mut self,
-        buffer: Resource<BufferHandle>,
-        key: String,
-    ) -> HostResult<Option<String>> {
+    fn tab_width(&mut self, buffer: Resource<BufferHandle>) -> HostResult<u8> {
         let (index, _) = self.buffer_range(&buffer, 0, 0)?;
-        Ok(self.state()?.setting_json(index, &key))
+        Ok(self.state()?.tab_width(index) as u8)
     }
 
-    fn set_for(
+    fn indent(&mut self, buffer: Resource<BufferHandle>) -> HostResult<settings::Indentation> {
+        let (index, _) = self.buffer_range(&buffer, 0, 0)?;
+        Ok(match self.state()?.indent(index) {
+            Indent::Spaces(n) => settings::Indentation::Spaces(n),
+            Indent::Tab => settings::Indentation::Tab,
+        })
+    }
+
+    fn scroll_margin(&mut self) -> HostResult<u32> {
+        Ok(u32::from(self.state()?.settings.scroll_margin))
+    }
+
+    fn set_tab_width(
         &mut self,
         buffer: Resource<BufferHandle>,
-        key: String,
-        value: Option<String>,
+        width: Option<u8>,
     ) -> HostResult<Result<(), String>> {
         let (index, _) = self.buffer_range(&buffer, 0, 0)?;
         let owner = self.plugin;
         Ok(self
             .state()?
-            .set_setting(index, owner, &key, value.as_deref()))
+            .set_tab_width(index, owner, width.map(u16::from)))
+    }
+
+    fn set_indent(
+        &mut self,
+        buffer: Resource<BufferHandle>,
+        indent: Option<settings::Indentation>,
+    ) -> HostResult<Result<(), String>> {
+        let (index, _) = self.buffer_range(&buffer, 0, 0)?;
+        let owner = self.plugin;
+        let indent = indent.map(|indent| match indent {
+            settings::Indentation::Spaces(n) => Indent::Spaces(n),
+            settings::Indentation::Tab => Indent::Tab,
+        });
+        Ok(self.state()?.set_indent(index, owner, indent))
     }
 }
 
@@ -1016,6 +1160,11 @@ impl wit_prompt::HostLine for PluginData {
         Ok(())
     }
 
+    fn set_label(&mut self, prompt: Resource<PromptHandle>, label: String) -> HostResult<()> {
+        self.prompt(&prompt)?.label = label;
+        Ok(())
+    }
+
     fn set_hint(&mut self, prompt: Resource<PromptHandle>, hint: String) -> HostResult<()> {
         self.prompt(&prompt)?.hint = hint;
         Ok(())
@@ -1062,6 +1211,8 @@ fn action(action: wit_prompt::Action) -> Action {
         wit_prompt::Action::Cancel => Action::Cancel,
         wit_prompt::Action::Next => Action::Next,
         wit_prompt::Action::Previous => Action::Previous,
+        wit_prompt::Action::PageNext => Action::PageNext,
+        wit_prompt::Action::PagePrevious => Action::PagePrevious,
         wit_prompt::Action::Complete => Action::Complete,
         wit_prompt::Action::CompleteBack => Action::CompleteBack,
     }
@@ -1073,6 +1224,8 @@ fn wit_action(action: Action) -> wit_prompt::Action {
         Action::Cancel => wit_prompt::Action::Cancel,
         Action::Next => wit_prompt::Action::Next,
         Action::Previous => wit_prompt::Action::Previous,
+        Action::PageNext => wit_prompt::Action::PageNext,
+        Action::PagePrevious => wit_prompt::Action::PagePrevious,
         Action::Complete => wit_prompt::Action::Complete,
         Action::CompleteBack => wit_prompt::Action::CompleteBack,
     }
@@ -1172,6 +1325,7 @@ pub(crate) fn key_event(key: KeyEvent) -> wit::KeyEvent {
         KeyCode::Tab => wit::KeyCode::Tab,
         KeyCode::Backspace => wit::KeyCode::Backspace,
         KeyCode::Delete => wit::KeyCode::Delete,
+        KeyCode::Insert => wit::KeyCode::Insert,
         KeyCode::Up => wit::KeyCode::Up,
         KeyCode::Down => wit::KeyCode::Down,
         KeyCode::Left => wit::KeyCode::Left,
@@ -1194,6 +1348,42 @@ pub(crate) fn key_event(key: KeyEvent) -> wit::KeyEvent {
         }
     }
     wit::KeyEvent { code, modifiers }
+}
+
+fn range(start: usize, end: usize) -> wit::Range {
+    wit::Range {
+        start: start as u64,
+        end: end as u64,
+    }
+}
+
+fn wit_mode(mode: &Mode) -> input::Mode {
+    input::Mode {
+        base: mode.base.clone(),
+        name: mode.name.clone(),
+        typing: mode.typing,
+    }
+}
+
+impl PluginData {
+    /// Undoes or redoes a step of the view's buffer, and returns where the
+    /// text changed first.
+    fn undo_or_redo(
+        &mut self,
+        view: &Resource<ViewHandle>,
+        undo: bool,
+    ) -> HostResult<Option<wit::Range>> {
+        let state = self.view_state(view)?;
+        let index = state.view.buffer;
+        let buffer = &mut state.buffers[index];
+        let Some(change) = (if undo { buffer.undo() } else { buffer.redo() }) else {
+            return Ok(None);
+        };
+        state.sync_views(index, &change.changes);
+        let first = change.first_range();
+        state.view.selection = change.selection;
+        Ok(first.map(|r| range(r.start, r.end)))
+    }
 }
 
 fn pos(offset: u64) -> Result<usize, Error> {
@@ -1225,15 +1415,15 @@ fn from_wit_selection(selection: wit::Selection) -> Result<(Vec<Range>, usize), 
 
 /// Errors a plugin can act on become WIT errors. Anything else is a bug in
 /// the host and traps.
-fn wit_result<T>(result: Result<T, Error>) -> HostResult<Result<T, editor::Error>> {
+fn wit_result<T>(result: Result<T, Error>) -> HostResult<Result<T, wit::Error>> {
     match result {
         Ok(value) => Ok(Ok(value)),
         Err(err) => Ok(Err(match err {
-            Error::StaleVersion { .. } => editor::Error::StaleVersion,
-            Error::InvalidPosition(_) => editor::Error::InvalidPosition,
-            Error::OverlappingEdits => editor::Error::OverlappingEdits,
-            Error::InvalidSelection => editor::Error::InvalidSelection,
-            Error::InvalidPattern(message) => editor::Error::InvalidPattern(message),
+            Error::StaleVersion { .. } => wit::Error::StaleVersion,
+            Error::InvalidPosition(_) => wit::Error::InvalidPosition,
+            Error::OverlappingEdits => wit::Error::OverlappingEdits,
+            Error::InvalidSelection => wit::Error::InvalidSelection,
+            Error::InvalidPattern(message) => wit::Error::InvalidPattern(message),
             other => return Err(wasmtime::Error::msg(other.to_string())),
         })),
     }

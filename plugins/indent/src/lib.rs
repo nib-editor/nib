@@ -5,8 +5,9 @@
 use std::cell::RefCell;
 
 use nib_plugin::exports::nib::plugin::guest::{Guest, KeyResult};
-use nib_plugin::nib::plugin::editor::{self, Buffer};
+use nib_plugin::nib::plugin::buffer::{self, Buffer};
 use nib_plugin::nib::plugin::events::Event;
+use nib_plugin::nib::plugin::settings::Indentation;
 use nib_plugin::nib::plugin::types::KeyEvent;
 use nib_plugin::nib::plugin::{settings, syntax, ui};
 use serde_json::{Map, Value, json};
@@ -46,13 +47,17 @@ impl Guest for Plugin {
         }
         LANGUAGES.with_borrow_mut(|l| *l = languages);
         // Buffers opened before, e.g. when restarted from the menu.
-        for buffer in editor::buffers() {
+        for buffer in buffer::all() {
             apply(&buffer);
         }
         Ok(())
     }
 
     fn handle_key(_ev: KeyEvent) -> KeyResult {
+        KeyResult::Pass
+    }
+
+    fn handle_paste(_text: String) -> KeyResult {
         KeyResult::Pass
     }
 
@@ -76,10 +81,24 @@ fn apply(buffer: &Buffer) {
         return;
     };
     for key in KEYS {
-        if let Some(value) = keys.get(key)
-            && let Err(err) = settings::set_for(buffer, key, Some(&value.to_string()))
-        {
-            ui::show_message(&format!("indent.toml: languages.{language}.{err}"));
+        let Some(value) = keys.get(key) else {
+            continue;
+        };
+        let set = match (key, value) {
+            ("indent", serde_json::Value::String(tab)) if tab == "tab" => {
+                settings::set_indent(buffer, Some(Indentation::Tab))
+            }
+            ("indent", value) => match value.as_u64().and_then(|n| u8::try_from(n).ok()) {
+                Some(n) => settings::set_indent(buffer, Some(Indentation::Spaces(n))),
+                None => Err("indent must be \"tab\" or a number of spaces".into()),
+            },
+            (_, value) => match value.as_u64().and_then(|n| u8::try_from(n).ok()) {
+                Some(n) => settings::set_tab_width(buffer, Some(n)),
+                None => Err("tab-width must be a number".into()),
+            },
+        };
+        if let Err(err) = set {
+            ui::show_message(&format!("indent.toml: languages.{language}.{key}: {err}"));
         }
     }
 }

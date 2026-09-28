@@ -80,7 +80,7 @@ pub fn read_manifest(dir: &Path) -> Result<PluginManifest, Error> {
 const FALLBACK_BASE: &str = "helix";
 
 /// The version of `nib:plugin` this host implements.
-pub const API_VERSION: &str = "0.5";
+pub const API_VERSION: &str = "0.6";
 
 /// How often the epoch advances during a plugin call. Timeouts are
 /// accurate to about one tick.
@@ -372,6 +372,8 @@ pub(crate) struct PluginData {
     /// It may list files: "fs-read" or "fs-write".
     can_read_files: bool,
     can_use_clipboard: bool,
+    /// It is a base, so it may say what mode it is in.
+    is_base: bool,
     clock: CallClock,
     interrupts: Arc<AtomicU64>,
     wasi: WasiCtx,
@@ -869,6 +871,14 @@ impl Editor {
         !matches!(result, Some(KeyResult::Pass))
     }
 
+    /// As `plugin_handle_key`, for pasted text.
+    pub(crate) fn plugin_handle_paste(&mut self, id: PluginId, text: &str) -> bool {
+        let result = self.call_plugin(id, |bindings, store| {
+            bindings.nib_plugin_guest().call_handle_paste(store, text)
+        });
+        !matches!(result, Some(KeyResult::Pass))
+    }
+
     /// Instantiates the plugin and calls `init`. On failure the plugin is
     /// left stopped.
     fn start_plugin(&mut self, id: PluginId) -> Result<(), String> {
@@ -1227,6 +1237,7 @@ fn start_in(plugins: &mut Plugins, state: &mut Option<State>, id: PluginId) -> R
             .iter()
             .any(|c| c == "fs-read" || c == "fs-write"),
         can_use_clipboard: plugin.capabilities.iter().any(|c| c == "clipboard"),
+        is_base: plugin.base,
         clock: CallClock {
             started: Instant::now(),
             limit: limits.init,
@@ -1250,6 +1261,12 @@ fn start_in(plugins: &mut Plugins, state: &mut Option<State>, id: PluginId) -> R
     });
 
     let config = plugin.config.clone();
+    // A base starting says its mode anew; the one before is gone.
+    if plugin.base
+        && let Some(state) = state
+    {
+        state.mode = crate::events::Mode::default();
+    }
     let result = call_in(plugins, state, id, limits.init, |bindings, store| {
         bindings.nib_plugin_guest().call_init(store, &config)
     });

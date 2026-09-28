@@ -3,8 +3,8 @@
 use base_kit::call_or_show;
 use base_kit::doc::{self, Doc};
 use base_kit::edit::indent_unit;
-use nib_plugin::nib::plugin::editor::{self, View};
 use nib_plugin::nib::plugin::types::{Edit, KeyCode, KeyEvent, Modifiers};
+use nib_plugin::nib::plugin::view::{self, View};
 
 use crate::normal::{deletion, insertion};
 use crate::parse::{Action, InsertAt};
@@ -36,7 +36,7 @@ impl Vim {
     }
 
     pub fn insert_key(&mut self, ev: KeyEvent) {
-        let view = editor::active_view();
+        let view = view::active();
         if !self.dotting
             && let Some(session) = &mut self.session
         {

@@ -26,6 +26,32 @@ pub fn find(
     Ok(found.map(|m| (m.start(), m.end())))
 }
 
+/// As [`find`], with the span of each group: the whole match first, then
+/// each group, `None` for a group that took no part.
+pub type Groups = Vec<Option<(usize, usize)>>;
+
+pub fn find_groups(
+    text: &Rope,
+    pattern: &str,
+    start: usize,
+    backward: bool,
+) -> Result<Option<Groups>, Error> {
+    check_position(text, start)?;
+    let regex = compile(pattern)?;
+    let caps = if backward {
+        regex.captures_iter(Input::new(text).range(..start)).last()
+    } else {
+        let mut caps = regex.create_captures();
+        regex.captures(Input::new(text).range(start..), &mut caps);
+        caps.is_match().then_some(caps)
+    };
+    Ok(caps.map(|caps| {
+        (0..caps.group_len())
+            .map(|i| caps.get_group(i).map(|span| (span.start, span.end)))
+            .collect()
+    }))
+}
+
 /// Finds all non-overlapping matches within `start..end`.
 pub fn find_all(
     text: &Rope,
@@ -70,6 +96,16 @@ fn describe(err: &dyn std::error::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn groups_come_with_the_match() {
+        let text = Rope::from_str("ab ac ad");
+        let groups = find_groups(&text, "a(b|c)|(d)", 1, false).unwrap().unwrap();
+        assert_eq!(groups, vec![Some((3, 5)), Some((4, 5)), None]);
+        let groups = find_groups(&text, "a(.)", 8, true).unwrap().unwrap();
+        assert_eq!(groups, vec![Some((6, 8)), Some((7, 8))]);
+        assert_eq!(find_groups(&text, "z", 0, false).unwrap(), None);
+    }
 
     #[test]
     fn forward_and_backward() {

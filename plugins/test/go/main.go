@@ -5,7 +5,7 @@ package main
 import (
 	nib "github.com/nib-editor/nib/sdk/go"
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/commands"
-	"github.com/nib-editor/nib/sdk/go/nib/plugin/editor"
+	"github.com/nib-editor/nib/sdk/go/nib/plugin/view"
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/events"
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/input"
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/types"
@@ -28,7 +28,7 @@ func (plugin) HandleKey(ev types.KeyEvent) bool {
 	if c == nil || ev.Modifiers != 0 {
 		return false
 	}
-	view := editor.ActiveView()
+	view := view.Active()
 	var edits []types.Edit
 	for _, r := range view.Selection().Ranges.Slice() {
 		edits = append(edits, types.Edit{Start: r.Head, End: r.Head, Text: string(*c)})

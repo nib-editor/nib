@@ -134,18 +134,41 @@ fn timers_fire_once_and_can_be_cancelled() {
 }
 
 #[test]
+fn plugins_see_changes_groups_and_what_undo_changed() {
+    let mut editor = editor_with(&["test-events"]);
+    let call = |editor: &mut Editor, name: &str, args: &str| {
+        editor
+            .call_command(&format!("test-events.{name}"), args)
+            .unwrap()
+    };
+    assert_eq!(call(&mut editor, "modified", ""), "false");
+    call(&mut editor, "edit", "ab ac\n");
+    assert_eq!(call(&mut editor, "modified", ""), "true");
+    assert_eq!(call(&mut editor, "groups", "a(c)|(z)"), "3-5 4-5 none");
+    assert_eq!(call(&mut editor, "groups", "q"), "no match");
+    assert_eq!(call(&mut editor, "undo", ""), "0-0");
+    assert_eq!(call(&mut editor, "modified", ""), "false");
+    assert_eq!(call(&mut editor, "undo", ""), "none");
+    assert_eq!(call(&mut editor, "redo", ""), "0-6");
+}
+
+#[test]
+fn a_paste_nobody_takes_goes_before_each_selection() {
+    let mut editor = editor_with(&["test-events"]);
+    editor.handle_paste("one\r\ntwo");
+    assert_eq!(editor.buffer().text().to_string(), "one\ntwo");
+}
+
+#[test]
 fn the_keymap_tells_others_about_modes() {
     let mut editor = editor_with(&["helix", "test-events"]);
     // Emitted by helix's init, delivered once both are loaded.
     editor.deliver_events();
-    assert_eq!(log(&mut editor), ["custom helix.mode_changed \"normal\""]);
+    assert_eq!(log(&mut editor), ["mode helix normal false"]);
     type_keys(&mut editor, "i<esc>");
     assert_eq!(
         log(&mut editor),
-        [
-            "custom helix.mode_changed \"insert\"",
-            "custom helix.mode_changed \"normal\"",
-        ]
+        ["mode helix insert true", "mode helix normal false"]
     );
 }
 

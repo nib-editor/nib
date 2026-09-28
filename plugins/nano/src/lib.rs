@@ -7,15 +7,15 @@ use std::cell::RefCell;
 use base_kit::doc::{self, Doc};
 use base_kit::edit::{indent_unit, insertion, point, range, set_ranges};
 use base_kit::keys::{self, Binding, Keymap, Sequence, Step};
-use base_kit::{call_or_show, error_message, hints, json_string, leader, line_edit, regex_escape};
+use base_kit::{call_or_show, error_message, hints, leader, line_edit, regex_escape};
 use base_kit::{span, tree};
 use nib_plugin::exports::nib::plugin::guest::{Guest, KeyResult};
-use nib_plugin::nib::plugin::editor::{self, ScrollAmount, View};
 use nib_plugin::nib::plugin::events::Event;
 use nib_plugin::nib::plugin::prompt::{self as prompts, Action, Line};
 use nib_plugin::nib::plugin::types::{CursorShape, Edit, KeyCode, KeyEvent, Modifiers, UndoMode};
 use nib_plugin::nib::plugin::ui::{self, Panel, Popup, PopupAnchor};
-use nib_plugin::nib::plugin::{commands, input};
+use nib_plugin::nib::plugin::view::{self, ScrollAmount, View};
+use nib_plugin::nib::plugin::{editor, input};
 
 /// nano's function names, as nanorc's `bind` writes them, and the keys that
 /// do them here, for `[settings.keys.global]`.
@@ -150,7 +150,9 @@ impl Guest for Plugin {
             ui::show_message(&format!("nano.toml: {first}; left out"));
         }
         input::push_layer();
-        let view = editor::active_view();
+        // No modes: typed chars always go into the text.
+        input::set_mode("global", true);
+        let view = view::active();
         view.set_cursor_shape(CursorShape::Block);
         // The start of whatever was selected, as a point.
         let selection = view.selection();
@@ -165,6 +167,20 @@ impl Guest for Plugin {
 
     fn handle_key(ev: KeyEvent) -> KeyResult {
         with_nano(|nano| nano.handle_key(ev))
+    }
+
+    /// Pasted text goes in at the cursor, as if typed, or into the prompt.
+    fn handle_paste(text: String) -> KeyResult {
+        if prompts::active().is_some() {
+            return KeyResult::Pass;
+        }
+        with_nano(|nano| {
+            let view = view::active();
+            nano.marking = false;
+            let head = primary_head(&view);
+            replace(&view, head, head, &text);
+        });
+        KeyResult::Handled
     }
 
     fn run_command(name: String, _args: String) -> Result<String, String> {
@@ -273,7 +289,7 @@ impl Nano {
 
     /// nano's own keys.
     fn key(&mut self, ev: KeyEvent) -> KeyResult {
-        let view = editor::active_view();
+        let view = view::active();
         let cutting = std::mem::take(&mut self.cutting);
         let typing = std::mem::take(&mut self.typing);
         let vertical = matches!(ev.code, KeyCode::Up | KeyCode::Down)
@@ -325,13 +341,13 @@ impl Nano {
             (Some('d'), ..) | (_, _, KeyCode::Delete) => self.delete(&view, false),
             (_, Some('u'), _) => {
                 self.marking = false;
-                if !view.undo() {
+                if view.undo().is_none() {
                     ui::show_message("Nothing to undo");
                 }
             }
             (_, Some('e'), _) => {
                 self.marking = false;
-                if !view.redo() {
+                if view.redo().is_none() {
                     ui::show_message("Nothing to redo");
                 }
             }
@@ -496,7 +512,7 @@ impl Nano {
     }
 
     fn ask_write(&mut self, exit: bool) {
-        let path = editor::active_view().buffer().path().unwrap_or_default();
+        let path = view::active().buffer().path().unwrap_or_default();
         self.ask(Ask::Write { exit }, "File Name to Write: ");
         if let Some(asking) = &self.asking {
             asking.line.set(&path, path.len() as u32);
@@ -504,7 +520,7 @@ impl Nano {
     }
 
     fn exit(&mut self) {
-        if commands::call("editor.quit", r#"{"force":false}"#).is_err() {
+        if view::active().buffer().modified() || editor::quit(false).is_err() {
             self.ask(
                 Ask::SaveFirst,
                 "Save modified buffer?  Y Yes  N No  ^C Cancel ",
@@ -528,7 +544,7 @@ impl Nano {
                 }
                 (_, KeyCode::Char('n' | 'N')) => {
                     self.asking = None;
-                    call_or_show_args("editor.quit", r#"{"force":true}"#);
+                    show_error(editor::quit(true));
                 }
                 _ => {}
             }
@@ -561,12 +577,12 @@ impl Nano {
     }
 
     fn save_and_exit(&mut self) {
-        if editor::active_view().buffer().path().is_none() {
+        if view::active().buffer().path().is_none() {
             self.ask_write(true);
             return;
         }
         if write(None) {
-            call_or_show_args("editor.quit", r#"{"force":false}"#);
+            show_error(editor::quit(false));
         }
     }
 
@@ -583,14 +599,14 @@ impl Nano {
             }
         }
         let text = asking.line.text();
-        let view = editor::active_view();
+        let view = view::active();
         match asking.ask {
             Ask::Write { exit } => {
                 let path = view.buffer().path();
                 let other = (!text.is_empty() && path.as_deref() != Some(text.as_str()))
                     .then_some(text.as_str());
                 if write(other) && exit {
-                    call_or_show_args("editor.quit", r#"{"force":false}"#);
+                    show_error(editor::quit(false));
                 }
             }
             Ask::Insert => match std::fs::read_to_string(&text) {
@@ -655,7 +671,8 @@ impl Nano {
             Err(err) => return ui::show_message(&error_message(err)),
         };
         match found {
-            Some((at, _)) => {
+            Some(found) => {
+                let at = found.start;
                 self.marking = false;
                 set_ranges(view, vec![point(at)], 0);
             }
@@ -688,10 +705,10 @@ fn replace_all(view: &View, what: &str, with: &str) {
     };
     let edits: Vec<Edit> = found
         .iter()
-        .filter(|(start, end)| start < end)
-        .map(|&(start, end)| Edit {
-            start,
-            end,
+        .filter(|r| r.start < r.end)
+        .map(|r| Edit {
+            start: r.start,
+            end: r.end,
             text: with.to_string(),
         })
         .collect();
@@ -707,13 +724,9 @@ fn replace_all(view: &View, what: &str, with: &str) {
 
 /// Saves, under `path` if another one is given. Says how it went.
 fn write(path: Option<&str>) -> bool {
-    let args = match path {
-        Some(path) => format!(r#"{{"path":{}}}"#, json_string(path)),
-        None => "{}".into(),
-    };
-    match commands::call("buffer.save", &args) {
-        Ok(_) => {
-            let buffer = editor::active_view().buffer();
+    let buffer = view::active().buffer();
+    match buffer.save(path) {
+        Ok(()) => {
             let lines = buffer.line_count().saturating_sub(1).max(1);
             let plural = if lines == 1 { "" } else { "s" };
             ui::show_message(&format!("Wrote {lines} line{plural}"));
@@ -726,8 +739,8 @@ fn write(path: Option<&str>) -> bool {
     }
 }
 
-fn call_or_show_args(command: &str, args: &str) {
-    if let Err(err) = commands::call(command, args) {
+fn show_error(result: Result<(), String>) {
+    if let Err(err) = result {
         ui::show_message(&err);
     }
 }

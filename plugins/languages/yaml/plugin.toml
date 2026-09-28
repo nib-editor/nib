@@ -1,7 +1,7 @@
 # Data only: a grammar and its queries, no plugin code.
 name = "yaml"
 version = "0.1.0"
-api = "0.5"
+api = "0.6"
 
 [[languages]]
 name = "yaml"

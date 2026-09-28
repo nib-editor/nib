@@ -6,7 +6,7 @@ use nib_plugin::exports::nib::plugin::guest::{Guest, KeyResult};
 use nib_plugin::nib::plugin::events::Event;
 use nib_plugin::nib::plugin::types::{KeyEvent, Span};
 use nib_plugin::nib::plugin::ui::{self, Side};
-use nib_plugin::nib::plugin::{commands, editor};
+use nib_plugin::nib::plugin::{commands, view};
 
 struct Plugin;
 
@@ -23,6 +23,11 @@ impl Guest for Plugin {
         KeyResult::Pass
     }
 
+    fn handle_paste(_text: String) -> KeyResult {
+        // Pasted text, as keys come: through the layers on the input stack.
+        KeyResult::Pass
+    }
+
     fn run_command(name: String, _args: String) -> Result<String, String> {
         match name.as_str() {
             "count" => Ok(count().to_string()),
@@ -36,7 +41,7 @@ impl Guest for Plugin {
 }
 
 fn count() -> usize {
-    let buffer = editor::active_view().buffer();
+    let buffer = view::active().buffer();
     buffer
         .slice(0, buffer.len())
         .map_or(0, |text| text.split_whitespace().count())

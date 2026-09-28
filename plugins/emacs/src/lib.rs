@@ -19,13 +19,14 @@ use base_kit::edit::{point, range, set_ranges};
 use base_kit::keys::{self, Binding, Keymap, Sequence, Step};
 use base_kit::{call_or_show, hints, leader, span};
 use nib_plugin::exports::nib::plugin::guest::{Guest, KeyResult};
-use nib_plugin::nib::plugin::editor::{self, Buffer, View};
+use nib_plugin::nib::plugin::buffer::Buffer;
 use nib_plugin::nib::plugin::events::Event;
 use nib_plugin::nib::plugin::prompt::{self as prompts, Action};
 use nib_plugin::nib::plugin::types::{
     CursorShape, Edit, KeyCode, KeyEvent, Modifiers, SelRange, Selection, UndoMode,
 };
 use nib_plugin::nib::plugin::ui::{self, Popup, PopupAnchor, Side};
+use nib_plugin::nib::plugin::view::{self, View};
 use nib_plugin::nib::plugin::{clipboard, input};
 
 use minibuffer::Asking;
@@ -129,6 +130,9 @@ pub enum Waiting {
     Describe(Vec<KeyEvent>),
     /// `y` or `n`, for this question.
     YesOrNo(minibuffer::Confirm),
+    /// `C-x s` and `C-x C-c`: whether to save each of these files, the
+    /// first one asked now, and whether to quit after.
+    SaveSome { paths: Vec<String>, quit: bool },
 }
 
 /// `M-SPC` pressed again deletes the space it left; the text it replaced.
@@ -238,7 +242,9 @@ impl Guest for Plugin {
             ui::show_message(&format!("emacs.toml: {first}{more}; left out"));
         }
         input::push_layer();
-        let view = editor::active_view();
+        // No modes: typed chars always go into the text.
+        input::set_mode("global", true);
+        let view = view::active();
         view.set_cursor_shape(CursorShape::Block);
         let selection = view.selection();
         let r = selection.ranges[selection.primary as usize];
@@ -254,6 +260,10 @@ impl Guest for Plugin {
 
     fn handle_key(ev: KeyEvent) -> KeyResult {
         with_emacs(|emacs| emacs.handle_key(ev))
+    }
+
+    fn handle_paste(text: String) -> KeyResult {
+        with_emacs(|emacs| emacs.paste(&text))
     }
 
     fn run_command(name: String, _args: String) -> Result<String, String> {
@@ -408,6 +418,40 @@ impl Emacs {
         result
     }
 
+    /// Pasted text, as `xterm-paste` puts it: at the point, with the mark at
+    /// its start; into the search string while searching, and into the
+    /// minibuffer while it asks.
+    fn paste(&mut self, text: &str) -> KeyResult {
+        let view = view::active();
+        if self.isearch.is_some() {
+            self.add_text(&view, text);
+            return KeyResult::Handled;
+        }
+        if self.query.is_some() {
+            return KeyResult::Handled;
+        }
+        if let Some(active) = prompts::active() {
+            if !active.mine || self.asking.is_none() {
+                return KeyResult::Pass;
+            }
+            self.paste_into_minibuffer(text);
+            return KeyResult::Handled;
+        }
+        let key = KeyEvent {
+            code: KeyCode::Char('v'),
+            modifiers: Modifiers::CTRL | Modifiers::SHIFT,
+        };
+        self.whole("xterm-paste", Arg::None, key, |emacs, view| {
+            let here = emacs.point(view);
+            let end = here + text.len() as u64;
+            emacs.replace(view, here, here, text, end);
+            emacs.push_mark(view, here);
+            Ok(())
+        });
+        self.show_status();
+        KeyResult::Handled
+    }
+
     /// Whether the prefix being typed has `ev` in its table, as `ESC ESC`
     /// has the third `ESC`.
     fn prefix_binds(&self, ev: KeyEvent) -> bool {
@@ -533,7 +577,7 @@ impl Emacs {
         {
             let name = name.clone();
             // A region set otherwise gives way to a new one from here.
-            let view = editor::active_view();
+            let view = view::active();
             if !self.active || !self.shift_selected {
                 let here = primary(&view).head;
                 self.push_mark(&view, here);
@@ -653,7 +697,7 @@ impl Emacs {
         self.deactivate = false;
         self.step_open = false;
         self.merge = false;
-        let view = editor::active_view();
+        let view = view::active();
         if let Err(message) = f(self, &view) {
             self.failed = true;
             ui::show_message(&message);
@@ -689,7 +733,7 @@ impl Emacs {
 
     /// Draws the region, or the point alone.
     pub fn render(&mut self) {
-        let view = editor::active_view();
+        let view = view::active();
         let here = primary(&view).head;
         let mark = self.mark(&view.buffer());
         match mark {
@@ -934,6 +978,7 @@ impl Emacs {
                 typed.push(ev);
                 self.describe_key(typed);
             }
+            Waiting::SaveSome { paths, quit } => self.save_some_key(paths, quit, ev),
             Waiting::YesOrNo(confirm) => match plain(&ev) {
                 Some('y' | 'Y') => self.confirmed(confirm, true),
                 Some('n' | 'N') => self.confirmed(confirm, false),

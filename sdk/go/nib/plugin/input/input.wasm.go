@@ -6,16 +6,24 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.3".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.6.0".
 
-//go:wasmimport nib:plugin/input@0.5.3 push-layer
+//go:wasmimport nib:plugin/input@0.6.0 push-layer
 //go:noescape
 func wasmimport_PushLayer()
 
-//go:wasmimport nib:plugin/input@0.5.3 pop-layer
+//go:wasmimport nib:plugin/input@0.6.0 pop-layer
 //go:noescape
 func wasmimport_PopLayer()
 
-//go:wasmimport nib:plugin/input@0.5.3 leader-keys
+//go:wasmimport nib:plugin/input@0.6.0 leader-keys
 //go:noescape
 func wasmimport_LeaderKeys(result *cm.List[LeaderKey])
+
+//go:wasmimport nib:plugin/input@0.6.0 set-mode
+//go:noescape
+func wasmimport_SetMode(name0 *uint8, name1 uint32, typing0 uint32)
+
+//go:wasmimport nib:plugin/input@0.6.0 current-mode
+//go:noescape
+func wasmimport_CurrentMode(result *Mode)

@@ -4,7 +4,7 @@
 use nib_plugin::exports::nib::plugin::guest::{Guest, KeyResult};
 use nib_plugin::nib::plugin::events::Event;
 use nib_plugin::nib::plugin::types::{Edit, KeyCode, KeyEvent, Modifiers, UndoMode};
-use nib_plugin::nib::plugin::{editor, input};
+use nib_plugin::nib::plugin::{input, view};
 
 struct Insert;
 
@@ -12,6 +12,10 @@ impl Guest for Insert {
     fn init(_config: String) -> Result<(), String> {
         input::push_layer();
         Ok(())
+    }
+
+    fn handle_paste(_text: String) -> KeyResult {
+        KeyResult::Pass
     }
 
     fn handle_key(ev: KeyEvent) -> KeyResult {
@@ -41,7 +45,7 @@ impl Guest for Insert {
 }
 
 fn insert(text: &str) -> bool {
-    let view = editor::active_view();
+    let view = view::active();
     let edits: Vec<Edit> = view
         .selection()
         .ranges

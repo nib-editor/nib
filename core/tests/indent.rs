@@ -67,6 +67,7 @@ fn wrong_settings_are_reported() {
         "[settings.languages.go]\nindent = 99\n",
     );
     let message = editor.message().unwrap_or_default().to_string();
-    assert!(message.contains("indent must be"), "{message}");
+    assert!(message.contains("languages.go.indent"), "{message}");
+    assert!(message.contains("1 to 16 spaces"), "{message}");
     fs::remove_file(path).unwrap();
 }

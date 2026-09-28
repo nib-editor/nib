@@ -42,24 +42,6 @@ pub enum Indent {
     Spaces(u8),
 }
 
-impl Indent {
-    pub(crate) fn to_json(self) -> serde_json::Value {
-        match self {
-            Indent::Tab => serde_json::json!("tab"),
-            Indent::Spaces(n) => serde_json::json!(n),
-        }
-    }
-
-    /// "tab", or 1 to 16 spaces.
-    pub(crate) fn from_json(value: &serde_json::Value) -> Option<Self> {
-        if value == "tab" {
-            return Some(Indent::Tab);
-        }
-        let n = value.as_u64().filter(|n| (1..=16).contains(n))?;
-        Some(Indent::Spaces(n as u8))
-    }
-}
-
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -72,19 +54,6 @@ impl Default for Settings {
             plugin_init_timeout: Duration::from_secs(5),
             plugin_memory: 256 << 20,
         }
-    }
-}
-
-impl Settings {
-    /// The value of an editing setting as JSON, for plugins.
-    pub fn get_json(&self, key: &str) -> Option<String> {
-        let value = match key {
-            "tab-width" => serde_json::json!(self.tab_width),
-            "indent" => self.indent.to_json(),
-            "scroll-margin" => serde_json::json!(self.scroll_margin),
-            _ => return None,
-        };
-        Some(value.to_string())
     }
 }
 
@@ -649,14 +618,5 @@ mod tests {
             err.to_string().contains("theme.keyword: unknown color"),
             "{err}"
         );
-    }
-
-    #[test]
-    fn plugins_read_editing_settings_as_json() {
-        let settings = Settings::default();
-        assert_eq!(settings.get_json("tab-width").as_deref(), Some("4"));
-        assert_eq!(settings.get_json("indent").as_deref(), Some("4"));
-        assert_eq!(settings.get_json("menu-key"), None);
-        assert_eq!(settings.menu_key, None);
     }
 }

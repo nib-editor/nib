@@ -6,7 +6,7 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// Exports represents the caller-defined exports from "nib:plugin/guest@0.5.3".
+// Exports represents the caller-defined exports from "nib:plugin/guest@0.6.0".
 var Exports struct {
 	// Init represents the caller-defined, exported function "init".
 	//
@@ -22,6 +22,15 @@ var Exports struct {
 	//
 	//	handle-key: func(ev: key-event) -> key-result
 	HandleKey func(ev KeyEvent) (result KeyResult)
+
+	// HandlePaste represents the caller-defined, exported function "handle-paste".
+	//
+	// Text pasted into the terminal reached one of this plugin's input
+	// layers, as one piece. When every layer passes, the core puts it into
+	// the open prompt, or before each selection of the shown buffer.
+	//
+	//	handle-paste: func(text: string) -> key-result
+	HandlePaste func(text string) (result KeyResult)
 
 	// RunCommand represents the caller-defined, exported function "run-command".
 	//

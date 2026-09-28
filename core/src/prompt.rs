@@ -15,6 +15,8 @@ pub(crate) enum Action {
     Cancel,
     Next,
     Previous,
+    PageNext,
+    PagePrevious,
     Complete,
     CompleteBack,
 }
@@ -70,6 +72,16 @@ impl Prompt {
         self.cursor = cursor;
     }
 
+    /// Inserts pasted text at the cursor, its line breaks as spaces, as a
+    /// prompt holds one line.
+    pub fn paste(&mut self, text: &str) {
+        let text = text
+            .trim_end_matches(['\n', '\r'])
+            .replace(['\n', '\r'], " ");
+        self.text.insert_str(self.cursor, &text);
+        self.cursor += text.len();
+    }
+
     /// What the core does with a key the base left.
     pub fn default_key(&mut self, key: KeyEvent) -> Option<Outcome> {
         let plain = !key.modifiers.ctrl && !key.modifiers.alt;
@@ -97,6 +109,8 @@ impl Prompt {
             KeyCode::End => return self.move_to(self.text.len()),
             KeyCode::Up => return Some(Outcome::Asked(Action::Previous)),
             KeyCode::Down => return Some(Outcome::Asked(Action::Next)),
+            KeyCode::PageUp => return Some(Outcome::Asked(Action::PagePrevious)),
+            KeyCode::PageDown => return Some(Outcome::Asked(Action::PageNext)),
             KeyCode::Tab if shift => return Some(Outcome::Asked(Action::CompleteBack)),
             KeyCode::Tab => return Some(Outcome::Asked(Action::Complete)),
             KeyCode::Enter => return Some(Outcome::Asked(Action::Accept)),

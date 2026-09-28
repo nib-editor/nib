@@ -3,69 +3,16 @@
 package editor
 
 import (
-	"github.com/nib-editor/nib/sdk/go/nib/plugin/types"
 	"go.bytecodealliance.org/cm"
-	"unsafe"
 )
 
-// OptionTupleOffsetOffsetShape is used for storage in variant or result types.
-type OptionTupleOffsetOffsetShape struct {
-	_     cm.HostLayout
-	shape [unsafe.Sizeof(cm.Option[[2]Offset]{})]byte
-}
-
-// ErrorShape is used for storage in variant or result types.
-type ErrorShape struct {
-	_     cm.HostLayout
-	shape [unsafe.Sizeof(Error{})]byte
-}
-
-func lower_Selection(v types.Selection) (f0 *types.SelRange, f1 uint32, f2 uint32) {
-	f0, f1 = cm.LowerList(v.Ranges)
-	f2 = (uint32)(v.Primary)
-	return
-}
-
-func lower_OptionSelection(v cm.Option[Selection]) (f0 uint32, f1 *types.SelRange, f2 uint32, f3 uint32) {
+func lower_OptionString(v cm.Option[string]) (f0 uint32, f1 *uint8, f2 uint32) {
 	some := v.Some()
 	if some != nil {
 		f0 = 1
-		v1, v2, v3 := lower_Selection(*some)
-		f1 = (*types.SelRange)(v1)
+		v1, v2 := cm.LowerString(*some)
+		f1 = (*uint8)(v1)
 		f2 = (uint32)(v2)
-		f3 = (uint32)(v3)
-	}
-	return
-}
-
-// TupleOffsetU32Shape is used for storage in variant or result types.
-type TupleOffsetU32Shape struct {
-	_     cm.HostLayout
-	shape [unsafe.Sizeof(cm.Tuple[Offset, uint32]{})]byte
-}
-
-func lower_OptionU32(v cm.Option[uint32]) (f0 uint32, f1 uint32) {
-	some := v.Some()
-	if some != nil {
-		f0 = 1
-		v1 := (uint32)(*some)
-		f1 = (uint32)(v1)
-	}
-	return
-}
-
-func lower_ScrollAmount(v ScrollAmount) (f0 uint32, f1 uint32) {
-	f0 = (uint32)(v.Tag())
-	switch f0 {
-	case 0: // lines
-		v1 := (uint32)(*cm.Case[int32](&v, 0))
-		f1 = (uint32)(v1)
-	case 1: // half-page
-		v1 := (uint32)(*cm.Case[int32](&v, 1))
-		f1 = (uint32)(v1)
-	case 2: // page
-		v1 := (uint32)(*cm.Case[int32](&v, 2))
-		f1 = (uint32)(v1)
 	}
 	return
 }

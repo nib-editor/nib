@@ -170,17 +170,16 @@ fn braces(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<String, St
 
 /// `:s`'s replacement for a match of `matched`: `&` and `\0` are the match,
 /// `\r` and `\n` a line break, and `\` takes the next char as it is.
-pub fn replacement(template: &str, matched: &str) -> Result<String, String> {
+pub fn replacement(template: &str, groups: &[String]) -> Result<String, String> {
+    let group = |n: usize| groups.get(n).map_or("", String::as_str);
     let mut out = String::new();
     let mut chars = template.chars();
     while let Some(c) = chars.next() {
         match c {
-            '&' => out.push_str(matched),
+            '&' => out.push_str(group(0)),
             '\\' => match chars.next() {
-                Some('0') => out.push_str(matched),
-                Some('1'..='9') => {
-                    return Err("groups (\\1 to \\9) are not supported in :s yet".into());
-                }
+                Some('0') => out.push_str(group(0)),
+                Some(d @ '1'..='9') => out.push_str(group(d as usize - '0' as usize)),
                 Some('r' | 'n') => out.push('\n'),
                 Some('t') => out.push('\t'),
                 Some(other) => out.push(other),
@@ -215,7 +214,8 @@ mod tests {
 
     #[test]
     fn replacements_take_the_match() {
-        assert_eq!(replacement(r"<&>\&\r", "x").unwrap(), "<x>&\n");
-        assert!(replacement(r"\1", "x").is_err());
+        let groups = ["xy".to_string(), "y".to_string()];
+        assert_eq!(replacement(r"<&>\&\r", &groups).unwrap(), "<xy>&\n");
+        assert_eq!(replacement(r"\1\0\2", &groups).unwrap(), "yxy");
     }
 }

@@ -319,3 +319,33 @@ keys = "<C-x><space><C-n><C-f>"
 
 [test.expect]
 selections = "a#(b|)#cd\ne#[f|]#gh\n"
+
+[[test]]
+name = "a paste goes in at the point as it is, with the mark at its start"
+text = "  #[|]#abc\n"
+
+[[test.step]]
+paste = "one\n  two "
+expect.text = "  one\n  two abc\n"
+
+[[test.step]]
+keys = "<C-x><C-x>"
+expect.selections = "  #[|one\n  two ]#abc\n"
+
+[[test]]
+name = "a paste goes into the search string and into the minibuffer"
+text = "#[|]#one two three\n"
+
+[[test.step]]
+keys = "<C-s>"
+paste = "two"
+expect.screen = ["I-search: two"]
+
+[[test.step]]
+keys = "<ret><A-x>"
+paste = "kill-line"
+expect.screen = ["M-x kill-line"]
+
+[[test.step]]
+keys = "<ret>"
+expect.text = "one two\n"

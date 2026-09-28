@@ -1021,3 +1021,11 @@ differs = "the indent is nib's setting, not shiftwidth"
 text = "#[|]#abc\n"
 keys = ">>"
 differs = "the indent is nib's setting, not shiftwidth"
+
+# Groups in :s
+[[case]]
+text = "#[|]#ab ab\ncd\n"
+keys = ":s/\\(a\\)\\(b\\)/\\2\\1/g<ret>"
+[[case]]
+text = "#[|]#key = value\n"
+keys = ":s/\\v(\\w+) \\= (\\w+)/\\2 := \\1/<ret>"

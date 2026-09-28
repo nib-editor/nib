@@ -89,3 +89,16 @@ keys = ":nope<ret>"
 
 [test.expect]
 screen = ["unknown command: nope"]
+
+[[test]]
+name = "a paste goes before the selection, or in as typed in insert mode"
+text = "#[a|]#bc\n"
+
+[[test.step]]
+paste = "one\n  two"
+expect.text = "one\n  twoabc\n"
+
+[[test.step]]
+keys = "A"
+paste = "!\n"
+expect.text = "one\n  twoabc!\n\n"

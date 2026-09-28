@@ -4,7 +4,7 @@
 
 use base_kit::doc::Doc;
 use base_kit::text::Text;
-use nib_plugin::nib::plugin::settings;
+use nib_plugin::nib::plugin::{settings, view};
 
 /// Word constituents: letters, digits, `$`, and `%`.
 pub fn is_word(c: char) -> bool {
@@ -436,9 +436,7 @@ pub fn down_list(t: &mut Text, pos: u64) -> Option<u64> {
 
 /// The width tabs take: the core's tab-width.
 pub fn tab_width() -> u32 {
-    settings::get("tab-width")
-        .and_then(|w| w.parse().ok())
-        .unwrap_or(4)
+    u32::from(settings::tab_width(&view::active().buffer()))
 }
 
 /// How many columns `c` takes after column `col`.

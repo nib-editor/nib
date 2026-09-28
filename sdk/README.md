@@ -31,7 +31,7 @@ wordcount/
 ```toml
 name = "wordcount"        # also the prefix of its commands and events
 version = "0.1.0"
-api = "0.5"               # the nib:plugin version it is built for
+api = "0.6"               # the nib:plugin version it is built for
 capabilities = []         # what it may do beyond the editor API
 events = ["buffer-opened", "buffer-changed"]
 
@@ -79,13 +79,14 @@ Rules every plugin lives by:
 
 Positions are UTF-8 byte offsets into a buffer. Screen rows and columns are the core's business: ask it to move vertically or scroll, and it takes wrapping, tabs, and wide characters into account.
 
-### Editor
+### Buffers and views
 
-`editor.active-view()` is the view with the focus; `view.buffer()` the buffer it shows; `editor.buffers()` every open buffer.
+`view.active()` is the view with the focus; `view.buffer()` the buffer it shows; `buffer.all()` every open buffer. `buffer.open(path)` opens a file, or finds the buffer that has it, without showing it; `view.show(buffer)` shows it. A buffer can `save`, save under another path, `close`, and say whether it is `modified`. `view.split`, `view.close`, `view.only`, and `view.focus` arrange the views; `editor` has the rest of the editor: `quit`, `open-config`, `reload-config`, `open-menu`, and the working directory.
 
 - Change text with `view.apply(base-version, edits, after, undo)`. Each edit replaces `start..end` of the buffer as it was before the change, and edits must not overlap. If the buffer is no longer at `base-version`, nothing changes and `stale-version` comes back, so read `buffer.version()` in the same call.
 - `undo` is `new-step` to start an undo step, or `merge` to add to the last one: an insert mode makes its first key a new step and merges the rest, so undo takes back the whole insertion.
-- `next-grapheme` and `prev-grapheme` step over what shows as one character; `find` and `find-all` search with regular expressions without copying the buffer into the plugin.
+- `next-grapheme` and `prev-grapheme` step over what shows as one character; `find` and `find-all` search with regular expressions without copying the buffer into the plugin, and `find-groups` also gives the groups of a match, as a replacement's `\1` needs.
+- `view.undo()` and `view.redo()` return where the text changed first, so a keymap can put the cursor where its editor would.
 - `move-vertically` and `scroll` do what `j`, `k`, and `Ctrl-d` need. `move-vertically` returns the column it aimed for; pass it back on the next move to keep the column across short lines.
 - Using a buffer or view handle after it closed traps the plugin.
 
@@ -93,9 +94,13 @@ Positions are UTF-8 byte offsets into a buffer. Screen rows and columns are the 
 
 Keys go down a stack of layers, top first. `input.push-layer()` puts one on top for the plugin and `input.pop-layer()` takes it off; a keymap pushes its layer in `init` and keeps it. A plugin without a layer gets no keys. The menu key (Ctrl-g unless the user changes it) never reaches plugins.
 
+Text pasted into the terminal comes the same way, as one piece, to `handle-paste`. When every layer passes, the core puts it into the open prompt, or before each selection of the shown buffer.
+
+The base (the keymap in use) says what mode it is in with `input.set-mode(name, typing)`, where `typing` means plain keys go into the text, as in insert mode or in a base without modes. Others hear it as `mode-changed`, or ask `input.current-mode()`: completions, say, can come while typing whichever base runs.
+
 ### Prompts
 
-A line to type into, such as a picker's query: `prompt.line(label)` opens one, drawn above the status line with `label` in front, and dropping it closes it. While it is the newest one open, keys go to the base in use (helix, by default), which edits the text its own way; you hear about it through events, only to you: `prompt-changed` with the text and cursor, and `prompt-action` for what a key asked, such as `accept` (Enter), `cancel` (Escape), `next` / `previous` (Down / Up), and `complete` / `complete-back` (Tab / Shift-Tab). Closing it on `accept` or `cancel` is yours to do. Lists of candidates are yours to draw, in a panel.
+A line to type into, such as a picker's query: `prompt.line(label)` opens one, drawn above the status line with `label` in front, and dropping it closes it. While it is the newest one open, keys go to the base in use (helix, by default), which edits the text its own way; you hear about it through events, only to you: `prompt-changed` with the text and cursor, and `prompt-action` for what a key asked, such as `accept` (Enter), `cancel` (Escape), `next` / `previous` (Down / Up), `page-next` / `page-previous` (PageDown / PageUp), and `complete` / `complete-back` (Tab / Shift-Tab). Closing it on `accept` or `cancel` is yours to do. Lists of candidates are yours to draw, in a panel.
 
 For a list without a line to type into, such as completions, open `prompt.choices(actions)` with the actions it takes (`next`, `previous`, `accept`) and draw it yourself. Keys go on as usual; the base turns its own keys for those actions into `prompt-action` events for you, and any other key is handled as usual and sends you `cancel` first, as the list no longer fits.
 
@@ -105,7 +110,7 @@ A base answers keys while `prompt.active()` says a prompt is open: `prompt.edit(
 
 `commands.register("count", "…")` makes `wordcount.count`. Anyone can call it with `commands.call(name, args)`: users from a keymap or the command line, other plugins, and tests. Calls are synchronous and return the result. Calling into a plugin that is already in a call, such as your own, is an error.
 
-The core's commands (arguments are JSON):
+The core's commands call the functions above by name, for keys and command lines; plugins call the functions. Their arguments are JSON, and empty arguments are `{}`:
 
 | Command | Does |
 |---------|------|
@@ -129,9 +134,10 @@ A plugin gets the kinds of events listed under `events` in its manifest:
 |-------|------|
 | `buffer-opened`, `buffer-saved` | A buffer was opened, saved. Buffers opened before the plugin loaded are announced after it does |
 | `buffer-changed` | A buffer changed. The changes come in the order that turns the old text into the new, each with its line and column, as LSP's `didChange` wants them |
-| `<plugin>.<name>` | A plugin called `events.emit(name, json)`. `helix.mode_changed` tells when the Helix keymap changes modes |
-| `editor.buffer_closed` | A buffer was closed: `{"path": …}`. The core emits it |
-| `editor.syntax_updated` | A buffer's syntax tree caught up with its edits: `{"path": …, "version": …}`. The core emits it |
+| `buffer-closed` | A buffer was closed. Its handles no longer work, so the event has its path |
+| `syntax-updated` | A buffer's syntax tree caught up with its edits, with the version it parsed |
+| `mode-changed` | The base changed modes (`input.set-mode`) |
+| `<plugin>.<name>` | A plugin called `events.emit(name, json)` |
 
 These come to the plugin that asked for them, without being listed: `timer` (from `timers.set`), `process-output` and `process-exit` (from `process.spawn`), `files-listed` (from `files.walk`), and `prompt-changed` and `prompt-action` (from `prompt.line`).
 
@@ -158,11 +164,11 @@ Text is a list of spans, each with a style named after the theme (`"keyword"`, `
 
 The core parses buffers with tree-sitter, and plugins read the trees: `syntax.node-at`, `parent`, `children`, and `captures`, which runs one of the language's queries (`"textobjects"`, say) over a range. Answers are always up to date, even right after an edit in the same call. Buffers without a language answer with nothing, so fall back to working on text. Inside a language injected into another, such as a Rust code block in Markdown, answers come from that language's tree: `node-at` gives its nodes, the parent of its outermost node is the node around it outside, and `captures` runs each language's own query, so the same text objects work there.
 
-nib parses on a thread of its own, so an answer right after an edit waits for that parse. For what a plugin reads on every key, such as the bracket to highlight, read the tree when `editor.syntax_updated` comes instead, as the Helix keymap does after keys that change text.
+nib parses on a thread of its own, so an answer right after an edit waits for that parse. For what a plugin reads on every key, such as the bracket to highlight, read the tree when `syntax-updated` comes instead, as the Helix keymap does after keys that change text.
 
 ### And more
 
-- `settings`: the tab width and indent of a buffer, and changing them for one buffer.
+- `settings`: the tab width and indentation of a buffer, changing them for one buffer, and the scroll margin.
 - `files.walk`: lists files under a directory, honoring `.gitignore`, on a background thread; the names arrive as `files-listed` events. Needs `fs-read`.
 - `clipboard`: the system clipboard. Needs `clipboard`.
 - `process.spawn`: starts a program; its output and exit arrive as events, and it is killed when the plugin stops. Needs `process`.
@@ -235,7 +241,7 @@ expect.screen = ["hover at 0:1"]
 
 **Selections** are written as in Helix's tests: `#[` and `]#` around the primary range, `#(` and `)#` around others, and `|` where the cursor is. `#[h|]#ello` is a cursor on the `h`; `#[|hello]#` selects `hello` backward. Without marks, the cursor is on the first character.
 
-**Keys** are characters as they are, and named or modified keys between `<` and `>`: `<esc>`, `<ret>`, `<tab>`, `<backspace>`, `<space>`, `<C-w>`, `<A-o>`, `<S-tab>`, `<F5>`, and `<lt>` for `<`.
+**Keys** are characters as they are, and named or modified keys between `<` and `>`: `<esc>`, `<ret>`, `<tab>`, `<backspace>`, `<space>`, `<C-w>`, `<A-o>`, `<S-tab>`, `<F5>`, and `<lt>` for `<`, `<gt>` for `>` (as in `<A-gt>`). After the keys, `paste = "…"` pastes text as a terminal would, as one piece.
 
 A failing test prints what was expected beside what came out, and the command's exit code says whether all passed.
 
@@ -258,7 +264,7 @@ To make it findable by name, add it to [nib-editor/plugins](https://github.com/n
 crate-type = ["cdylib"]
 
 [dependencies]
-nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.5.3" }
+nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.6.0" }
 ```
 
 Implement `nib_plugin::exports::nib::plugin::guest::Guest` and export it with `nib_plugin::export!(YourType)`. The API is under `nib_plugin::nib::plugin::<interface>`. Build for `wasm32-wasip2`; `nib plugin build` does it.
@@ -269,4 +275,4 @@ Built with [TinyGo](https://tinygo.org/) 0.42 or later, since Go itself cannot m
 
 ### Versions
 
-SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.5.3`, `sdk/go/v0.5.3`.
+SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.6.0`, `sdk/go/v0.6.0`.

@@ -58,7 +58,7 @@ fn passes_its_tests(name: &str, dir: &str, count: usize) {
 
 #[test]
 fn the_helix_plugin_passes_its_tests() {
-    passes_its_tests("helix", "helix", 9);
+    passes_its_tests("helix", "helix", 10);
 }
 
 #[test]
@@ -68,17 +68,17 @@ fn the_indent_plugin_passes_its_tests() {
 
 #[test]
 fn the_nano_plugin_passes_its_tests() {
-    passes_its_tests("nano", "nano", 10);
+    passes_its_tests("nano", "nano", 11);
 }
 
 #[test]
 fn the_vim_plugin_passes_its_tests() {
-    passes_its_tests("vim", "vim", 10);
+    passes_its_tests("vim", "vim", 12);
 }
 
 #[test]
 fn the_emacs_plugin_passes_its_tests() {
-    passes_its_tests("emacs", "emacs", 29);
+    passes_its_tests("emacs", "emacs", 31);
 }
 
 #[test]

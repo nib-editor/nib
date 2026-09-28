@@ -123,6 +123,7 @@ fn handle(editor: &mut Editor, event: Event) {
             }
         }
         Event::Resize(width, height) => editor.resize(width, height),
+        Event::Paste(text) => editor.handle_paste(&text),
         _ => {}
     }
 }
@@ -137,6 +138,7 @@ fn convert_key(key: event::KeyEvent) -> Option<KeyEvent> {
         K::Tab | K::BackTab => KeyCode::Tab,
         K::Backspace => KeyCode::Backspace,
         K::Delete => KeyCode::Delete,
+        K::Insert => KeyCode::Insert,
         K::Up => KeyCode::Up,
         K::Down => KeyCode::Down,
         K::Left => KeyCode::Left,
@@ -171,7 +173,13 @@ impl TerminalGuard {
     fn enter() -> io::Result<Self> {
         terminal::enable_raw_mode()?;
         let guard = TerminalGuard;
-        execute!(io::stdout(), terminal::EnterAlternateScreen)?;
+        // Pasted text arrives as one piece, not as keys the base would
+        // take for commands.
+        execute!(
+            io::stdout(),
+            terminal::EnterAlternateScreen,
+            event::EnableBracketedPaste
+        )?;
         let default_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
             restore();
@@ -192,6 +200,7 @@ fn restore() {
         io::stdout(),
         cursor::SetCursorStyle::DefaultUserShape,
         cursor::Show,
+        event::DisableBracketedPaste,
         terminal::LeaveAlternateScreen
     );
     let _ = terminal::disable_raw_mode();

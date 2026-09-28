@@ -6,12 +6,32 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-func lower_OptionString(v cm.Option[string]) (f0 uint32, f1 *uint8, f2 uint32) {
+func lower_OptionU8(v cm.Option[uint8]) (f0 uint32, f1 uint32) {
 	some := v.Some()
 	if some != nil {
 		f0 = 1
-		v1, v2 := cm.LowerString(*some)
-		f1 = (*uint8)(v1)
+		v1 := (uint32)(*some)
+		f1 = (uint32)(v1)
+	}
+	return
+}
+
+func lower_Indentation(v Indentation) (f0 uint32, f1 uint32) {
+	f0 = (uint32)(v.Tag())
+	switch f0 {
+	case 0: // spaces
+		v1 := (uint32)(*cm.Case[uint8](&v, 0))
+		f1 = (uint32)(v1)
+	}
+	return
+}
+
+func lower_OptionIndentation(v cm.Option[Indentation]) (f0 uint32, f1 uint32, f2 uint32) {
+	some := v.Some()
+	if some != nil {
+		f0 = 1
+		v1, v2 := lower_Indentation(*some)
+		f1 = (uint32)(v1)
 		f2 = (uint32)(v2)
 	}
 	return

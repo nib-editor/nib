@@ -1,13 +1,13 @@
 //! The command line: `:` for ex commands, and `/` and `?` for searches.
 
 use base_kit::doc::Doc;
-use base_kit::{cmdline, json_string, line_edit};
+use base_kit::{cmdline, line_edit};
 use nib_plugin::exports::nib::plugin::guest::KeyResult;
-use nib_plugin::nib::plugin::commands;
-use nib_plugin::nib::plugin::editor::{self, View};
+use nib_plugin::nib::plugin::editor;
 use nib_plugin::nib::plugin::prompt::{self as prompts, Action as PromptAction, Line};
 use nib_plugin::nib::plugin::types::{Edit, KeyCode, KeyEvent};
 use nib_plugin::nib::plugin::ui;
+use nib_plugin::nib::plugin::view::{self, Direction, View};
 
 use crate::ex::{self, Base, Ex};
 use crate::motion::first_non_blank;
@@ -252,10 +252,10 @@ impl Vim {
                         self.remember(':', &text);
                         self.last_ex = Some(text.clone());
                         self.step_open = false;
-                        let view = editor::active_view();
+                        let view = view::active();
                         let version = view.buffer().version();
                         self.run_ex_line(&text);
-                        let view = editor::active_view();
+                        let view = view::active();
                         if self.mode == Mode::Normal && view.buffer().version() != version {
                             let pos = self.cursor(&view);
                             self.place(&view, pos);
@@ -356,7 +356,7 @@ impl Vim {
     fn run_ex(&mut self, line: &str) -> Result<(), String> {
         let ex = ex::parse(line)?;
         let arg = ex.arg.trim_end();
-        let view = editor::active_view();
+        let view = view::active();
         let doc = Doc::new(view.buffer());
         let cursor = self.cursor(&view);
         let current = doc.line_of(cursor);
@@ -496,31 +496,33 @@ impl Vim {
                 if arg.is_empty() {
                     return Ok(());
                 }
-                call(
-                    "buffer.open",
-                    &format!(r#"{{"path":{}}}"#, json_string(arg)),
-                )
+                base_kit::open_file(arg)
             }
             _ if is("split", 2) || name == "new" || is("vsplit", 2) || name == "vnew" => {
-                let direction = if name.starts_with('v') {
-                    "vertical"
+                view::split(if name.starts_with('v') {
+                    Direction::Vertical
                 } else {
-                    "horizontal"
-                };
-                call("view.split", &format!(r#"{{"direction":"{direction}"}}"#))?;
+                    Direction::Horizontal
+                });
                 if !arg.is_empty() {
-                    call(
-                        "buffer.open",
-                        &format!(r#"{{"path":{}}}"#, json_string(arg)),
-                    )?;
+                    base_kit::open_file(arg)?;
                 }
                 Ok(())
             }
-            _ if is("only", 2) => call("view.only", ""),
-            _ if is("close", 3) => call("view.close", ""),
-            _ if is("bnext", 2) => call("buffer.next", ""),
-            _ if is("bprevious", 2) || is("bNext", 2) => call("buffer.previous", ""),
-            _ if is("bdelete", 2) => call("buffer.close", &format!(r#"{{"force":{}}}"#, ex.bang)),
+            _ if is("only", 2) => {
+                view::only();
+                Ok(())
+            }
+            _ if is("close", 3) => view::close(),
+            _ if is("bnext", 2) => {
+                view::active().show_next();
+                Ok(())
+            }
+            _ if is("bprevious", 2) || is("bNext", 2) => {
+                view::active().show_previous();
+                Ok(())
+            }
+            _ if is("bdelete", 2) => view::active().buffer().close(ex.bang),
             _ if is("set", 2) => Err("nib's settings are in config.toml; :config opens it".into()),
             _ if is("registers", 3) || is("display", 2) => {
                 ui::show_message(&self.registers_summary());
@@ -620,7 +622,8 @@ impl Vim {
             .map_err(base_kit::error_message)?;
         let mut edits: Vec<Edit> = Vec::new();
         let mut lines = Vec::new();
-        for (s, e) in found {
+        for found in found {
+            let (s, e) = (found.start, found.end);
             let line = doc.line_of(s);
             if !all && lines.last() == Some(&line) {
                 continue;
@@ -631,11 +634,15 @@ impl Vim {
             {
                 continue;
             }
-            let matched = doc.slice(s, e);
+            let groups = if base_kit::refers_to_groups(replacement) {
+                base_kit::match_groups(&view.buffer(), &regex, s)?
+            } else {
+                vec![doc.slice(s, e)]
+            };
             edits.push(Edit {
                 start: s,
                 end: e,
-                text: pattern::replacement(replacement, &matched)?,
+                text: pattern::replacement(replacement, &groups)?,
             });
             if lines.last() != Some(&line) {
                 lines.push(line);
@@ -752,7 +759,7 @@ impl Vim {
         };
         view.buffer().set_marks("normal", &starts);
         for i in 0..starts.len() {
-            let view = editor::active_view();
+            let view = view::active();
             let Some(&at) = view.buffer().marks("normal").get(i) else {
                 break;
             };
@@ -760,7 +767,7 @@ impl Vim {
             self.replay(&keys);
             self.finish_keys();
         }
-        editor::active_view().buffer().set_marks("normal", &[]);
+        view::active().buffer().set_marks("normal", &[]);
     }
 
     /// Ends what replayed keys left unfinished, as `:normal` does.
@@ -812,7 +819,7 @@ impl Vim {
                 doc.line_end(doc.line_start(last)),
             )
             .map_err(base_kit::error_message)?;
-        let mut matching: Vec<u64> = found.iter().map(|&(s, _)| doc.line_of(s)).collect();
+        let mut matching: Vec<u64> = found.iter().map(|r| doc.line_of(r.start)).collect();
         matching.dedup();
         let lines: Vec<u64> = if keep {
             matching
@@ -831,7 +838,7 @@ impl Vim {
         };
         let mut done = None;
         for i in 0..starts.len() {
-            let view = editor::active_view();
+            let view = view::active();
             let Some(&at) = view.buffer().marks("global").get(i) else {
                 break;
             };
@@ -845,19 +852,14 @@ impl Vim {
             }
             self.run_ex(&command)?;
         }
-        editor::active_view().buffer().set_marks("global", &[]);
+        view::active().buffer().set_marks("global", &[]);
         Ok(())
     }
 
     /// Saves, under `path` if one is given.
     fn write(&mut self, path: &str) -> Result<(), String> {
-        let args = if path.is_empty() {
-            "{}".to_string()
-        } else {
-            format!(r#"{{"path":{}}}"#, json_string(path))
-        };
-        commands::call("buffer.save", &args)?;
-        let buffer = editor::active_view().buffer();
+        let buffer = view::active().buffer();
+        buffer.save((!path.is_empty()).then_some(path))?;
         let shown = buffer.path().unwrap_or_default();
         let lines = buffer.line_count().saturating_sub(1).max(1);
         ui::show_message(&format!("\"{shown}\" {lines}L, {}B written", buffer.len()));
@@ -913,12 +915,6 @@ fn split_command(arg: &str, _pattern: &str) -> Option<String> {
     None
 }
 
-fn call(name: &str, args: &str) -> Result<(), String> {
-    commands::call(name, args).map(|_| ())
-}
-
 fn quit(force: bool) -> Result<(), String> {
-    commands::call("editor.quit", &format!(r#"{{"force":{force}}}"#))
-        .map(|_| ())
-        .map_err(|_| "E37: No write since last change (add ! to override)".into())
+    editor::quit(force).map_err(|_| "E37: No write since last change (add ! to override)".into())
 }

@@ -10,7 +10,7 @@ use crate::background::{Inbox, Message, Waker};
 use crate::buffer::Buffer;
 use crate::clipboard::{self, Clipboard};
 use crate::config::{CONFIG_TEMPLATE, Config, Indent, PluginConfig, Settings, plugin_template};
-use crate::events::{Command, Event, Timer};
+use crate::events::{Command, Event, Mode, Timer};
 use crate::files::FileJobs;
 use crate::history::UndoMode;
 use crate::input::{KeyCode, KeyEvent};
@@ -94,32 +94,65 @@ pub(crate) struct State {
     pub hidden_views: HashMap<usize, View>,
     pub languages: Languages,
     pub theme: Theme,
+    /// What the running base says of its state.
+    pub mode: Mode,
+}
+
+/// Where `view.focus` moves the focus.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Toward {
+    Next,
+    Left,
+    Right,
+    Up,
+    Down,
 }
 
 impl State {
-    /// Opens `path` in the view. The initial empty buffer is replaced if it
-    /// was never touched.
-    pub fn open(&mut self, path: impl Into<PathBuf>) -> Result<(), Error> {
-        let path = path.into();
-        let same_file = |other: &std::path::Path| {
+    /// The open buffer that has `path`.
+    fn find_open(&self, path: &Path) -> Option<usize> {
+        let same_file = |other: &Path| {
             other == path
                 || matches!(
                     (other.canonicalize(), path.canonicalize()),
                     (Ok(a), Ok(b)) if a == b
                 )
         };
-        if let Some(open) = self
-            .buffers
+        self.buffers
             .iter()
-            .position(|b| b.path().is_some_and(same_file))
-        {
-            self.switch_to(open);
-            return Ok(());
-        }
+            .position(|b| !b.is_closed() && b.path().is_some_and(same_file))
+    }
+
+    fn load(&self, path: PathBuf) -> Result<Buffer, Error> {
         let mut buffer = Buffer::open(path)?;
         if let Some(language) = buffer.path().and_then(|p| self.languages.for_path(p)) {
             buffer.syntax = Some(BufferSyntax::new(language));
         }
+        Ok(buffer)
+    }
+
+    /// Opens `path` without showing it, or finds the buffer that has it.
+    pub fn open_buffer(&mut self, path: impl Into<PathBuf>) -> Result<usize, Error> {
+        let path = path.into();
+        if let Some(open) = self.find_open(&path) {
+            return Ok(open);
+        }
+        let buffer = self.load(path)?;
+        self.buffers.push(buffer);
+        let index = self.buffers.len() - 1;
+        self.push_event(None, Event::BufferOpened(index));
+        Ok(index)
+    }
+
+    /// Opens `path` in the view. The initial empty buffer is replaced if it
+    /// was never touched.
+    pub fn open(&mut self, path: impl Into<PathBuf>) -> Result<(), Error> {
+        let path = path.into();
+        if let Some(open) = self.find_open(&path) {
+            self.switch_to(open);
+            return Ok(());
+        }
+        let buffer = self.load(path)?;
         // An empty scratch buffer, when it is the only one open, gives way
         // to the file.
         let mut open = self
@@ -339,16 +372,12 @@ impl State {
     /// they read from it on every key can wait for this instead of for a
     /// parse (docs/plugin-api.md).
     fn syntax_updated(&mut self, index: usize) {
-        let buffer = &self.buffers[index];
-        let data = serde_json::json!({
-            "path": buffer.path().map(|p| p.to_string_lossy()),
-            "version": buffer.version(),
-        });
+        let version = self.buffers[index].version();
         self.push_event(
             None,
-            Event::Custom {
-                name: SYNTAX_UPDATED.into(),
-                data: data.to_string(),
+            Event::SyntaxUpdated {
+                buffer: index,
+                version,
             },
         );
     }
@@ -398,6 +427,19 @@ impl State {
             self.languages
                 .highlight(&self.theme, syntax, buffer.text(), range),
         )
+    }
+
+    /// Shows buffer `index` in the focused view for a plugin. The empty
+    /// buffer nib starts with gives way, as when opening a file.
+    pub fn show(&mut self, index: usize) {
+        let old = self.view.buffer;
+        self.switch_to(index);
+        let buffer = &self.buffers[old];
+        let untouched = buffer.path().is_none() && buffer.is_empty() && !buffer.is_modified();
+        let shown = self.others.iter().any(|(_, view)| view.buffer == old);
+        if old != index && untouched && !shown {
+            let _ = self.close_buffer_at(old, false);
+        }
     }
 
     /// Shows buffer `index`, keeping the view of the current one for later.
@@ -497,7 +539,7 @@ impl State {
 
     /// Opens config.toml, or `plugins/<plugin>.toml`. A missing one opens
     /// with the defaults commented out, unsaved, so it exists once saved.
-    fn open_config(&mut self, plugin: Option<&str>) -> Result<(), String> {
+    pub fn open_config(&mut self, plugin: Option<&str>) -> Result<(), String> {
         let dir = self
             .config_dir
             .clone()
@@ -530,25 +572,92 @@ impl State {
         Ok(())
     }
 
-    /// The open buffer after the shown one, or before it, going round.
-    /// The shown one if it is the only one.
-    fn next_open(&self, forward: bool) -> usize {
+    /// The open buffer after `from`, or before it, going round. `from`
+    /// itself if it is the only one.
+    fn next_open(&self, from: usize, forward: bool) -> usize {
         let count = self.buffers.len();
         let step = if forward { 1 } else { count - 1 };
-        let mut at = self.view.buffer;
+        let mut at = from;
         for _ in 0..count {
             at = (at + step) % count;
             if !self.buffers[at].is_closed() {
                 return at;
             }
         }
-        self.view.buffer
+        from
     }
 
-    /// Closes the shown buffer. Views showing it show another open one,
-    /// or a new empty buffer if it was the last.
+    /// Shows the open buffer after the shown one, or before it.
+    pub fn show_next(&mut self, forward: bool) {
+        let next = self.next_open(self.view.buffer, forward);
+        self.switch_to(next);
+    }
+
+    /// Saves buffer `index`, or with `path`, saves it there and makes that
+    /// its path.
+    pub fn save_buffer(&mut self, index: usize, path: Option<&str>) -> Result<(), String> {
+        let buffer = &mut self.buffers[index];
+        let saved = match path {
+            Some(path) => buffer.save_as(path),
+            None => buffer.save(),
+        };
+        saved.map_err(|err| err.to_string())?;
+        self.push_event(None, Event::BufferSaved(index));
+        if self.is_config(index) {
+            self.reload_config = true;
+        }
+        Ok(())
+    }
+
+    /// Quits, unless buffers have unsaved changes and it is not `force`d.
+    pub fn quit(&mut self, force: bool) -> Result<(), String> {
+        let modified = self.modified_buffers();
+        if modified > 0 && !force {
+            let buffers = if modified == 1 {
+                "buffer has"
+            } else {
+                "buffers have"
+            };
+            return Err(format!("{modified} {buffers} unsaved changes"));
+        }
+        self.quit = true;
+        Ok(())
+    }
+
+    pub fn open_menu(&mut self) {
+        self.menu = Some(Menu::Main);
+        self.menu_cursor = 0;
+    }
+
+    /// Moves the focus to the next view, or the one on a side.
+    pub fn focus_toward(&mut self, toward: Toward) {
+        let target = if toward == Toward::Next {
+            let order = self.splits.leaves();
+            let at = order.iter().position(|id| *id == self.focused).unwrap_or(0);
+            Some(order[(at + 1) % order.len()])
+        } else {
+            let direction = match toward {
+                Toward::Left => Direction::Left,
+                Toward::Right => Direction::Right,
+                Toward::Up => Direction::Up,
+                _ => Direction::Down,
+            };
+            let (rects, _) = self.view_layout(self.text_area_rows());
+            windows::neighbor(&rects, self.focused, direction)
+        };
+        if let Some(id) = target {
+            self.focus(id);
+        }
+    }
+
+    /// Closes the shown buffer; see `close_buffer_at`.
     pub fn close_buffer(&mut self, force: bool) -> Result<(), String> {
-        let index = self.view.buffer;
+        self.close_buffer_at(self.view.buffer, force)
+    }
+
+    /// Closes buffer `index`. Views showing it show another open one, or a
+    /// new empty buffer if it was the last.
+    pub fn close_buffer_at(&mut self, index: usize, force: bool) -> Result<(), String> {
         let buffer = &self.buffers[index];
         if buffer.is_modified() && !force {
             let name = buffer
@@ -559,14 +668,16 @@ impl State {
             ));
         }
         let path = buffer.path().map(|p| p.to_string_lossy().into_owned());
-        let previous = self.next_open(false);
+        let previous = self.next_open(index, false);
         let shown = if previous == index {
             self.buffers.push(Buffer::default());
             self.buffers.len() - 1
         } else {
             previous
         };
-        self.switch_to(shown);
+        if self.view.buffer == index {
+            self.switch_to(shown);
+        }
         for (_, view) in &mut self.others {
             if view.buffer == index {
                 *view = View::new(shown);
@@ -578,18 +689,13 @@ impl State {
         self.flush_changes();
         self.events.retain(|(_, event)| match event {
             Event::BufferOpened(b) | Event::BufferSaved(b) => *b != index,
-            Event::BufferChanged { buffer, .. } => *buffer != index,
+            Event::BufferChanged { buffer, .. } | Event::SyntaxUpdated { buffer, .. } => {
+                *buffer != index
+            }
             _ => true,
         });
         self.buffers[index] = Buffer::closed();
-        let data = serde_json::json!({ "path": path });
-        self.push_event(
-            None,
-            Event::Custom {
-                name: BUFFER_CLOSED.into(),
-                data: data.to_string(),
-            },
-        );
+        self.push_event(None, Event::BufferClosed(path));
         Ok(())
     }
 
@@ -611,6 +717,42 @@ impl State {
     pub fn only_view(&mut self) {
         self.others.clear();
         self.splits = Splits::Leaf(self.focused);
+    }
+
+    /// Puts pasted text into the open prompt, or before each selection of
+    /// the shown buffer, as a new undo step.
+    fn paste(&mut self, text: &str) {
+        if let Some(prompt) = self.prompts.last_mut() {
+            prompt.paste(text);
+            let event = Event::PromptChanged {
+                prompt: prompt.id,
+                text: prompt.text.clone(),
+                cursor: prompt.cursor,
+            };
+            let owner = prompt.owner;
+            self.push_event(Some(owner), event);
+            return;
+        }
+        let index = self.view.buffer;
+        let edits = self
+            .view
+            .selection
+            .ranges()
+            .iter()
+            .map(|range| Edit::insert(range.from(), text))
+            .collect();
+        let buffer = &mut self.buffers[index];
+        let version = buffer.version();
+        if let Ok(change) = buffer.apply(
+            version,
+            edits,
+            &self.view.selection,
+            None,
+            UndoMode::NewStep,
+        ) {
+            self.sync_views(index, &change.changes);
+            self.view.selection = change.selection;
+        }
     }
 
     /// Maps the selections of other views on buffer `index`, shown or
@@ -670,36 +812,20 @@ impl State {
             args => serde_json::from_str(args)
                 .map_err(|err| format!("{name}: invalid arguments: {err}"))?,
         };
+        // The same as the functions plugins call, by name for keys and
+        // command lines (docs/api-0.6.md).
         match name {
-            "buffer.save" => {
-                let index = self.view.buffer;
-                let buffer = &mut self.buffers[index];
-                let saved = match args["path"].as_str() {
-                    Some(path) => buffer.save_as(path),
-                    None => buffer.save(),
-                };
-                saved.map_err(|err| err.to_string())?;
-                self.push_event(None, Event::BufferSaved(index));
-                if self.is_config(index) {
-                    self.reload_config = true;
-                }
-            }
+            "buffer.save" => self.save_buffer(self.view.buffer, args["path"].as_str())?,
             "config.open" => self.open_config(args["plugin"].as_str())?,
             "config.reload" => self.reload_config = true,
-            "core.menu" => {
-                self.menu = Some(Menu::Main);
-                self.menu_cursor = 0;
-            }
+            "core.menu" => self.open_menu(),
             "buffer.open" => {
                 let path = args["path"]
                     .as_str()
                     .ok_or(r#"buffer.open needs {"path": string}"#)?;
                 self.open(path).map_err(|err| format!("{path}: {err}"))?;
             }
-            "buffer.next" | "buffer.previous" => {
-                let next = self.next_open(name == "buffer.next");
-                self.switch_to(next);
-            }
+            "buffer.next" | "buffer.previous" => self.show_next(name == "buffer.next"),
             "buffer.close" => self.close_buffer(args["force"].as_bool() == Some(true))?,
             "view.split" => {
                 let side_by_side = match args["direction"].as_str() {
@@ -712,39 +838,17 @@ impl State {
             "view.close" => self.close_view()?,
             "view.only" => self.only_view(),
             "view.focus" => {
-                let to = args["to"].as_str().unwrap_or("next");
-                let target = if to == "next" {
-                    let order = self.splits.leaves();
-                    let at = order.iter().position(|id| *id == self.focused).unwrap_or(0);
-                    Some(order[(at + 1) % order.len()])
-                } else {
-                    let direction = match to {
-                        "left" => Direction::Left,
-                        "right" => Direction::Right,
-                        "up" => Direction::Up,
-                        "down" => Direction::Down,
-                        other => return Err(format!("view.focus: no direction {other:?}")),
-                    };
-                    let (rects, _) = self.view_layout(self.text_area_rows());
-                    windows::neighbor(&rects, self.focused, direction)
+                let toward = match args["to"].as_str().unwrap_or("next") {
+                    "next" => Toward::Next,
+                    "left" => Toward::Left,
+                    "right" => Toward::Right,
+                    "up" => Toward::Up,
+                    "down" => Toward::Down,
+                    other => return Err(format!("view.focus: no direction {other:?}")),
                 };
-                if let Some(id) = target {
-                    self.focus(id);
-                }
+                self.focus_toward(toward);
             }
-            "editor.quit" => {
-                let force = args["force"].as_bool().unwrap_or(false);
-                let modified = self.modified_buffers();
-                if modified > 0 && !force {
-                    let buffers = if modified == 1 {
-                        "buffer has"
-                    } else {
-                        "buffers have"
-                    };
-                    return Err(format!("{modified} {buffers} unsaved changes"));
-                }
-                self.quit = true;
-            }
+            "editor.quit" => self.quit(args["force"].as_bool().unwrap_or(false))?,
             _ => return Err(format!("no command named {name}")),
         }
         Ok("null".into())
@@ -758,58 +862,43 @@ impl State {
             .map_or(self.settings.tab_width, |(_, width)| width)
     }
 
-    /// An editing setting of buffer `index` as JSON.
-    pub fn setting_json(&self, index: usize, key: &str) -> Option<String> {
-        let overrides = &self.buffers[index].overrides;
-        match key {
-            "tab-width" => Some(self.tab_width(index).to_string()),
-            "indent" => {
-                let indent = overrides
-                    .indent
-                    .map_or(self.settings.indent, |(_, indent)| indent);
-                Some(indent.to_json().to_string())
-            }
-            _ => self.settings.get_json(key),
-        }
+    /// The indentation of buffer `index`.
+    pub fn indent(&self, index: usize) -> Indent {
+        self.buffers[index]
+            .overrides
+            .indent
+            .map_or(self.settings.indent, |(_, indent)| indent)
     }
 
-    /// Sets an editing setting for buffer `index` alone, or with `None`
-    /// goes back to config.toml's value.
-    pub fn set_setting(
+    /// Sets the tab width of buffer `index` alone, or with `None` goes back
+    /// to config.toml's value.
+    pub fn set_tab_width(
         &mut self,
         index: usize,
         owner: PluginId,
-        key: &str,
-        value: Option<&str>,
+        width: Option<u16>,
     ) -> Result<(), String> {
-        let value: Option<serde_json::Value> = value
-            .map(serde_json::from_str)
-            .transpose()
-            .map_err(|err| format!("{key}: {err}"))?;
-        let overrides = &mut self.buffers[index].overrides;
-        match key {
-            "tab-width" => {
-                overrides.tab_width = value
-                    .map(|v| {
-                        let width = v
-                            .as_u64()
-                            .filter(|w| (1..=16).contains(w))
-                            .ok_or("tab-width must be 1 to 16")?;
-                        Ok::<_, String>((owner, width as u16))
-                    })
-                    .transpose()?;
-            }
-            "indent" => {
-                overrides.indent = value
-                    .map(|v| {
-                        let indent = Indent::from_json(&v)
-                            .ok_or("indent must be \"tab\" or 1 to 16 spaces")?;
-                        Ok::<_, String>((owner, indent))
-                    })
-                    .transpose()?;
-            }
-            _ => return Err(format!("{key} cannot be set per buffer")),
+        if width.is_some_and(|w| !(1..=16).contains(&w)) {
+            return Err("the tab width must be 1 to 16".into());
         }
+        self.buffers[index].overrides.tab_width = width.map(|w| (owner, w));
+        Ok(())
+    }
+
+    /// Sets the indentation of buffer `index` alone, or with `None` goes
+    /// back to config.toml's value.
+    pub fn set_indent(
+        &mut self,
+        index: usize,
+        owner: PluginId,
+        indent: Option<Indent>,
+    ) -> Result<(), String> {
+        if let Some(Indent::Spaces(n)) = indent
+            && !(1..=16).contains(&n)
+        {
+            return Err("an indentation must be a tab or 1 to 16 spaces".into());
+        }
+        self.buffers[index].overrides.indent = indent.map(|i| (owner, i));
         Ok(())
     }
 
@@ -917,11 +1006,6 @@ pub struct Editor {
 const LENT: &str = "editor state is only lent during plugin calls";
 
 /// The commands the core runs itself, with their descriptions.
-/// The event the core emits when a buffer's syntax tree is up to date.
-const SYNTAX_UPDATED: &str = "editor.syntax_updated";
-/// The event the core emits when a buffer is closed.
-const BUFFER_CLOSED: &str = "editor.buffer_closed";
-
 pub(crate) const CORE_COMMANDS: &[(&str, &str)] = &[
     (
         "buffer.save",
@@ -1000,6 +1084,7 @@ impl Default for Editor {
                 hidden_views: HashMap::new(),
                 languages: Languages::default(),
                 theme: Theme::default(),
+                mode: Mode::default(),
             }),
             plugins: Plugins::default(),
             plugin_configs: BTreeMap::new(),
@@ -1157,6 +1242,32 @@ impl Editor {
             self.send_to_plugins_offering(key);
         } else {
             self.prompt_key(key);
+        }
+        self.after_plugins_ran();
+    }
+
+    /// Sends pasted text down the input stack as one piece, or to the base
+    /// while a prompt is open. When no plugin takes it, it goes into the
+    /// prompt, or before each selection of the shown buffer.
+    pub fn handle_paste(&mut self, text: &str) {
+        self.state_mut().message = None;
+        if self.state().menu.is_some() {
+            return;
+        }
+        // Terminals send line breaks as they were copied, or as CR.
+        let text = text.replace("\r\n", "\n").replace('\r', "\n");
+        let handled = if self.state().prompts.is_empty() {
+            let layers = self.state().layers.clone();
+            layers
+                .into_iter()
+                .rev()
+                .any(|plugin| self.plugin_handle_paste(plugin, &text))
+        } else {
+            self.running_base()
+                .is_some_and(|base| self.plugin_handle_paste(base, &text))
+        };
+        if !handled {
+            self.state_mut().paste(&text);
         }
         self.after_plugins_ran();
     }

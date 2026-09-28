@@ -1,6 +1,6 @@
 name = "test-events"
 version = "0.0.0"
-api = "0.5"
+api = "0.6"
 capabilities = ["process", "fs-read"]
 events = [
     "buffer-opened",
@@ -8,7 +8,8 @@ events = [
     "buffer-changed",
     "test-events.ping",
     "test-events.loop",
-    "helix.mode_changed",
+    "mode-changed",
+    "buffer-closed",
 ]
 
 # f loses to picker's when both are loaded, picker first.

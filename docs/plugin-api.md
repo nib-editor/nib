@@ -28,7 +28,7 @@ helix-keymap/
 ```toml
 name = "helix"            # コマンドの名前空間にもなる
 version = "0.1.0"
-api = "0.5"               # 対応する nib:plugin のバージョン（メジャー.マイナー）
+api = "0.6"               # 対応する nib:plugin のバージョン（メジャー.マイナー）
 
 capabilities = []         # "fs-read" / "fs-write" / "process" / "network"
 events = ["buffer-changed"]
@@ -50,132 +50,34 @@ f = "picker.files"        # helix なら Space f
 
 ## world
 
-WIT パッケージは `nib:plugin`。プラグインは `plugin` world に対して書く。
-
-以下の WIT は形を示すためのスケッチで、一部の型は省略している。wasm-tools での検証は、`api/` に置くときに行う。
-
-```wit
-package nib:plugin@0.4.0;
-
-world plugin {
-    import editor;
-    import input;
-    import commands;
-    import ui;
-    import syntax;
-    import events;
-    import timers;
-    import process;   // 宣言がなければ、呼ぶと permission-denied を返す
-
-    export guest;
-}
-```
+WIT パッケージは `nib:plugin`。プラグインは `plugin` world に対して書く。型と関数の正は [api/wit/plugin.wit](../api/wit/plugin.wit) で、ここには形と決まりを書く。0.6 で作り直したときの理由は [api-0.6.md](api-0.6.md)。
 
 ### プラグインが実装する関数（guest）
 
-```wit
-interface guest {
-    use types.{key-event, event};
+| 関数 | 呼ばれるとき |
+|------|--------------|
+| `init(config)` | 読み込み直後に 1 回。`config` は `plugins/<name>.toml` の `[settings]` を JSON にしたもの |
+| `handle-key(ev)` | 入力スタックに積んだ層にキーが届いたとき。`handled` か `pass`（下の層へ）を返す |
+| `handle-paste(text)` | 端末に貼り付けたものが、キーと同じく層に届いたとき（下の「入力」） |
+| `run-command(name, args)` | 自分が登録したコマンドが呼ばれたとき。`name` は登録したときの名前。引数と戻り値は JSON |
+| `on-event(ev)` | 購読したイベント |
 
-    enum key-result { handled, pass }
+### コアが提供するもの
 
-    /// 読み込み直後に 1 回呼ぶ。config は plugins/<name>.toml の [settings] を JSON にしたもの
-    init: func(config: string) -> result<_, string>;
-
-    /// 入力スタックに積んだ層にキーが届いたとき
-    handle-key: func(ev: key-event) -> key-result;
-
-    /// 自分が登録したコマンドが呼ばれたとき。name は登録したときの名前。引数と戻り値は JSON
-    run-command: func(name: string, args: string) -> result<string, string>;
-
-    /// 購読したイベント
-    on-event: func(ev: event);
-}
-```
-
-### コアが提供する関数（抜粋）
-
-```wit
-interface types {
-    type offset = u64;
-
-    record sel-range { anchor: offset, head: offset }
-    record selection { ranges: list<sel-range>, primary: u32 }
-
-    /// 変更前のバッファでの範囲 [start, end) を text で置き換える
-    record edit { start: offset, end: offset, text: string }
-
-    enum undo-mode { new-step, merge }
-    enum cursor-shape { block, bar, underline }
-
-    flags modifiers { ctrl, alt, shift, super }
-    variant key-code {
-        %char(char), enter, escape, tab, backspace, delete,
-        up, down, left, right, home, end, page-up, page-down, f(u8),
-    }
-    record key-event { code: key-code, modifiers: modifiers }
-
-    /// style はテーマの名前（例: "ui.statusline"）
-    record span { text: string, style: string }
-    type styled-line = list<span>;
-}
-
-interface editor {
-    use types.{offset, selection, edit, undo-mode, cursor-shape};
-
-    variant error {
-        stale-version, invalid-position, overlapping-edits,
-        invalid-selection, invalid-pattern(string),
-    }
-
-    resource buffer {
-        /// 変更のたびに増える（undo と redo も含む）
-        version: func() -> u64;
-        len: func() -> offset;
-        slice: func(start: offset, end: offset) -> result<string, error>;
-        line-count: func() -> u64;
-        /// 行がなければ none
-        line-start: func(line: u64) -> option<offset>;
-        line-of: func(pos: offset) -> result<u64, error>;
-        next-grapheme: func(pos: offset) -> result<offset, error>;
-        prev-grapheme: func(pos: offset) -> result<offset, error>;
-        path: func() -> option<string>;
-        /// 正規表現で検索する。見つかった範囲を返す
-        find: func(pattern: string, start: offset, backward: bool) -> result<option<tuple<offset, offset>>, error>;
-        find-all: func(pattern: string, start: offset, end: offset) -> result<list<tuple<offset, offset>>, error>;
-        /// 編集に合わせて動く位置（位置の印）を、名前空間ごとに置き換える。空のリストで消える
-        set-marks: func(namespace: string, marks: list<offset>);
-        /// 名前空間の位置の印を、置いた順に返す
-        marks: func(namespace: string) -> list<offset>;
-    }
-
-    variant scroll-amount { lines(s32), half-page(s32), page(s32) }
-
-    resource view {
-        buffer: func() -> buffer;
-        selection: func() -> selection;
-        set-selection: func(sel: selection) -> result<_, error>;
-        apply: func(base-version: u64, edits: list<edit>,
-                    after: option<selection>, undo: undo-mode) -> result<_, error>;
-        undo: func() -> bool;
-        redo: func() -> bool;
-        set-cursor-shape: func(shape: cursor-shape);
-        /// 表示上の行単位で縦に動かした位置と、目指した列を返す（折り返しとタブを考慮する）。
-        /// 返った列を次に渡すと、短い行を通っても列を保てる
-        move-vertically: func(pos: offset, lines: s32, column: option<u32>) -> result<tuple<offset, u32>, error>;
-        /// カーソルを動かさずに表示を動かし、動かした行数を返す（上向きは負）
-        scroll: func(amount: scroll-amount) -> s32;
-        /// 表示中のバッファの範囲
-        visible-range: func() -> tuple<offset, offset>;
-    }
-
-    active-view: func() -> view;
-    /// 開いているすべてのバッファ
-    buffers: func() -> list<buffer>;
-    /// エディタの作業ディレクトリ（絶対パス）。バッファのパスは開いたときの形なので、ここからの相対パスのことがある
-    working-directory: func() -> string;
-}
-```
+| interface | 中身 |
+|-----------|------|
+| `types` | 位置（バイトオフセット）、範囲（`range`）、選択、編集、キー、表示の文字列、失敗の種類（`error`） |
+| `buffer` | バッファ（resource）の読み出し、検索（`find`、`find-groups`、`find-all`）、位置の印、保存、閉じる、変更済みか。`buffer.open`（表示せずに開く）と `buffer.all` |
+| `view` | ビュー（resource）の選択、編集の適用、undo と redo（変わった範囲を返す）、縦移動、スクロール、表示するバッファ。`view.active` と分割（`split`、`close`、`only`、`focus`） |
+| `editor` | エディタ全体: 作業ディレクトリ、終了、設定を開く・読み直す、コアメニュー |
+| `input` | 入力スタックの層、リーダーの下のキー、ベースのモード（`set-mode`、`current-mode`） |
+| `prompt` | 入力欄と、文字を打つ欄のない一覧（下の「入力欄」） |
+| `commands` | 名前で呼ぶコマンドの登録と呼び出し |
+| `events` | イベントの種類と、custom イベントを出す `emit` |
+| `ui` | ステータスライン、メッセージ、パネル、ポップアップ、装飾、注記 |
+| `settings` | バッファの tab の幅とインデント、スクロールの余白 |
+| `syntax` | 構文木のノードとクエリ |
+| `timers`、`process`、`files`、`clipboard` | タイマー、外部プロセス、ファイルの一覧、クリップボード（権限が要るものは下の「権限」） |
 
 ## バッファと選択
 
@@ -188,7 +90,9 @@ interface editor {
   - 挿入モードでは、最初の打鍵を `new-step`、以降を `merge` にすれば、挿入全体が 1 手になる。
 - 閉じたバッファやビューの handle を使うと、プラグインはトラップする。プラグインのバグとして扱い、再起動の対象にする。
 - 書記素の境界は、コアが `next-grapheme` / `prev-grapheme` として提供する。プラグインごとに Unicode の表を持たなくて済み、描画とも結果が食い違わない。
-- 正規表現の検索は、コアが `find` / `find-all` として提供する。プラグインが自前で検索すると、大きなバッファの全文を毎回コピーすることになるため。
+- 正規表現の検索は、コアが `find` / `find-groups` / `find-all` として提供する。プラグインが自前で検索すると、大きなバッファの全文を毎回コピーすることになるため。`find-groups` はグループの範囲も返す（置き換えの `\1` のため）。
+- `undo` と `redo` は、変わったところ（変更後のテキストで、いちばん前の変更の範囲）を返す。ベースが、元のエディタの作法でカーソルを置き直すため。
+- `buffer.modified` は、保存したときの undo の状態と今の状態が違うか。undo で保存したときに戻れば、変更なしに戻る。
 - 位置の印（`set-marks` / `marks`）は、vim のマークとジャンプリスト、Emacs のマークとマークリングのように、編集されても同じ場所を指し続けたい位置に使う（[base.md](base.md) の「コアに足すもの」）。
   - どのプラグインの編集でも、コアが動かす。ベースが自分で持つと、LSP の整形のような他のプラグインの編集でずれるため。
   - 動かし方は注記と同じ。印の位置に挿入された文字は印の後ろに入り（Emacs のマーカーの既定と同じ）、消された範囲の印は消えた場所へ動く。undo で文字が戻っても、印は戻らない。
@@ -251,14 +155,14 @@ interface syntax {
 - `commands.register(name, description)` で登録する。登録名の前には、マニフェストの `name` が自動で付く（`move_next_word` → `helix.move_next_word`）。
   - 呼ばれると、登録したプラグインの `run-command(name, args)` に、登録したときの名前（`move_next_word`）で届く。
   - 同じ名前をもう一度登録すると、説明を差し替える。プラグインが止まると登録は消える。
-- `buffer.`、`editor.`、`view.` で始まる名前はコア用に予約する。
+- `buffer`、`config`、`core`、`editor`、`view` で始まる名前はコア用に予約する（プラグインの名前にも使えない）。
 - `commands.call(name, args)` で呼ぶ。
-  - 引数と戻り値は JSON 文字列。
+  - 引数と戻り値は JSON 文字列。引数の空文字列は `{}` と同じ。
   - 呼び出しは同期的で、戻り値をその場で受け取れる。
   - 呼び出し先がすでに呼び出し中のプラグイン（呼び出し元自身や、その呼び出し元）なら、再入になるのでエラーを返す。
   - 呼び出し先のプラグインが落ちたときは、呼び出し元にはエラーが返る。落ちたプラグインの再起動は、いちばん外側の呼び出しが終わってから行う。
 - `commands.all()` で、登録済みのコマンドの名前と説明を得る（コマンドの一覧や補完に使う）。
-- コアのコマンド（引数は JSON）:
+- コアのコマンド（引数は JSON）。どれも上の関数を名前で呼ぶためのもので、キーの設定や `:`、`M-x` から使う。プラグインは関数を直接呼ぶ:
 
 | コマンド | 内容 |
 |----------|------|
@@ -276,7 +180,8 @@ interface syntax {
 
   分割表示のコマンドは [architecture.md](architecture.md) の「分割表示」も見る。
 - バッファを閉じると、それを表示していたビューは、前の開いているバッファを表示する（最後の 1 つなら、空のバッファを作る）。
-  - 閉じたバッファは一覧の中に空で残し、番号をずらさない。プラグインが持つバッファの handle は番号なので、ほかのバッファの handle がずれないため。閉じたバッファの handle を使うとトラップする。`editor.buffers()` には出ない。
+  - 閉じたバッファは一覧の中に空で残し、番号をずらさない。プラグインが持つバッファの handle は番号なので、ほかのバッファの handle がずれないため。閉じたバッファの handle を使うとトラップする。`buffer.all()` には出ない。
+- `view.show` でバッファを表示すると、nib が起動したときの空のバッファ（パスがなく、何も打っていないもの）は閉じる。ファイルを開いたときにそれが残らないように。
   - まだ届けていない、そのバッファのイベントは捨てる。閉じたあとで、閉じたバッファの handle を渡さないため。
 
 呼び出しを同期にできるのは、呼び出し中はエディタの状態とプラグインの一覧をそのプラグインのストアに貸しているため。呼び出し先のプラグインへは、貸したものをそのまま又貸しする（[architecture.md](architecture.md) の「プラグインの実行」）。
@@ -288,7 +193,9 @@ JSON を選んだのは、WIT に再帰する型がなく、任意の値の木�
 - `input.push-layer()` で入力スタックに層を積み、`input.pop-layer()` で外す。キーは上の層から順に `handle-key` で届き、`pass` を返すと下の層に回る。
 - コアメニューのキー（既定は Ctrl-g、ベースが `menu-key` で決め、利用者が `[core]` の `menu-key` で変えられる）はプラグインに届かない（[architecture.md](architecture.md) の「入力」）。
 - キーマッププラグインは `init` で 1 層積み、それを外さない。
-- 貼り付け（bracketed paste）は、キーではなく `paste` イベントとして届ける。
+- 端末に貼り付けたもの（bracketed paste）は、キーではなく 1 つの塊として、`handle-paste` に同じ順で届く。入力欄が開いているあいだはベースに届く。どのプラグインも `pass` を返したら、コアが入れる: 入力欄が開いていれば欄に（改行は空白にする）、なければ表示中のバッファの各選択の前に、新しい undo の 1 手として。
+  - 貼り付けたものが 1 文字ずつキーとして届くと、vim の normal モードではコマンドとして動き、Emacs では改行のたびにインデントが足されるため。
+- ベースは `input.set-mode(name, typing)` でモードを知らせる。`typing` は、修飾のない文字がテキストに入る状態か（挿入モード、モードのないベース）。ほかのプラグインは `mode-changed` イベントか `input.current-mode()` で知る（lsp は、打鍵が止まったときに補完を出すかをこれで決める）。ベース以外が呼んでも何もしない。
 
 ## 入力欄
 
@@ -296,7 +203,7 @@ JSON を選んだのは、WIT に再帰する型がなく、任意の値の木�
 
 ```wit
 interface prompt {
-    enum action { accept, cancel, next, previous, complete, complete-back }
+    enum action { accept, cancel, next, previous, page-next, page-previous, complete, complete-back }
 
     resource line {
         constructor(label: string);   // label は ":" や "files> "
@@ -304,6 +211,7 @@ interface prompt {
         text: func() -> string;
         cursor: func() -> u32;        // text の中のバイト位置
         set: func(text: string, cursor: u32);
+        set-label: func(label: string);
         set-hint: func(hint: string); // 右端に出す。"3/10" など
     }
 
@@ -326,7 +234,7 @@ interface prompt {
 - アクティブな欄があるあいだ、キーは入力スタックではなく、使っているベースの `handle-key` に届く。ベースは `prompt.active()` で欄があるかを知り、自分の作法でキーを解釈する。
   - 文字列を変えるときは `prompt.edit(text, cursor)`。持ち主に `prompt-changed` が届く。
   - 決定、取り消し、次の候補などは `prompt.act(action)`。持ち主に `prompt-action` が届く。
-  - 知らないキーは `pass` を返す。コアが既定の動きをする: 修飾のない文字は入れる、Backspace は 1 文字消す（空なら `cancel`）、Delete、左右、Home、End で動く、上下は `previous` / `next`、Tab と Shift-Tab は `complete` / `complete-back`、Enter は `accept`、Esc は `cancel`。ベースがない、または作りかけでも、欄は使える。
+  - 知らないキーは `pass` を返す。コアが既定の動きをする: 修飾のない文字は入れる、Backspace は 1 文字消す（空なら `cancel`）、Delete、左右、Home、End で動く、上下は `previous` / `next`、PageUp と PageDown は `page-previous` / `page-next`、Tab と Shift-Tab は `complete` / `complete-back`、Enter は `accept`、Esc は `cancel`。ベースがない、または作りかけでも、欄は使える。
 - 持ち主は、イベントを受けて動く。決定や取り消しで欄を閉じるのも持ち主（捨てる）。欄を開いたまま持ち主が止まると、コアが閉じる。
 - `set` は持ち主が補完などで文字列を書き換えるためのもので、`prompt-changed` は出ない。
 - 一覧（picker の候補、補完の候補）は、持ち主がパネルやポップアップで描く。欄が持つのは 1 行の文字と右端の hint だけ。
@@ -347,7 +255,7 @@ LSP の補完やホバーのように、文字は本文に打ちながら、一�
 - プラグインは、マニフェストの `events` に書いた種類のイベントだけを受け取る。全イベントを全プラグインに配ることはしない。
 
 ```toml
-events = ["buffer-opened", "buffer-changed", "helix.mode_changed"]
+events = ["buffer-opened", "buffer-changed", "mode-changed", "wordcount.counted"]
 ```
 
 - 主なイベント:
@@ -356,23 +264,24 @@ events = ["buffer-opened", "buffer-changed", "helix.mode_changed"]
 |----------|------|--------|
 | `buffer-opened` / `buffer-saved` | バッファを開いた・保存した | `events` に書いたプラグイン |
 | `buffer-changed` | バッファの変更。変更後のバージョンと、変更の列 | 同上 |
+| `buffer-closed` | バッファを閉じた。閉じたバッファの handle は使えないので、パスを渡す | 同上 |
+| `syntax-updated` | バッファの構文木が、編集のあとの解析で最新になった。バッファと、解析した時点のバージョン | 同上 |
+| `mode-changed` | ベースがモードを知らせた（`input.set-mode`）。ベース、モードの名前、`typing` | 同上 |
 | `<plugin>.<name>` | プラグインが `events.emit(name, json)` で出したもの（custom イベント） | 同上 |
-| `editor.buffer_closed` | バッファを閉じた。`{"path": string \| null}` | 同上 |
-| `editor.syntax_updated` | バッファの構文木が、編集のあとの解析で最新になった。`{"path": string \| null, "version": number}`（バッファのパスと、解析した時点のバージョン） | 同上 |
 | `timer` | `timers.set` で予約した時間がたった | 予約したプラグインだけ |
 | `process-output` / `process-exit` | 起動した外部プロセスの出力と終了 | 起動したプラグインだけ |
 | `files-listed` | `files.walk` で頼んだファイルの一覧（1,000 件ずつ） | 頼んだプラグインだけ |
 | `prompt-changed` / `prompt-action` | 入力欄の文字列が変わった（id、文字列、カーソル）・操作の意味（id、`action`） | 欄を開いたプラグインだけ |
-| `selection-changed`、`paste` | 必要になったときに足す | |
+| `selection-changed` | 必要になったときに足す | |
 
 - `buffer-changed` の変更の列は、先頭から順に 1 つずつ適用していけば変更後のテキストになるように並べる。LSP の `didChange` の `contentChanges` と同じ考え方で、変更ごとに、その時点のテキストでの行と列（バイト数）を付ける。LSP プラグインは、これをそのまま差分の同期に使える。
   - 1 回の `apply` の編集は、後ろから順に並べる。後ろの変更は前の位置を動かさないので、どれも変更前のテキストの位置のまま使える。
   - undo と redo も同じ形で届く。
-- `editor.` で始まるイベントはコアが出す。形は custom イベントと同じで、WIT の `event` に種類を足さずに済む（足すと API のバージョンが上がり、すべてのプラグインを作り直すことになる）。
-- custom イベントの名前には、出したプラグインの名前が自動で付く（`events.emit("mode_changed", ...)` → `helix.mode_changed`）。custom イベントはコマンドと対になる仕組み。コマンドは「誰かに頼む」、custom イベントは「起きたことを知らせる」。たとえばキーマッププラグインがモードの変化を知らせ、ステータスラインのプラグインがそれを表示する。
+- コアが出すイベントは、どれも WIT の `event` の種類にする。custom イベントは、プラグインどうしの知らせだけに使う（0.5 までは、コアのイベントの一部を custom の形の `editor.*` で出していた。[api-0.6.md](api-0.6.md)）。
+- custom イベントの名前には、出したプラグインの名前が自動で付く（`events.emit("counted", ...)` → `wordcount.counted`）。custom イベントはコマンドと対になる仕組み。コマンドは「誰かに頼む」、custom イベントは「起きたことを知らせる」。名前は種類の名前と同じく、ハイフンでつなぐのを勧める。
 - イベントは、それを起こした呼び出しが終わってから、起きた順に届ける。イベントを受けたプラグインが出したイベントも、同じ順番の最後に並ぶ。
   - 1 回にさばくイベントは 1,000 個までにする。プラグイン同士がイベントを投げ合って止まらなくなったときに、エディタが固まらないようにするため。超えた分は捨てて、メッセージで知らせる。
-- プラグインより前に開いたバッファの `buffer-opened` も、読み込んだあとに届く。起動時は、ファイルを開き、プラグインを読み込んでから、たまったイベントを配るため。途中で有効にしたプラグインは、`editor.buffers()` で開いているバッファを調べる。
+- プラグインより前に開いたバッファの `buffer-opened` も、読み込んだあとに届く。起動時は、ファイルを開き、プラグインを読み込んでから、たまったイベントを配るため。途中で有効にしたプラグインは、`buffer.all()` で開いているバッファを調べる。
 
 ## タイマー
 
@@ -453,19 +362,20 @@ set-decorations: func(buf: borrow<buffer>, namespace: string, decorations: list<
 
 ```wit
 interface settings {
-    /// 表示中のバッファでの値（JSON）: "tab-width"、"indent"（空白の数か "tab"）、"scroll-margin"
-    get: func(key: string) -> option<string>;
-    /// buf での値
-    get-for: func(buf: borrow<buffer>, key: string) -> option<string>;
-    /// buf でだけ値を変える。none で元に戻す
-    set-for: func(buf: borrow<buffer>, key: string, value: option<string>) -> result<_, string>;
+    variant indentation { spaces(u8), tab }
+    tab-width: func(buf: borrow<buffer>) -> u8;
+    indent: func(buf: borrow<buffer>) -> indentation;
+    scroll-margin: func() -> u32;
+    /// buf でだけ値を変える。none で config.toml の値に戻す
+    set-tab-width: func(buf: borrow<buffer>, width: option<u8>) -> result<_, string>;
+    set-indent: func(buf: borrow<buffer>, indent: option<indentation>) -> result<_, string>;
 }
 ```
 
 - 値は、config.toml の `[core]` の値を、プラグインがバッファ単位で上書きしたもの（[architecture.md](architecture.md) の「config.toml」）。
 - バッファ単位で変えられるのは `tab-width` と `indent` だけ。`scroll-margin` は画面の設定なので、バッファには持たせない。安全装置（予約キー、プラグインの上限）は、どの形でもプラグインから変えられない。
 - 同じバッファの同じキーを複数のプラグインが変えたら、あとから変えたほうが勝つ。変えたプラグインが止まると、その上書きは消える。
-- 言語ごとの既定値は、標準プラグイン `indent` が受け持つ。バッファが開いたら言語を調べ、`set-for` で上書きする。既定では Go をタブ、YAML と JSON を空白 2 つにする。利用者は `plugins/indent.toml` で変えられる。
+- 言語ごとの既定値は、標準プラグイン `indent` が受け持つ。バッファが開いたら言語を調べ、`set-tab-width` と `set-indent` で上書きする。既定では Go をタブ、YAML と JSON を空白 2 つにする。利用者は `plugins/indent.toml` で変えられる。
 
 ```toml
 # ~/.config/nib/plugins/indent.toml

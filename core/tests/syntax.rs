@@ -33,7 +33,7 @@ fn highlights_and_follows_edits() {
     assert_eq!(fg(&editor, 0, 0), Color::Reset);
     assert!(editor.catch_up());
     assert_eq!(fg(&editor, 0, 0), KEYWORD);
-    // Then editor.syntax_updated reaches the keymap.
+    // Then syntax-updated reaches the keymap.
     assert!(editor.catch_up());
     assert!(!editor.catch_up());
     assert_eq!(fg(&editor, 3, 0), FUNCTION);

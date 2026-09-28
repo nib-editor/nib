@@ -6,10 +6,10 @@ use base_kit::doc::Doc;
 use base_kit::text::Text;
 use base_kit::{error_message, regex_escape};
 use nib_plugin::exports::nib::plugin::guest::KeyResult;
-use nib_plugin::nib::plugin::editor::{self, View};
 use nib_plugin::nib::plugin::prompt::Line;
 use nib_plugin::nib::plugin::types::{Edit, KeyCode, KeyEvent, UndoMode};
 use nib_plugin::nib::plugin::ui::{self, Decoration};
+use nib_plugin::nib::plugin::view::{self, View};
 
 use crate::edit_range;
 use crate::motion::is_word;
@@ -197,9 +197,10 @@ pub fn translate(emacs: &str) -> Result<String, String> {
     Ok(out)
 }
 
-/// `to` with Emacs's `\&` as the matched text, `\\` as a backslash, and
-/// `\?` left out.
-fn expand(to: &str, matched: &str) -> Result<String, String> {
+/// `to` with Emacs's `\&` as the matched text, `\1` to `\9` as its
+/// groups, and `\\` as a backslash. `groups` has the whole match first.
+fn expand(to: &str, groups: &[String]) -> Result<String, String> {
+    let group = |n: usize| groups.get(n).map_or("", String::as_str);
     let mut out = String::new();
     let mut chars = to.chars();
     while let Some(c) = chars.next() {
@@ -208,11 +209,9 @@ fn expand(to: &str, matched: &str) -> Result<String, String> {
             continue;
         }
         match chars.next() {
-            Some('&') => out.push_str(matched),
+            Some('&') => out.push_str(group(0)),
             Some('\\') => out.push('\\'),
-            Some(d) if d.is_ascii_digit() => {
-                return Err(format!("\\{d} is not supported in replacements"));
-            }
+            Some(d @ '0'..='9') => out.push_str(group(d as usize - '0' as usize)),
             Some(other) => {
                 return Err(format!(
                     "Invalid use of `\\' in replacement text: \\{other}"
@@ -284,7 +283,7 @@ impl Emacs {
             return KeyResult::Pass;
         };
         let step = search.steps.last().expect("a search has a step").clone();
-        let view = editor::active_view();
+        let view = view::active();
         match (ctrl(&ev), ev.code) {
             (Some(c @ ('s' | 'r')), _) => {
                 let forward = c == 's';
@@ -355,7 +354,7 @@ impl Emacs {
 
     /// Adds `more` to what is searched for, and looks again from the start
     /// of the match.
-    fn add_text(&mut self, view: &View, more: &str) {
+    pub fn add_text(&mut self, view: &View, more: &str) {
         let Some(search) = self.isearch.as_ref() else {
             return;
         };
@@ -465,6 +464,7 @@ impl Emacs {
         let pattern = pattern(text, regexp)?;
         view.buffer()
             .find(&pattern, start, !forward)
+            .map(|found| found.map(|r| (r.start, r.end)))
             .map_err(error_message)
     }
 
@@ -486,9 +486,9 @@ impl Emacs {
         if step.incomplete {
             label = label.replace(": ", " (incomplete input): ");
         }
-        search.line = Line::new(&label);
+        search.line.set_label(&label);
         search.line.set(&step.text, step.text.len() as u32);
-        let view = editor::active_view();
+        let view = view::active();
         match step.found {
             Some((s, e)) if !step.text.is_empty() => {
                 let (anchor, head) = if step.forward { (s, e) } else { (e, s) };
@@ -499,16 +499,17 @@ impl Emacs {
         let buffer = view.buffer();
         let decorations: Vec<Decoration> = match (step.found, step.text.is_empty()) {
             (Some(_), false) => {
-                let (top, bottom) = view.visible_range();
+                let shown = view.visible_range();
+                let (top, bottom) = (shown.start, shown.end);
                 pattern(&step.text, regexp)
                     .ok()
                     .and_then(|p| buffer.find_all(&p, top, bottom).ok())
                     .unwrap_or_default()
                     .into_iter()
-                    .filter(|(s, e)| s < e)
-                    .map(|(start, end)| Decoration {
-                        start,
-                        end,
+                    .filter(|r| r.start < r.end)
+                    .map(|r| Decoration {
+                        start: r.start,
+                        end: r.end,
                         style: "ui.selection".into(),
                     })
                     .collect()
@@ -632,18 +633,9 @@ impl Emacs {
         if start > end {
             return Ok(None);
         }
-        let body = if state.regexp {
-            translate(&state.from)?
-        } else {
-            regex_escape(&state.from)
-        };
-        let pattern = if state.fold {
-            format!("(?i){body}")
-        } else {
-            body
-        };
+        let pattern = query_pattern(state)?;
         match buffer.find(&pattern, start, false) {
-            Ok(Some((s, e))) if e <= end => Ok(Some((s, e))),
+            Ok(Some(r)) if r.end <= end => Ok(Some((r.start, r.end))),
             Ok(_) => Ok(None),
             Err(err) => Err(error_message(err)),
         }
@@ -654,7 +646,12 @@ impl Emacs {
         let state = self.query.as_mut().expect("replacing");
         let (s, e) = state.current.expect("a match");
         let matched = view.buffer().slice(s, e).unwrap_or_default();
-        let mut text = expand(&state.to, &matched)?;
+        let groups = if base_kit::refers_to_groups(&state.to) {
+            base_kit::match_groups(&view.buffer(), &query_pattern(state)?, s)?
+        } else {
+            vec![matched.clone()]
+        };
+        let mut text = expand(&state.to, &groups)?;
         if state.fold {
             text = match_case(&text, &matched);
         }
@@ -706,7 +703,7 @@ impl Emacs {
         let Some(state) = self.query.as_ref() else {
             return;
         };
-        let view = editor::active_view();
+        let view = view::active();
         if let Some((s, e)) = state.current {
             edit_range(&view, s, e);
         }
@@ -732,7 +729,7 @@ impl Emacs {
     }
 
     pub fn query_key(&mut self, ev: KeyEvent) -> KeyResult {
-        let view = editor::active_view();
+        let view = view::active();
         let Some(state) = self.query.as_ref() else {
             return KeyResult::Pass;
         };
@@ -827,6 +824,20 @@ impl Emacs {
     }
 }
 
+/// What `M-%` searches for, in the core's syntax.
+fn query_pattern(state: &Query) -> Result<String, String> {
+    let body = if state.regexp {
+        translate(&state.from)?
+    } else {
+        regex_escape(&state.from)
+    };
+    Ok(if state.fold {
+        format!("(?i){body}")
+    } else {
+        body
+    })
+}
+
 fn isearch_label(forward: bool, regexp: bool, failing: bool, wrapped: bool) -> String {
     let mut label = String::new();
     if failing {
@@ -867,8 +878,9 @@ mod tests {
         assert_eq!(match_case("xyz", "ONE"), "XYZ");
         assert_eq!(match_case("xyz", "one"), "xyz");
         assert_eq!(match_case("xyz", "oNe"), "xyz");
-        assert_eq!(expand(r"<\&>\\", "m").unwrap(), r"<m>\");
-        assert!(expand(r"\1", "m").is_err());
+        let groups = ["ab".to_string(), "b".to_string()];
+        assert_eq!(expand(r"<\&>\\", &groups).unwrap(), r"<ab>\");
+        assert_eq!(expand(r"\1-\2", &groups).unwrap(), "b-");
     }
 
     #[test]

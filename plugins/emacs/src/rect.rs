@@ -3,8 +3,8 @@
 
 use base_kit::doc::Doc;
 use base_kit::edit::{indent_unit, range};
-use nib_plugin::nib::plugin::editor::View;
 use nib_plugin::nib::plugin::types::{Edit, SelRange};
+use nib_plugin::nib::plugin::view::View;
 
 use crate::motion::{self, at_column, column};
 use crate::{Emacs, Kill};

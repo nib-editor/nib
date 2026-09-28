@@ -33,6 +33,14 @@ pub(crate) enum Event {
         version: u64,
         changes: Vec<TextChange>,
     },
+    /// The path of a buffer that was closed.
+    BufferClosed(Option<String>),
+    SyntaxUpdated {
+        buffer: usize,
+        version: u64,
+    },
+    /// The base said what mode it is in.
+    ModeChanged(Mode),
     /// Emitted by a plugin; `name` starts with the plugin's name.
     Custom {
         name: String,
@@ -71,6 +79,9 @@ impl Event {
             Event::BufferOpened(_) => "buffer-opened",
             Event::BufferSaved(_) => "buffer-saved",
             Event::BufferChanged { .. } => "buffer-changed",
+            Event::BufferClosed(_) => "buffer-closed",
+            Event::SyntaxUpdated { .. } => "syntax-updated",
+            Event::ModeChanged(_) => "mode-changed",
             Event::Custom { name, .. } => name,
             Event::Timer(_) => "timer",
             Event::ProcessOutput { .. } => "process-output",
@@ -80,6 +91,16 @@ impl Event {
             Event::PromptAction { .. } => "prompt-action",
         }
     }
+}
+
+/// What the running base says of its state (`input.set-mode`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Mode {
+    pub base: String,
+    /// The base's name for it, such as "insert", or "global".
+    pub name: String,
+    /// Plain chars go into the text.
+    pub typing: bool,
 }
 
 #[derive(Clone, Debug)]

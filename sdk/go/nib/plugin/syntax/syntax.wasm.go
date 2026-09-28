@@ -6,24 +6,24 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.5.3".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.6.0".
 
-//go:wasmimport nib:plugin/syntax@0.5.3 language
+//go:wasmimport nib:plugin/syntax@0.6.0 language
 //go:noescape
 func wasmimport_Language(buf0 uint32, result *cm.Option[string])
 
-//go:wasmimport nib:plugin/syntax@0.5.3 node-at
+//go:wasmimport nib:plugin/syntax@0.6.0 node-at
 //go:noescape
 func wasmimport_NodeAt(buf0 uint32, start0 uint64, end0 uint64, named0 uint32, result *cm.Option[Node])
 
-//go:wasmimport nib:plugin/syntax@0.5.3 parent
+//go:wasmimport nib:plugin/syntax@0.6.0 parent
 //go:noescape
 func wasmimport_Parent(buf0 uint32, of0 uint64, of1 *uint8, of2 uint32, of3 uint32, of4 uint64, of5 uint64, result *cm.Option[Node])
 
-//go:wasmimport nib:plugin/syntax@0.5.3 children
+//go:wasmimport nib:plugin/syntax@0.6.0 children
 //go:noescape
 func wasmimport_Children(buf0 uint32, of0 uint64, of1 *uint8, of2 uint32, of3 uint32, of4 uint64, of5 uint64, result *cm.List[Node])
 
-//go:wasmimport nib:plugin/syntax@0.5.3 captures
+//go:wasmimport nib:plugin/syntax@0.6.0 captures
 //go:noescape
-func wasmimport_Captures(buf0 uint32, query0 *uint8, query1 uint32, capture0 *uint8, capture1 uint32, start0 uint64, end0 uint64, result *cm.List[[2]Offset])
+func wasmimport_Captures(buf0 uint32, query0 *uint8, query1 uint32, capture0 *uint8, capture1 uint32, start0 uint64, end0 uint64, result *cm.List[Range])

@@ -2,9 +2,9 @@
 //! they follow edits; the selection is drawn from them after each key.
 
 use base_kit::doc::Doc;
-use nib_plugin::nib::plugin::editor::{self, View};
 use nib_plugin::nib::plugin::types::{Edit, KeyEvent, SelRange, Selection};
 use nib_plugin::nib::plugin::ui;
+use nib_plugin::nib::plugin::view::{self, View};
 
 use crate::motion;
 use crate::normal::{Span, deletion, lines_span, text_object};
@@ -172,7 +172,7 @@ impl Vim {
     }
 
     pub fn visual_key(&mut self, ev: KeyEvent, kind: VisualKind) -> bool {
-        let view = editor::active_view();
+        let view = view::active();
         if is_escape(&ev) {
             self.keys.clear();
             self.leave_visual(&view);

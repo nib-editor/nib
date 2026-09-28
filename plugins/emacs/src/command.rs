@@ -5,8 +5,8 @@ use base_kit::doc::{self, Doc};
 use base_kit::edit::{deletion, indent_unit, insertion};
 use base_kit::text::Text;
 use base_kit::{call_or_show, tree};
-use nib_plugin::nib::plugin::editor::{ScrollAmount, View};
 use nib_plugin::nib::plugin::types::{Edit, KeyCode, KeyEvent, Modifiers};
+use nib_plugin::nib::plugin::view::{ScrollAmount, View};
 use nib_plugin::nib::plugin::{commands, ui};
 
 use crate::motion::{self, is_word};
@@ -316,17 +316,21 @@ impl Emacs {
             }
             "undo" | "undo-redo" => {
                 for _ in 0..n.max(1) {
-                    let done = if name == "undo" {
+                    let changed = if name == "undo" {
                         view.undo()
                     } else {
                         view.redo()
                     };
-                    if !done {
-                        return Err(if name == "undo" {
-                            "No further undo information".into()
-                        } else {
-                            "No further redo information".into()
-                        });
+                    // The point goes where the text changed, as in Emacs.
+                    match changed {
+                        Some(changed) => self.goto(view, changed.start),
+                        None => {
+                            return Err(if name == "undo" {
+                                "No further undo information".into()
+                            } else {
+                                "No further redo information".into()
+                            });
+                        }
                     }
                 }
                 self.deactivate = true;
@@ -537,10 +541,9 @@ impl Emacs {
             "xref-go-back" => {
                 let (path, at) = self.xref.pop().ok_or("At start of history")?;
                 if let Some(path) = path.filter(|p| Some(p) != view.buffer().path().as_ref()) {
-                    let args = format!(r#"{{"path":{}}}"#, base_kit::json_string(&path));
-                    commands::call("buffer.open", &args)?;
+                    base_kit::open_file(&path)?;
                 }
-                let view = nib_plugin::nib::plugin::editor::active_view();
+                let view = nib_plugin::nib::plugin::view::active();
                 let at = at.min(view.buffer().len());
                 self.goto(&view, at);
                 Ok(())
@@ -621,7 +624,8 @@ impl Emacs {
     /// `C-l`: the point's line to the middle, the top, then the bottom.
     fn recenter(&mut self, view: &View, arg: Arg) {
         let doc = Doc::new(view.buffer());
-        let (top, bottom) = view.visible_range();
+        let shown = view.visible_range();
+        let (top, bottom) = (shown.start, shown.end);
         let first = doc.line_of(top) as i64;
         let height = (doc.line_of(bottom) as i64 - first + 1).max(1);
         let line = doc.line_of(self.point(view)) as i64;
@@ -656,7 +660,8 @@ impl Emacs {
     /// bottom.
     fn window_line(&mut self, view: &View, arg: Arg) {
         let doc = Doc::new(view.buffer());
-        let (top, bottom) = view.visible_range();
+        let shown = view.visible_range();
+        let (top, bottom) = (shown.start, shown.end);
         let first = doc.line_of(top) as i64;
         let last = doc.line_of(bottom) as i64;
         let line = doc.line_of(self.point(view)) as i64;
@@ -876,7 +881,7 @@ impl Emacs {
                 return false;
             }
         };
-        let view = nib_plugin::nib::plugin::editor::active_view();
+        let view = nib_plugin::nib::plugin::view::active();
         self.shift_lines(&view, n);
         self.waiting = Some(Waiting::IndentRigidly);
         self.render();
@@ -1279,8 +1284,8 @@ impl Emacs {
         };
         let edits: Vec<Edit> = found
             .into_iter()
-            .filter(|(s, e)| s < e)
-            .map(|(s, e)| deletion(s, e))
+            .filter(|r| r.start < r.end)
+            .map(|r| deletion(r.start, r.end))
             .collect();
         self.edit_around(view, edits);
     }
@@ -1405,7 +1410,8 @@ impl Emacs {
         };
         let mut before = Vec::new();
         let mut after = Vec::new();
-        for (s, e) in found {
+        for found in found {
+            let (s, e) = (found.start, found.end);
             if s == start || !word_start(s, &mut t) {
                 continue;
             }
@@ -1515,8 +1521,8 @@ fn defun(doc: &Doc, pos: u64, after: bool) -> Option<(u64, u64)> {
     let buffer = &doc.buffer;
     let before = buffer.find("^\\(", pos, true).ok().flatten();
     let start = match before {
-        Some((s, _)) if !after || s < pos => s,
-        _ => buffer.find("^\\(", pos, false).ok().flatten()?.0,
+        Some(r) if !after || r.start < pos => r.start,
+        _ => buffer.find("^\\(", pos, false).ok().flatten()?.start,
     };
     let mut t = Text::new(doc);
     let end = motion::forward_sexp(&mut t, start).ok().flatten()?;

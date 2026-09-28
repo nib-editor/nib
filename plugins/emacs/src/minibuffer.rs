@@ -2,12 +2,12 @@
 //! Emacs's editing keys, completion, and history, and the commands that
 //! ask them. Every key is read here, so a macro replays them the same.
 
-use base_kit::{cmdline, json_string, line_edit, span};
-use nib_plugin::nib::plugin::commands;
-use nib_plugin::nib::plugin::editor::{self, View};
+use base_kit::{cmdline, line_edit, span};
 use nib_plugin::nib::plugin::prompt::Line;
 use nib_plugin::nib::plugin::types::{KeyCode, KeyEvent, Modifiers};
 use nib_plugin::nib::plugin::ui::{self, Panel};
+use nib_plugin::nib::plugin::view::{self, Direction, Toward, View};
+use nib_plugin::nib::plugin::{buffer, commands, editor};
 
 use crate::{Arg, Emacs, Waiting, bind, ctrl, is_quit, meta, plain};
 
@@ -45,8 +45,6 @@ pub enum Ask {
 pub enum Confirm {
     /// Close the buffer at this path though it has changes.
     KillBuffer(Option<String>),
-    /// `C-x C-c`: save the buffer first?
-    SaveBeforeQuit,
     /// `C-x C-c`: quit without saving?
     QuitAnyway,
 }
@@ -98,7 +96,7 @@ pub fn buffer_name(path: Option<&str>) -> String {
 
 /// The path of the open buffer named `name`, or `name` as a path.
 fn buffer_path(name: &str) -> String {
-    editor::buffers()
+    buffer::all()
         .into_iter()
         .filter_map(|b| b.path())
         .find(|p| buffer_name(Some(p)) == name)
@@ -112,10 +110,6 @@ impl Confirm {
                 "Buffer {} modified; kill anyway?",
                 buffer_name(path.as_deref())
             ),
-            Confirm::SaveBeforeQuit => {
-                let path = editor::active_view().buffer().path();
-                format!("Save file {}?", path.as_deref().unwrap_or("*scratch*"))
-            }
             Confirm::QuitAnyway => "Modified buffers exist; exit anyway?".into(),
         }
     }
@@ -312,6 +306,20 @@ impl Emacs {
         }
     }
 
+    /// Pasted text goes in at the cursor, its line breaks as spaces.
+    pub fn paste_into_minibuffer(&mut self, text: &str) {
+        let Some(asking) = self.asking.as_mut() else {
+            return;
+        };
+        let pasted = text.trim_end_matches('\n').replace('\n', " ");
+        let mut line = asking.line.text();
+        let cursor = asking.line.cursor() as usize;
+        line.insert_str(cursor, &pasted);
+        asking.line.set(&line, (cursor + pasted.len()) as u32);
+        asking.history_at = None;
+        asking.completions = None;
+    }
+
     fn walk_history(&mut self, step: i64) {
         let Some(asking) = self.asking.as_mut() else {
             return;
@@ -399,7 +407,7 @@ impl Emacs {
         if !text.is_empty() && !matches!(asking.ask, Ask::YesOrNo(_)) {
             self.remember(key, &text);
         }
-        let view = editor::active_view();
+        let view = view::active();
         let ask = asking.ask;
         if let Ask::Command(arg) = ask {
             return self.run_named(&text, arg);
@@ -505,15 +513,10 @@ impl Emacs {
                 query,
                 region,
             } => self.start_replace(view, from, text, regexp, query, region),
-            Ask::FindFile => {
-                let path = expand_home(&text);
-                let args = format!(r#"{{"path":{}}}"#, json_string(&path));
-                commands::call("buffer.open", &args).map(|_| ())
-            }
+            Ask::FindFile => base_kit::open_file(&expand_home(&text)),
             Ask::WriteFile => {
                 let path = expand_home(&text);
-                let args = format!(r#"{{"path":{}}}"#, json_string(&path));
-                commands::call("buffer.save", &args)?;
+                view.buffer().save(Some(&path))?;
                 ui::show_message(&format!("Wrote {path}"));
                 Ok(())
             }
@@ -531,18 +534,15 @@ impl Emacs {
                 if text.is_empty() {
                     return Ok(());
                 }
-                let args = format!(r#"{{"path":{}}}"#, json_string(&buffer_path(&text)));
-                commands::call("buffer.open", &args).map(|_| ())
+                base_kit::open_file(&buffer_path(&text))
             }
             Ask::KillBuffer => {
-                let current = buffer_name(view.buffer().path().as_deref());
-                if !text.is_empty() && current != text {
-                    let args = format!(r#"{{"path":{}}}"#, json_string(&buffer_path(&text)));
-                    commands::call("buffer.open", &args)?;
-                }
-                let path = editor::active_view().buffer().path();
-                if commands::call("buffer.close", r#"{"force":false}"#).is_err() {
-                    let confirm = Confirm::KillBuffer(path);
+                let buffer = match text.is_empty() {
+                    true => view.buffer(),
+                    false => buffer::open(&buffer_path(&text))?,
+                };
+                if buffer.close(false).is_err() {
+                    let confirm = Confirm::KillBuffer(buffer.path());
                     let question = format!("{} (yes or no) ", confirm.question());
                     self.ask(Ask::YesOrNo(confirm), &question, "");
                 }
@@ -573,29 +573,63 @@ impl Emacs {
     /// What was answered to a question of `y` or `n`, or `yes` or `no`.
     pub fn confirmed(&mut self, confirm: Confirm, yes: bool) {
         let result = match (confirm, yes) {
-            (Confirm::KillBuffer(_), true) => {
-                commands::call("buffer.close", r#"{"force":true}"#).map(|_| ())
-            }
-            (Confirm::SaveBeforeQuit, true) => commands::call("buffer.save", "{}")
-                .and_then(|_| commands::call("editor.quit", r#"{"force":false}"#))
-                .map(|_| ())
-                .or_else(|_| {
-                    self.ask_yes_or_no(Confirm::QuitAnyway);
-                    Ok(())
-                }),
-            (Confirm::SaveBeforeQuit, false) => {
-                self.ask_yes_or_no(Confirm::QuitAnyway);
-                Ok(())
-            }
-            (Confirm::QuitAnyway, true) => {
-                commands::call("editor.quit", r#"{"force":true}"#).map(|_| ())
-            }
+            (Confirm::KillBuffer(path), true) => match path {
+                Some(path) => buffer::open(&path).and_then(|buffer| buffer.close(true)),
+                None => view::active().buffer().close(true),
+            },
+            (Confirm::QuitAnyway, true) => editor::quit(true),
             (_, false) => Ok(()),
         };
         if let Err(err) = result {
             ui::show_message(&err);
         }
         self.render();
+    }
+
+    /// Asks whether to save each of `paths`, then quits if `quit`.
+    pub fn save_some(&mut self, paths: Vec<String>, quit: bool) {
+        match paths.first() {
+            Some(path) => {
+                ui::show_message(&format!("Save file {path}? (y, n, !, q) "));
+                self.waiting = Some(Waiting::SaveSome { paths, quit });
+            }
+            None if quit => {
+                if editor::quit(false).is_err() {
+                    self.ask_yes_or_no(Confirm::QuitAnyway);
+                }
+            }
+            None => ui::show_message("(No files need saving)"),
+        }
+    }
+
+    /// `y` saves the file asked about, `n` leaves it, `!` saves it and the
+    /// rest, and `q` or `RET` saves no more.
+    pub fn save_some_key(&mut self, mut paths: Vec<String>, quit: bool, ev: KeyEvent) {
+        let save = |path: &str| {
+            let saved = buffer::open(path).and_then(|buffer| buffer.save(None));
+            if let Err(err) = saved {
+                ui::show_message(&err);
+            }
+        };
+        match (plain(&ev), ev.code) {
+            (Some('y' | ' '), _) => save(&paths.remove(0)),
+            (Some('n'), _) | (_, KeyCode::Backspace) => {
+                paths.remove(0);
+            }
+            (Some('!'), _) => {
+                for path in paths.drain(..) {
+                    save(&path);
+                }
+            }
+            (Some('q'), _) | (_, KeyCode::Enter) => paths.clear(),
+            _ if is_quit(&ev) => {
+                ui::show_message("Quit");
+                self.failed = true;
+                return;
+            }
+            _ => {}
+        }
+        self.save_some(paths, quit);
     }
 
     fn ask_yes_or_no(&mut self, confirm: Confirm) {
@@ -611,10 +645,19 @@ impl Emacs {
             .as_deref()
             .map(|p| relative(p).unwrap_or_else(|| p.to_string()));
         match name {
-            "save-buffer" | "save-some-buffers" => {
-                commands::call("buffer.save", "{}")?;
-                let path = editor::active_view().buffer().path().unwrap_or_default();
+            "save-buffer" => {
+                let buffer = view.buffer();
+                if !buffer.modified() {
+                    ui::show_message("(No changes need to be saved)");
+                    return Ok(());
+                }
+                buffer.save(None)?;
+                let path = buffer.path().unwrap_or_default();
                 ui::show_message(&format!("Wrote {path}"));
+                Ok(())
+            }
+            "save-some-buffers" => {
+                self.save_some(modified_files(), false);
                 Ok(())
             }
             "write-file" => {
@@ -638,7 +681,7 @@ impl Emacs {
                 Ok(())
             }
             "switch-to-buffer" => {
-                let other = editor::buffers()
+                let other = buffer::all()
                     .into_iter()
                     .filter_map(|b| b.path())
                     .map(|p| buffer_name(Some(&p)))
@@ -650,25 +693,35 @@ impl Emacs {
                 self.ask_with_default(Ask::KillBuffer, "Kill buffer", path);
                 Ok(())
             }
-            "next-buffer" => commands::call("buffer.next", "").map(|_| ()),
-            "previous-buffer" => commands::call("buffer.previous", "").map(|_| ()),
+            "next-buffer" => {
+                view.show_next();
+                Ok(())
+            }
+            "previous-buffer" => {
+                view.show_previous();
+                Ok(())
+            }
             "save-buffers-kill-terminal" => {
-                if commands::call("editor.quit", r#"{"force":false}"#).is_err() {
-                    let confirm = Confirm::SaveBeforeQuit;
-                    ui::show_message(&format!("{} (y or n) ", confirm.question()));
-                    self.waiting = Some(Waiting::YesOrNo(confirm));
-                }
+                self.save_some(modified_files(), true);
                 Ok(())
             }
             "split-window-below" => {
-                commands::call("view.split", r#"{"direction":"horizontal"}"#).map(|_| ())
+                view::split(Direction::Horizontal);
+                Ok(())
             }
             "split-window-right" => {
-                commands::call("view.split", r#"{"direction":"vertical"}"#).map(|_| ())
+                view::split(Direction::Vertical);
+                Ok(())
             }
-            "other-window" => commands::call("view.focus", r#"{"to":"next"}"#).map(|_| ()),
-            "delete-window" => commands::call("view.close", "").map(|_| ()),
-            "delete-other-windows" => commands::call("view.only", "").map(|_| ()),
+            "other-window" => {
+                view::focus(Toward::Next);
+                Ok(())
+            }
+            "delete-window" => view::close(),
+            "delete-other-windows" => {
+                view::only();
+                Ok(())
+            }
             "string-rectangle" => {
                 self.region(view)?;
                 self.ask(Ask::StringRectangle, "String rectangle: ", "");
@@ -677,6 +730,15 @@ impl Emacs {
             _ => Err(format!("{name} is not a command here")),
         }
     }
+}
+
+/// The files open with unsaved changes.
+fn modified_files() -> Vec<String> {
+    buffer::all()
+        .into_iter()
+        .filter(|buffer| buffer.modified())
+        .filter_map(|buffer| buffer.path())
+        .collect()
 }
 
 fn arg_label(arg: Arg) -> String {
@@ -719,7 +781,7 @@ fn candidates(ask: &Ask, text: &str) -> Vec<(String, String)> {
             all
         }
         Ask::FindFile | Ask::WriteFile | Ask::InsertFile => files(text),
-        Ask::SwitchBuffer | Ask::KillBuffer => editor::buffers()
+        Ask::SwitchBuffer | Ask::KillBuffer => buffer::all()
             .into_iter()
             .filter_map(|b| b.path())
             .map(|p| (buffer_name(Some(&p)), String::new()))

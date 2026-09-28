@@ -12,13 +12,14 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 use nib_plugin::exports::nib::plugin::guest::{Guest, KeyResult};
-use nib_plugin::nib::plugin::editor::{self, Buffer};
+use nib_plugin::nib::plugin::buffer::{self, Buffer};
 use nib_plugin::nib::plugin::events::{BufferChange, Event};
 use nib_plugin::nib::plugin::process::{self, Child, Stream};
 use nib_plugin::nib::plugin::prompt::{Action, Choices};
 use nib_plugin::nib::plugin::types::{Edit, KeyEvent, SelRange, Selection, Span, UndoMode};
 use nib_plugin::nib::plugin::ui::{self, Decoration, Note, Popup, PopupAnchor, Side};
 use nib_plugin::nib::plugin::{commands, syntax, timers};
+use nib_plugin::nib::plugin::{editor, input, view};
 use serde_json::{Value, json};
 
 /// Servers used unless `[settings.servers]` says otherwise.
@@ -175,7 +176,7 @@ impl Guest for Plugin {
                 pull_timer: None,
                 hover: None,
                 completion: None,
-                inserting: false,
+                inserting: input::current_mode().typing,
                 timer: None,
             })
         });
@@ -183,6 +184,10 @@ impl Guest for Plugin {
     }
 
     fn handle_key(_ev: KeyEvent) -> KeyResult {
+        KeyResult::Pass
+    }
+
+    fn handle_paste(_text: String) -> KeyResult {
         KeyResult::Pass
     }
 
@@ -238,15 +243,12 @@ impl Guest for Plugin {
                 });
                 lsp.failed.insert(server.language);
             }
-            Event::Custom(custom) if custom.name == "editor.buffer_closed" => {
-                lsp.closed(&custom.data);
-            }
-            Event::Custom(custom) => {
-                if custom.name == "helix.mode_changed" {
-                    lsp.inserting = custom.data == "\"insert\"";
-                    if !lsp.inserting {
-                        lsp.close_popups();
-                    }
+            Event::BufferClosed(Some(path)) => lsp.closed(&path),
+            // Whichever base runs: completions come while typing.
+            Event::ModeChanged(mode) => {
+                lsp.inserting = mode.typing;
+                if !lsp.inserting {
+                    lsp.close_popups();
                 }
             }
             Event::Timer(id) if lsp.pull_timer == Some(id) => {
@@ -266,7 +268,11 @@ impl Guest for Plugin {
             // A key the base turned into an action, or any other key, which
             // closes what is shown and still does what it would have done.
             Event::PromptAction(act) => lsp.acted(act.id, act.action),
-            Event::FilesListed(_) | Event::PromptChanged(_) => {}
+            Event::BufferClosed(None)
+            | Event::SyntaxUpdated(_)
+            | Event::Custom(_)
+            | Event::FilesListed(_)
+            | Event::PromptChanged(_) => {}
         })
     }
 }
@@ -350,12 +356,8 @@ impl Lsp {
     }
 
     /// A buffer closed: servers that have it open close it too, and what
-    /// was known of it goes. `data` is the core's `{"path": ...}`.
-    fn closed(&mut self, data: &str) {
-        let data: Value = serde_json::from_str(data).unwrap_or_default();
-        let Some(path) = data["path"].as_str() else {
-            return;
-        };
+    /// was known of it goes.
+    fn closed(&mut self, path: &str) {
         let uri = self.uri_of(path);
         for server in &mut self.servers {
             server.waiting.retain(|u| *u != uri);
@@ -448,7 +450,7 @@ impl Lsp {
 
     /// Sends a hover or definition request for the primary cursor.
     fn ask_at_cursor(&mut self, method: &str, hover: bool) -> Result<(), String> {
-        let view = editor::active_view();
+        let view = view::active();
         let buffer = view.buffer();
         let (i, uri) = self
             .open_document(&buffer)
@@ -661,7 +663,7 @@ impl Lsp {
             return;
         }
         // The cursor may have left the file meanwhile.
-        if self.uri(&editor::active_view().buffer()).as_deref() != Some(uri) {
+        if self.uri(&view::active().buffer()).as_deref() != Some(uri) {
             return;
         }
         let lines: Vec<Vec<Span>> = lines.iter().map(|line| vec![span(line, "")]).collect();
@@ -708,7 +710,7 @@ impl Lsp {
 
     /// The primary cursor in the shown buffer, where insert mode types.
     fn cursor() -> (Buffer, u64) {
-        let view = editor::active_view();
+        let view = view::active();
         let selection = view.selection();
         (
             view.buffer(),
@@ -856,7 +858,7 @@ impl Lsp {
             end,
             text: item.text.clone(),
         };
-        let view = editor::active_view();
+        let view = view::active();
         if let Err(err) = view.apply(buffer.version(), &[edit], None, UndoMode::Merge) {
             ui::show_message(&format!("lsp: {err:?}"));
         }
@@ -878,15 +880,17 @@ impl Lsp {
             return;
         };
         let utf8 = self.servers[i].utf8;
-        if self.uri(&editor::active_view().buffer()).as_deref() != Some(uri) {
+        if self.uri(&view::active().buffer()).as_deref() != Some(uri) {
             let path = uri_to_path(uri, &self.cwd);
-            let args = json!({"path": path}).to_string();
-            if let Err(err) = commands::call("buffer.open", &args) {
-                ui::show_message(&err);
-                return;
+            match buffer::open(&path) {
+                Ok(buffer) => view::active().show(&buffer),
+                Err(err) => {
+                    ui::show_message(&err);
+                    return;
+                }
             }
         }
-        let view = editor::active_view();
+        let view = view::active();
         let buffer = view.buffer();
         let line = position["line"].as_u64().unwrap_or(0) as u32;
         let character = position["character"].as_u64().unwrap_or(0) as u32;
@@ -914,7 +918,7 @@ impl Lsp {
 
     /// The open buffer with URI `uri`.
     fn buffer(&self, uri: &str) -> Option<Buffer> {
-        editor::buffers()
+        buffer::all()
             .into_iter()
             .find(|buffer| self.uri(buffer).as_deref() == Some(uri))
     }

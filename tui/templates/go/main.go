@@ -9,10 +9,10 @@ import (
 
 	nib "github.com/nib-editor/nib/sdk/go"
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/commands"
-	"github.com/nib-editor/nib/sdk/go/nib/plugin/editor"
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/events"
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/types"
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/ui"
+	"github.com/nib-editor/nib/sdk/go/nib/plugin/view"
 	"go.bytecodealliance.org/cm"
 )
 
@@ -46,9 +46,9 @@ func (plugin) OnEvent(ev events.Event) {
 
 // count counts the words of the buffer in the focused view.
 func count() int {
-	view := editor.ActiveView()
-	defer view.ResourceDrop()
-	buffer := view.Buffer()
+	shown := view.Active()
+	defer shown.ResourceDrop()
+	buffer := shown.Buffer()
 	defer buffer.ResourceDrop()
 	text := buffer.Slice(0, buffer.Len())
 	if text.IsErr() {

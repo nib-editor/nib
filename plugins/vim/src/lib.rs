@@ -26,14 +26,14 @@ use base_kit::doc::{Doc, FindKind};
 use base_kit::keys::{self, Binding, Keymap, Sequence, Step};
 use base_kit::{call_or_show, hints, leader, span};
 use nib_plugin::exports::nib::plugin::guest::{Guest, KeyResult};
-use nib_plugin::nib::plugin::editor::{self, View};
-use nib_plugin::nib::plugin::events::{self, Event};
+use nib_plugin::nib::plugin::events::Event;
 use nib_plugin::nib::plugin::input;
 use nib_plugin::nib::plugin::prompt::{self as prompts, Action as PromptAction};
 use nib_plugin::nib::plugin::types::{
     CursorShape, Edit, KeyCode, KeyEvent, Modifiers, SelRange, Selection, UndoMode,
 };
 use nib_plugin::nib::plugin::ui::{self, Popup, PopupAnchor, Side};
+use nib_plugin::nib::plugin::view::{self, View};
 
 use command::Prompting;
 use parse::{Cmd, VisualKind};
@@ -172,7 +172,7 @@ impl Guest for Plugin {
         with_vim(|vim| {
             vim.keymaps = keymaps;
             vim.leader = leader;
-            let view = editor::active_view();
+            let view = view::active();
             vim.set_mode(Mode::Normal);
             let pos = vim.cursor(&view);
             vim.place(&view, pos);
@@ -182,6 +182,10 @@ impl Guest for Plugin {
 
     fn handle_key(ev: KeyEvent) -> KeyResult {
         with_vim(|vim| vim.handle_key(ev))
+    }
+
+    fn handle_paste(text: String) -> KeyResult {
+        with_vim(|vim| vim.paste(&text))
     }
 
     fn run_command(name: String, _args: String) -> Result<String, String> {
@@ -489,10 +493,64 @@ impl Vim {
                 ("visual", " V-BLOCK ", "ui.mode.select", CursorShape::Block)
             }
         };
-        editor::active_view().set_cursor_shape(shape);
+        view::active().set_cursor_shape(shape);
         ui::set_status("mode", Side::Left, 0, &[span(label, style)]);
-        // For other plugins, such as a status line that shows the mode.
-        events::emit("mode_changed", &format!("\"{name}\""));
+        // For other plugins, such as a status line that shows the mode, or
+        // completions that come while typing.
+        input::set_mode(name, matches!(mode, Mode::Insert | Mode::Replace));
+    }
+
+    /// Pasted text, as Neovim puts it: typed in insert mode, after the
+    /// cursor in normal mode, over the selection in visual mode, and into
+    /// a prompt by the core.
+    fn paste(&mut self, text: &str) -> KeyResult {
+        if prompts::active().is_some() {
+            return KeyResult::Pass;
+        }
+        let view = view::active();
+        match self.mode {
+            Mode::Insert | Mode::Replace => self.type_text(&view, text),
+            Mode::Normal => {
+                self.step_open = false;
+                let doc = Doc::new(view.buffer());
+                let pos = self.cursor(&view);
+                let at = if pos >= doc.line_end(pos) {
+                    pos
+                } else {
+                    doc.next_grapheme(pos)
+                };
+                let end = at + text.len() as u64;
+                self.edit(
+                    &view,
+                    vec![base_kit::edit::insertion(at, text.to_string())],
+                    Some(vec![at]),
+                );
+                let doc = Doc::new(view.buffer());
+                let pos = doc.prev_grapheme(end).max(at);
+                self.place(&view, pos);
+            }
+            Mode::Visual(_) => {
+                self.step_open = false;
+                let edits: Vec<Edit> = view
+                    .selection()
+                    .ranges
+                    .iter()
+                    .map(|r| Edit {
+                        start: r.anchor.min(r.head),
+                        end: r.anchor.max(r.head),
+                        text: text.to_string(),
+                    })
+                    .collect();
+                let first = edits.iter().map(|e| e.start).min().unwrap_or(0);
+                self.set_mode(Mode::Normal);
+                self.edit(&view, edits, Some(vec![first]));
+                let doc = Doc::new(view.buffer());
+                let end = doc.prev_grapheme(first + text.len() as u64).max(first);
+                self.place(&view, end);
+            }
+        }
+        self.show_status();
+        KeyResult::Handled
     }
 
     /// The cursor: the primary point, or in visual mode, its moving end.

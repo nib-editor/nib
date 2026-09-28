@@ -1,7 +1,7 @@
 //! LSP positions: a line and a character, which counts bytes with UTF-8
 //! and UTF-16 code units otherwise.
 
-use nib_plugin::nib::plugin::editor::Buffer;
+use nib_plugin::nib::plugin::buffer::Buffer;
 
 /// The line and character of `offset`.
 pub fn to_lsp(buffer: &Buffer, offset: u64, utf8: bool) -> (u32, u32) {

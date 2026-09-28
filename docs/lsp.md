@@ -8,7 +8,7 @@ LSP（Language Server Protocol）のクライアントを、標準プラグイ�
 
 M3.4 で作るもの:
 
-- サーバーの起動と初期化、ファイルの同期（`didOpen` / `didChange` / `didSave` / `didClose`。`didClose` は、コアの `editor.buffer_closed` を受けて送り、そのファイルの診断も忘れる）
+- サーバーの起動と初期化、ファイルの同期（`didOpen` / `didChange` / `didSave` / `didClose`。`didClose` は、コアの `buffer-closed` を受けて送り、そのファイルの診断も忘れる）
 - 診断: 範囲に下線を引き、行末にメッセージを出し、ステータスラインに件数を出す
 - ホバー: helix の `Space k` で、カーソル位置の説明をポップアップに出す
 - 定義へ移動: helix の `gd`
@@ -68,7 +68,7 @@ command = ["pyright-langserver", "--stdio"]
 - 候補の一覧はポップアップで、カーソルの前の単語の始まりの下に出す。
 - 開き方:
   - 挿入モードの `Ctrl-x`（helix プラグインが `lsp.complete` を呼ぶ）
-  - 自動: 挿入モードで識別子の文字を 2 文字以上打つか、`.` / `::` を打ったあと、打鍵が 150 ms 止まったら要求する。打つたびに要求しないよう、タイマーで待つ。挿入モードかどうかは、`helix.mode_changed` イベントで知る。
+  - 自動: 挿入モードで識別子の文字を 2 文字以上打つか、`.` / `::` を打ったあと、打鍵が 150 ms 止まったら要求する。打つたびに要求しないよう、タイマーで待つ。文字を打つ状態かどうかは、ベースが知らせる `mode-changed` イベントの `typing` で知る（どのベースでも同じ。[plugin-api.md](plugin-api.md) の「入力」）。モードのないベース（Emacs、nano）は、いつも打つ状態。
 - キーの受け持ち: 一覧は `prompt.choices`（[plugin-api.md](plugin-api.md) の「文字を打つ欄のない一覧」）で開き、`next`、`previous`、`accept` を受け取る。どのキーがどれかは、使っているベースが決める。
   - helix では `Ctrl-n` / `↓` と `Ctrl-p` / `↑` で候補を選び、`Tab` / `Enter` で確定する。
   - ほかのキー（`Esc` を含む）はふつうに効き、そのキーの編集より先に `cancel` が届いて一覧を閉じる（`Esc` なら挿入モードも抜ける）。文字を打てば、少し待ってからその時点の単語で出し直す。

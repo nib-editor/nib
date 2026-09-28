@@ -1,8 +1,11 @@
-package nib:plugin@0.5.3;
+package nib:plugin@0.6.0;
 
 interface types {
     /// A UTF-8 byte offset into a buffer.
     type offset = u64;
+
+    /// `start..end` of a buffer.
+    record range { start: offset, end: offset }
 
     /// `head` is where the cursor is, so it may be before `anchor`.
     record sel-range { anchor: offset, head: offset }
@@ -31,6 +34,7 @@ interface types {
         tab,
         backspace,
         delete,
+        insert,
         up,
         down,
         left,
@@ -48,10 +52,6 @@ interface types {
     record span { text: string, style: string }
 
     type styled-line = list<span>;
-}
-
-interface editor {
-    use types.{offset, selection, edit, undo-mode, cursor-shape};
 
     variant error {
         /// The change was built against an older version of the buffer.
@@ -63,7 +63,12 @@ interface editor {
         /// A selection needs at least one range and a primary index in bounds.
         invalid-selection,
         invalid-pattern(string),
+        other(string),
     }
+}
+
+interface buffer {
+    use types.{offset, range, error};
 
     resource buffer {
         /// Increases on every change, including undo and redo.
@@ -77,11 +82,17 @@ interface editor {
         next-grapheme: func(pos: offset) -> result<offset, error>;
         prev-grapheme: func(pos: offset) -> result<offset, error>;
         path: func() -> option<string>;
+        /// Changed since it was last saved or opened. Undoing back to that
+        /// state makes it unchanged again.
+        modified: func() -> bool;
         /// The first match starting at or after `start`, or with `backward`,
         /// the last match ending at or before `start`. `^` and `$` match at
         /// every line.
-        find: func(pattern: string, start: offset, backward: bool) -> result<option<tuple<offset, offset>>, error>;
-        find-all: func(pattern: string, start: offset, end: offset) -> result<list<tuple<offset, offset>>, error>;
+        find: func(pattern: string, start: offset, backward: bool) -> result<option<range>, error>;
+        /// As `find`, with the pattern's groups: the whole match first, then
+        /// each group, `none` for a group that took no part.
+        find-groups: func(pattern: string, start: offset, backward: bool) -> result<option<list<option<range>>>, error>;
+        find-all: func(pattern: string, start: offset, end: offset) -> result<list<range>, error>;
         /// Replaces the positions this plugin keeps in `namespace` of this
         /// buffer, such as vim's marks or Emacs's mark ring; an empty list
         /// removes them. The core moves them with every edit, whoever makes
@@ -90,7 +101,24 @@ interface editor {
         set-marks: func(namespace: string, marks: list<offset>);
         /// The positions this plugin keeps in `namespace`, in the order set.
         marks: func(namespace: string) -> list<offset>;
+        /// Saves it, or with `path`, saves it there and makes that its path.
+        save: func(path: option<string>) -> result<_, string>;
+        /// Closes it; views that showed it show the buffer before. Without
+        /// `force`, fails when it has unsaved changes. Its handles can no
+        /// longer be used.
+        close: func(force: bool) -> result<_, string>;
     }
+
+    /// Opens a file, or finds the buffer that has it open, without showing
+    /// it.
+    open: func(path: string) -> result<buffer, string>;
+    /// Every open buffer, e.g. for a plugin enabled after files were opened.
+    all: func() -> list<buffer>;
+}
+
+interface view {
+    use types.{offset, range, selection, edit, undo-mode, cursor-shape, error};
+    use buffer.{buffer};
 
     variant scroll-amount {
         lines(s32),
@@ -98,16 +126,28 @@ interface editor {
         page(s32),
     }
 
+    enum direction { vertical, horizontal }
+
+    enum toward { next, left, right, up, down }
+
+    /// The focused view.
     resource view {
         buffer: func() -> buffer;
+        /// Shows `buf` in it.
+        show: func(buf: borrow<buffer>);
+        /// Shows the next or the previous open buffer.
+        show-next: func();
+        show-previous: func();
         selection: func() -> selection;
         set-selection: func(sel: selection) -> result<_, error>;
         /// Applies `edits` atomically. Without `after`, the selection is
         /// mapped through the change.
         apply: func(base-version: u64, edits: list<edit>, after: option<selection>, undo: undo-mode) -> result<_, error>;
-        /// Returns false when there is nothing to undo.
-        undo: func() -> bool;
-        redo: func() -> bool;
+        /// Undoes a step and returns where the text changed: the first
+        /// change, in the text after it. `none` when there is nothing to
+        /// undo.
+        undo: func() -> option<range>;
+        redo: func() -> option<range>;
         set-cursor-shape: func(shape: cursor-shape);
         /// Moves `lines` display lines down, or up if negative, from `pos`.
         /// Aims for display `column`, or the column of `pos` when none.
@@ -121,15 +161,33 @@ interface editor {
         scroll: func(amount: scroll-amount) -> s32;
         /// The part of the buffer on screen: from the start of the first line
         /// shown to the end of the last one.
-        visible-range: func() -> tuple<offset, offset>;
+        visible-range: func() -> range;
     }
 
-    active-view: func() -> view;
-    /// Every open buffer, e.g. for a plugin enabled after files were opened.
-    buffers: func() -> list<buffer>;
+    active: func() -> view;
+    /// Splits the focused view, side by side or one above the other; the
+    /// new view shows the same buffer and takes the focus.
+    split: func(direction: direction);
+    /// Closes the focused view; fails for the last one.
+    close: func() -> result<_, string>;
+    /// Closes every view but the focused one.
+    only: func();
+    focus: func(toward: toward);
+}
+
+/// The editor as a whole.
+interface editor {
     /// The editor's working directory, as an absolute path. Buffer paths
     /// are as they were opened, so they may be relative to it.
     working-directory: func() -> string;
+    /// Quits; without `force`, fails when buffers have unsaved changes.
+    quit: func(force: bool) -> result<_, string>;
+    /// Opens config.toml, or with `plugin`, `plugins/<plugin>.toml`.
+    open-config: func(plugin: option<string>) -> result<_, string>;
+    /// Reads the settings again.
+    reload-config: func();
+    /// Opens the core menu.
+    open-menu: func();
 }
 
 interface input {
@@ -147,6 +205,16 @@ interface input {
     /// For the base: the keys enabled plugins suggest, in the order they
     /// were loaded.
     leader-keys: func() -> list<leader-key>;
+
+    /// The base's state: the base, its name for the mode ("normal",
+    /// "insert"; "global" for bases without modes), and whether plain chars
+    /// go into the text.
+    record mode { base: string, name: string, typing: bool }
+
+    /// For the base: says what mode it is in; others get `mode-changed`.
+    /// Calls from plugins that are not the running base do nothing.
+    set-mode: func(name: string, typing: bool);
+    current-mode: func() -> mode;
 }
 
 interface commands {
@@ -156,16 +224,10 @@ interface commands {
     register: func(name: string, description: string);
 
     /// Runs a command by its full name and waits for its result. Arguments
-    /// and the result are JSON. Calling a plugin that is already in a call,
-    /// such as the caller itself, is an error.
-    ///
-    /// Core commands:
-    /// - `buffer.save`: saves the current buffer; `{"path": string}` saves
-    ///   it there and makes that its path.
-    /// - `buffer.open` `{"path": string}`: opens a file in the view.
-    /// - `buffer.next`, `buffer.previous`: shows another buffer.
-    /// - `editor.quit` `{"force": bool}`: quits; without `force`, fails when
-    ///   buffers have unsaved changes.
+    /// and the result are JSON; empty arguments are `{}`. Calling a plugin
+    /// that is already in a call, such as the caller itself, is an error.
+    /// The core's commands, such as `buffer.save`, call the functions of
+    /// this API by name, for keys and command lines.
     call: func(name: string, args: string) -> result<string, string>;
 
     /// Every command, core and registered, with its description.
@@ -217,7 +279,8 @@ interface files {
 /// plugin.toml, and its own timers and programs.
 interface events {
     use types.{offset};
-    use editor.{buffer};
+    use buffer.{buffer};
+    use input.{mode};
     use process.{%stream};
     use prompt.{action};
 
@@ -241,6 +304,10 @@ interface events {
         version: u64,
         changes: list<text-change>,
     }
+
+    /// The buffer's syntax tree is up to date with `version` after the
+    /// parse that follows an edit.
+    record syntax-update { buffer: buffer, version: u64 }
 
     /// An event a plugin emitted; `name` has the plugin's name in front.
     record custom-event { name: string, data: string }
@@ -267,6 +334,11 @@ interface events {
         buffer-opened(buffer),
         buffer-saved(buffer),
         buffer-changed(buffer-change),
+        /// The path of a buffer that was closed; its handles no longer work.
+        buffer-closed(option<string>),
+        syntax-updated(syntax-update),
+        /// The base said what mode it is in (`input.set-mode`).
+        mode-changed(mode),
         custom(custom-event),
         /// The id `timers.set` returned.
         timer(u64),
@@ -293,7 +365,7 @@ interface timers {
 
 interface ui {
     use types.{offset, styled-line};
-    use editor.{buffer};
+    use buffer.{buffer};
 
     enum side { left, right }
 
@@ -365,6 +437,9 @@ interface prompt {
         /// The next candidate, as Down does.
         next,
         previous,
+        /// A screen of candidates further, as PageDown does.
+        page-next,
+        page-previous,
         /// Complete what is typed, as Tab does.
         complete,
         /// Back to the completion before, as Shift-Tab does.
@@ -384,6 +459,7 @@ interface prompt {
         /// Replaces the text, as when completing; no event follows. The
         /// cursor is moved back to a char boundary and into the text.
         set: func(text: string, cursor: u32);
+        set-label: func(label: string);
         /// Shown at the right end, such as "3/10".
         set-hint: func(hint: string);
     }
@@ -419,17 +495,22 @@ interface prompt {
 }
 
 interface settings {
-    use editor.{buffer};
+    use buffer.{buffer};
 
-    /// An editing setting as JSON, for the shown buffer: "tab-width",
-    /// "indent" (a number of spaces or "tab"), or "scroll-margin".
-    get: func(key: string) -> option<string>;
-    /// An editing setting for `buf`.
-    get-for: func(buf: borrow<buffer>, key: string) -> option<string>;
-    /// Sets "tab-width" or "indent" for `buf` alone, over config.toml's
-    /// value; `none` goes back to it. The last plugin to set a key wins, and
-    /// what a plugin set goes away when it stops.
-    set-for: func(buf: borrow<buffer>, key: string, value: option<string>) -> result<_, string>;
+    /// How a level of indentation is made.
+    variant indentation { spaces(u8), tab }
+
+    /// The editing settings of `buf`: config.toml's, or what a plugin set
+    /// for it alone.
+    tab-width: func(buf: borrow<buffer>) -> u8;
+    indent: func(buf: borrow<buffer>) -> indentation;
+    /// Lines kept between the cursor and the edge of the view.
+    scroll-margin: func() -> u32;
+    /// Sets the tab width for `buf` alone (1 to 16), over config.toml's;
+    /// `none` goes back to it. The last plugin to set a value wins, and what
+    /// a plugin set goes away when it stops.
+    set-tab-width: func(buf: borrow<buffer>, width: option<u8>) -> result<_, string>;
+    set-indent: func(buf: borrow<buffer>, indent: option<indentation>) -> result<_, string>;
 }
 
 /// The syntax trees the core keeps for buffers with a language. Every
@@ -437,8 +518,8 @@ interface settings {
 /// made earlier in the same call. Buffers without a tree give `none` or an
 /// empty list.
 interface syntax {
-    use types.{offset};
-    use editor.{buffer};
+    use types.{offset, range};
+    use buffer.{buffer};
 
     /// A node of a buffer's syntax tree, as it was when returned. Nodes are
     /// values: `parent` and `children` find them again by `id` and range,
@@ -470,7 +551,7 @@ interface syntax {
     /// `(line_comment)+ @comment.around`, they make one range from the first
     /// to the last. Each range appears once. Empty when the language has no
     /// such query.
-    captures: func(buf: borrow<buffer>, query: string, capture: string, start: offset, end: offset) -> list<tuple<offset, offset>>;
+    captures: func(buf: borrow<buffer>, query: string, capture: string, start: offset, end: offset) -> list<range>;
 }
 
 interface guest {
@@ -490,6 +571,11 @@ interface guest {
     /// (Ctrl-g by default) never arrives.
     handle-key: func(ev: key-event) -> key-result;
 
+    /// Text pasted into the terminal reached one of this plugin's input
+    /// layers, as one piece. When every layer passes, the core puts it into
+    /// the open prompt, or before each selection of the shown buffer.
+    handle-paste: func(text: string) -> key-result;
+
     /// One of this plugin's registered commands was called, by the name it
     /// was registered with.
     run-command: func(name: string, args: string) -> result<string, string>;
@@ -498,6 +584,8 @@ interface guest {
 }
 
 world plugin {
+    import buffer;
+    import view;
     import editor;
     import input;
     import commands;

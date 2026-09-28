@@ -102,3 +102,12 @@ expect.screen = ["files> "]
 [[test.step]]
 keys = "<esc><C-t>"
 expect.screen = ["commands> "]
+
+[[test]]
+name = "a paste goes in at the cursor, even with the mark set"
+text = "#[|]#abc\n"
+keys = "<A-a><C-f>"
+paste = "x\ny"
+
+[test.expect]
+text = "ax\nybc\n"

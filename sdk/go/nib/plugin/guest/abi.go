@@ -4,6 +4,7 @@ package guest
 
 import (
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/events"
+	"github.com/nib-editor/nib/sdk/go/nib/plugin/input"
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/process"
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/prompt"
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/types"
@@ -42,7 +43,9 @@ func lift_KeyCode(f0 uint32, f1 uint32) (v types.KeyCode) {
 	case 13:
 		return cm.New[types.KeyCode](13, struct{}{})
 	case 14:
-		return cm.New[types.KeyCode](14, (uint8)((uint32)(f1)))
+		return cm.New[types.KeyCode](14, struct{}{})
+	case 15:
+		return cm.New[types.KeyCode](15, (uint8)((uint32)(f1)))
 	}
 	panic("lift variant: unknown case: " + strconv.Itoa(int(f0)))
 }
@@ -57,6 +60,26 @@ func lift_BufferChange(f0 uint32, f1 uint64, f2 *events.TextChange, f3 uint32) (
 	v.Buffer = cm.Reinterpret[events.Buffer](f0)
 	v.Version = (uint64)(f1)
 	v.Changes = cm.LiftList[cm.List[events.TextChange]](f2, f3)
+	return
+}
+
+func lift_OptionString(f0 uint32, f1 *uint8, f2 uint32) (v cm.Option[string]) {
+	if f0 == 0 {
+		return
+	}
+	return (cm.Option[string])(cm.Some[string](cm.LiftString[string]((*uint8)(f1), (uint32)(f2))))
+}
+
+func lift_SyntaxUpdate(f0 uint32, f1 uint64) (v events.SyntaxUpdate) {
+	v.Buffer = cm.Reinterpret[events.Buffer](f0)
+	v.Version = (uint64)(f1)
+	return
+}
+
+func lift_Mode(f0 *uint8, f1 uint32, f2 *uint8, f3 uint32, f4 uint32) (v input.Mode) {
+	v.Base = cm.LiftString[string](f0, f1)
+	v.Name = cm.LiftString[string](f2, f3)
+	v.Typing = (bool)(cm.U32ToBool(f4))
 	return
 }
 
@@ -106,7 +129,7 @@ func lift_PromptAct(f0 uint64, f1 uint32) (v events.PromptAct) {
 	return
 }
 
-func lift_Event(f0 uint32, f1 uint64, f2 uint64, f3 uint32, f4 uint32) (v events.Event) {
+func lift_Event(f0 uint32, f1 uint64, f2 uint64, f3 uint32, f4 uint32, f5 uint32) (v events.Event) {
 	switch f0 {
 	case 0:
 		return cm.New[events.Event](0, cm.Reinterpret[events.Buffer]((uint32)(f1)))
@@ -115,19 +138,25 @@ func lift_Event(f0 uint32, f1 uint64, f2 uint64, f3 uint32, f4 uint32) (v events
 	case 2:
 		return cm.New[events.Event](2, lift_BufferChange((uint32)(f1), (uint64)(f2), cm.U32ToPointer[events.TextChange](f3), (uint32)(f4)))
 	case 3:
-		return cm.New[events.Event](3, lift_CustomEvent(cm.U64ToPointer[uint8](f1), (uint32)(f2), cm.U32ToPointer[uint8](f3), (uint32)(f4)))
+		return cm.New[events.Event](3, lift_OptionString((uint32)(f1), cm.U64ToPointer[uint8](f2), (uint32)(f3)))
 	case 4:
-		return cm.New[events.Event](4, (uint64)((uint64)(f1)))
+		return cm.New[events.Event](4, lift_SyntaxUpdate((uint32)(f1), (uint64)(f2)))
 	case 5:
-		return cm.New[events.Event](5, lift_ProcessOutput((uint64)(f1), (uint32)(f2), cm.U32ToPointer[uint8](f3), (uint32)(f4)))
+		return cm.New[events.Event](5, lift_Mode(cm.U64ToPointer[uint8](f1), (uint32)(f2), cm.U32ToPointer[uint8](f3), (uint32)(f4), (uint32)(f5)))
 	case 6:
-		return cm.New[events.Event](6, lift_ProcessExit((uint64)(f1), (uint32)(f2), (uint32)(f3)))
+		return cm.New[events.Event](6, lift_CustomEvent(cm.U64ToPointer[uint8](f1), (uint32)(f2), cm.U32ToPointer[uint8](f3), (uint32)(f4)))
 	case 7:
-		return cm.New[events.Event](7, lift_FilesListed((uint64)(f1), cm.U64ToPointer[string](f2), (uint32)(f3), (uint32)(f4)))
+		return cm.New[events.Event](7, (uint64)((uint64)(f1)))
 	case 8:
-		return cm.New[events.Event](8, lift_PromptChange((uint64)(f1), cm.U64ToPointer[uint8](f2), (uint32)(f3), (uint32)(f4)))
+		return cm.New[events.Event](8, lift_ProcessOutput((uint64)(f1), (uint32)(f2), cm.U32ToPointer[uint8](f3), (uint32)(f4)))
 	case 9:
-		return cm.New[events.Event](9, lift_PromptAct((uint64)(f1), (uint32)(f2)))
+		return cm.New[events.Event](9, lift_ProcessExit((uint64)(f1), (uint32)(f2), (uint32)(f3)))
+	case 10:
+		return cm.New[events.Event](10, lift_FilesListed((uint64)(f1), cm.U64ToPointer[string](f2), (uint32)(f3), (uint32)(f4)))
+	case 11:
+		return cm.New[events.Event](11, lift_PromptChange((uint64)(f1), cm.U64ToPointer[uint8](f2), (uint32)(f3), (uint32)(f4)))
+	case 12:
+		return cm.New[events.Event](12, lift_PromptAct((uint64)(f1), (uint32)(f2)))
 	}
 	panic("lift variant: unknown case: " + strconv.Itoa(int(f0)))
 }
