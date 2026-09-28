@@ -24,6 +24,13 @@ pub fn span(text: &str, style: &str) -> Span {
     }
 }
 
+/// The name within `plugin` of command `name`, when it is one of
+/// `plugin`'s own. A plugin runs those itself: the core cannot call back
+/// into a plugin while it runs, so `commands.call` would find it busy.
+pub fn own_command<'a>(name: &'a str, plugin: &str) -> Option<&'a str> {
+    name.strip_prefix(plugin)?.strip_prefix('.')
+}
+
 /// Calls a command without arguments, showing its error if it fails.
 pub fn call_or_show(command: &str) {
     if let Err(err) = commands::call(command, "") {

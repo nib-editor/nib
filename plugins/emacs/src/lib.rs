@@ -536,9 +536,9 @@ impl Emacs {
                     ui::show_message(&format!("{} is undefined", keys_label(&typed)));
                 }
             }
-            // Its own, as its help's keys run: a call would find Emacs
-            // busy.
-            Step::Run(Binding::Command(name), _) if name.starts_with("emacs.") => {
+            Step::Run(Binding::Command(name), _)
+                if base_kit::own_command(&name, "emacs").is_some_and(bind::is_command) =>
+            {
                 self.execute(&name["emacs.".len()..], ev)
             }
             Step::Run(Binding::Command(name), _) if name.contains('.') => {

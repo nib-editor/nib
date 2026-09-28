@@ -532,7 +532,14 @@ impl Vim {
                 );
                 Ok(())
             }
-            _ => cmdline::run(line.trim()),
+            _ => {
+                let line = line.trim();
+                let name = line.split_once(' ').map_or(line, |(name, _)| name);
+                match base_kit::own_command(name, "vim") {
+                    Some(own) => self.run_own(own),
+                    None => cmdline::run(line),
+                }
+            }
         }
     }
 

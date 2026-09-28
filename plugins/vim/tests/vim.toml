@@ -152,3 +152,8 @@ expect.message = "*registers* is read-only"
 [[test.step]]
 keys = "q"
 expect.text = "abc def\n"
+
+# Vim's own command by its dotted name, which vim runs itself.
+[[test.step]]
+keys = ":reg<ret>:vim.close-listing<ret>"
+expect.text = "abc def\n"

@@ -431,6 +431,10 @@ impl Emacs {
     /// with arguments after it.
     fn run_named(&mut self, text: &str, arg: Arg) {
         let (name, rest) = text.split_once(' ').unwrap_or((text, ""));
+        // Its own by the dotted name too.
+        let name = base_kit::own_command(name, "emacs")
+            .filter(|own| bind::is_command(own))
+            .unwrap_or(name);
         let key = KeyEvent {
             code: KeyCode::Enter,
             modifiers: Modifiers::empty(),

@@ -96,6 +96,11 @@ expect.message = "*Help* is read-only"
 keys = "q"
 expect.text = "abc\n"
 
+# Emacs's own command by its dotted name, which Emacs runs itself.
+[[test.step]]
+keys = "<C-h>kq<A-x>emacs.quit-window<ret>"
+expect.text = "abc\n"
+
 [[test]]
 name = "M-x completes names with TAB and lists them"
 text = "abc\n"

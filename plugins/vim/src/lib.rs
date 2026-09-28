@@ -441,11 +441,13 @@ impl Vim {
                 Some(true)
             }
             Step::Run(Binding::Command(name), _) => {
-                // Its own, as its listings' keys run: a call would find
-                // vim busy.
-                match name.as_str() {
-                    "vim.close-listing" => base_kit::close_listing(),
-                    _ => call_or_show(&name),
+                match base_kit::own_command(&name, "vim") {
+                    Some(own) => {
+                        if let Err(err) = self.run_own(own) {
+                            ui::show_message(&err);
+                        }
+                    }
+                    None => call_or_show(&name),
                 }
                 Some(true)
             }
@@ -458,6 +460,18 @@ impl Vim {
                 Some(true)
             }
             Step::Run(Binding::Prefix(_), _) => Some(true),
+        }
+    }
+
+    /// Vim's own commands by their dotted names, as its listings' keys and
+    /// the command line run them.
+    fn run_own(&mut self, name: &str) -> Result<(), String> {
+        match name {
+            "close-listing" => {
+                base_kit::close_listing();
+                Ok(())
+            }
+            _ => Err(format!("no command vim.{name}")),
         }
     }
 
