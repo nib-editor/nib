@@ -2,8 +2,6 @@
 //! Emacs's editing keys, completion, and history, and the commands that
 //! ask them. Every key is read here, so a macro replays them the same.
 
-use std::path::Path;
-
 use base_kit::{cmdline, json_string, line_edit, span};
 use nib_plugin::nib::plugin::commands;
 use nib_plugin::nib::plugin::editor::{self, View};
@@ -53,18 +51,40 @@ pub enum Confirm {
     QuitAnyway,
 }
 
-/// `path` from the working directory, if it is in it.
-fn relative(path: &str) -> Option<String> {
-    if !Path::new(path).is_absolute() {
+// Paths are the host's, as the core gives them: `\` may separate their
+// parts and `C:` start them on Windows, which the plugin's own `Path`
+// does not know.
+
+fn is_separator(c: char) -> bool {
+    c == '/' || c == '\\'
+}
+
+fn is_absolute(path: &str) -> bool {
+    path.starts_with(is_separator) || path.as_bytes().get(1) == Some(&b':')
+}
+
+/// `path` from `dir`, if it is in it.
+fn relative_to(path: &str, dir: &str) -> Option<String> {
+    if !is_absolute(path) {
         return Some(path.to_string());
     }
     // macOS reaches /var and /tmp through /private too.
-    let plain = |p: &str| p.strip_prefix("/private").unwrap_or(p).to_string();
-    let dir = plain(&editor::working_directory());
-    let rest = plain(path);
-    rest.strip_prefix(dir.trim_end_matches('/'))
-        .and_then(|rest| rest.strip_prefix('/'))
-        .map(str::to_string)
+    let plain = |p: &'static str, s: &str| s.strip_prefix(p).map_or(s.to_string(), str::to_string);
+    let dir = plain("/private", dir);
+    let path = plain("/private", path);
+    let rest = path.strip_prefix(dir.trim_end_matches(is_separator))?;
+    let rest = rest.strip_prefix(is_separator)?;
+    Some(rest.to_string())
+}
+
+/// `path` from the working directory, if it is in it.
+fn relative(path: &str) -> Option<String> {
+    relative_to(path, &editor::working_directory())
+}
+
+/// The last part of `path`.
+fn file_name(path: &str) -> &str {
+    path.rsplit(is_separator).next().unwrap_or(path)
 }
 
 /// A buffer's name, as the minibuffer shows it: its path from the working
@@ -73,11 +93,7 @@ pub fn buffer_name(path: Option<&str>) -> String {
     let Some(path) = path else {
         return "*scratch*".into();
     };
-    relative(path).unwrap_or_else(|| {
-        Path::new(path)
-            .file_name()
-            .map_or(path.to_string(), |name| name.to_string_lossy().to_string())
-    })
+    relative(path).unwrap_or_else(|| file_name(path).to_string())
 }
 
 /// The path of the open buffer named `name`, or `name` as a path.
@@ -676,9 +692,9 @@ fn arg_label(arg: Arg) -> String {
 /// The directory of `path` with a `/` after it, as `C-x C-f` starts with,
 /// or nothing for the working directory.
 fn directory_of(path: Option<&str>) -> String {
-    match path.and_then(|p| Path::new(p).parent()) {
-        Some(dir) if !dir.as_os_str().is_empty() => format!("{}/", dir.display()),
-        _ => String::new(),
+    match path.and_then(|p| p.rfind(is_separator)) {
+        Some(i) => path.expect("found in it")[..=i].to_string(),
+        None => String::new(),
     }
 }
 
@@ -717,7 +733,7 @@ fn candidates(ask: &Ask, text: &str) -> Vec<(String, String)> {
 /// The files and directories that start with `text`'s last part, in its
 /// directory.
 fn files(text: &str) -> Vec<(String, String)> {
-    let (dir, _) = match text.rfind('/') {
+    let (dir, _) = match text.rfind(is_separator) {
         Some(i) => (&text[..=i], &text[i + 1..]),
         None => ("", text),
     };
@@ -791,5 +807,24 @@ mod tests {
         assert_eq!(common_prefix(&["ab", "cd"]), "");
         assert_eq!(directory_of(Some("src/main.rs")), "src/");
         assert_eq!(directory_of(Some("main.rs")), "");
+        assert_eq!(directory_of(Some(r"src\main.rs")), r"src\");
+    }
+
+    #[test]
+    fn buffers_are_named_from_the_working_directory() {
+        assert_eq!(
+            relative_to("/w/src/a.rs", "/w").as_deref(),
+            Some("src/a.rs")
+        );
+        assert_eq!(
+            relative_to("/private/var/a.rs", "/var/").as_deref(),
+            Some("a.rs")
+        );
+        assert_eq!(relative_to(r"D:\w\a.rs", r"D:\w").as_deref(), Some("a.rs"));
+        assert_eq!(relative_to("src/a.rs", "/w").as_deref(), Some("src/a.rs"));
+        assert_eq!(relative_to("/other/a.rs", "/w"), None);
+        assert_eq!(relative_to("/wx/a.rs", "/w"), None);
+        assert_eq!(file_name(r"D:\other\a.rs"), "a.rs");
+        assert_eq!(file_name("/other/a.rs"), "a.rs");
     }
 }

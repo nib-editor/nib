@@ -131,7 +131,7 @@ text = "hi\n"
 keys = "x<C-x><C-s>"
 
 [test.expect]
-screen = ["Wrote /", "/notes.txt"]
+screen = ["Wrote ", "notes.txt"]
 
 [[test]]
 name = "C-x C-f opens a file, completing its name"
@@ -171,7 +171,7 @@ text = "hi\n"
 
 [[test.step]]
 keys = "x<C-x><C-c>"
-expect.screen = ["Save file /"]
+expect.screen = ["Save file "]
 
 [[test.step]]
 keys = "n"

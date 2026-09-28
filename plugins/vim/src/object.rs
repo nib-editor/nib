@@ -243,7 +243,12 @@ pub fn quote(t: &mut Text, pos: u64, q: char, around: bool) -> Option<Object> {
         escaped = c == '\\' && !escaped;
         p = t.next(p)?;
     }
-    let pairs: Vec<(u64, u64)> = quotes.chunks_exact(2).map(|c| (c[0], c[1])).collect();
+    let pairs: Vec<(u64, u64)> = quotes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&[open, close]| (open, close))
+        .collect();
     let (open, close) = pairs
         .iter()
         .copied()

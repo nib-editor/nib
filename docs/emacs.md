@@ -32,14 +32,14 @@ GNU Emacs の操作感のベース（`plugins/emacs`、プラグイン名 `emacs
 | キー | 動作 |
 |------|------|
 | `C-f` `C-b` `C-n` `C-p`、矢印 | 文字、行。`C-n` `C-p` は列を保つ |
-| `C-a` `C-e` | 行頭、行末 |
+| `C-a` `C-e`、`Home` `End` | 行頭、行末 |
 | `M-m` | インデントのあと |
 | `M-f` `M-b`、`C-<right>` `C-<left>`、`M-<right>` `M-<left>` | 単語（英数字の並び。`_` は区切り） |
 | `M-a` `M-e` | 文（`sentence-end-double-space` の既定どおり、`.` のあとに空白 2 つか行末で終わる） |
 | `M-{` `M-}`、`C-<up>` `C-<down>` | 段落（空行） |
 | `C-M-f` `C-M-b` `C-M-u` `C-M-d` | S 式（括弧の対応、文字列、記号の並び） |
 | `C-M-a` `C-M-e` | 関数の始め、終わり（tree-sitter の関数。文法がなければ列 0 の `(`） |
-| `M-<` `M->`、`Home` `End`、`C-<home>` `C-<end>` | バッファの先頭、末尾（Emacs の既定の割り当てどおり）。マークを置く。前置き引数は 10 分の n の位置 |
+| `M-<` `M->`、`C-<home>` `C-<end>` | バッファの先頭、末尾。マークを置く。前置き引数は 10 分の n の位置 |
 | `C-v` `M-v`、`PageDown` `PageUp` | 1 画面 |
 | `C-l` | 画面の中・上・下にポイントの行を置く |
 | `M-r` | 画面の中・上・下の行へ |
@@ -162,7 +162,7 @@ GNU Emacs の操作感のベース（`plugins/emacs`、プラグイン名 `emacs
 `tui/tests/compare.rs` が、`plugins/emacs/compare.toml` の各ケースのキーを `emacs --batch -Q` と nib に流し、テキスト、ポイント、有効なリージョンのマークを比べる（[base.md](base.md) の「どこまで再現するか」）。emacs がなければ飛ばす（CI では入れて、必ず走らせる）。
 
 - キーは `execute-kbd-macro` で流す。キーボードマクロはコマンドのエラーや `C-g` の `quit` で止まるが、手で打ったキーはその先も続くので、止まったコマンドのあとのキーを流し直す。どこまで読んだかは、巻き戻される前に `signal-hook-function` で `executing-kbd-macro-index` を見て知る。isearch やミニバッファの途中の `C-g` も、これで比べられる。
-- Emacs の `tab-width` は nib の既定にそろえて 4 にする。
+- Emacs の `tab-width` は nib の既定にそろえて 4 にする。macOS の Emacs は `Home` `End` をバッファの端に割り当てる（ns-win）ので、ほかの OS と同じ行頭・行末に戻す。
 - キーボードマクロは `execute-kbd-macro` の中で記録できないので、比べずに `plugins/emacs/tests/emacs.toml` で確かめる。ファイル、バッファ、ミニバッファの補完、リーダーも同じ。
 - ミニバッファを開いたまま終わるキーは、Emacs が端末からの入力を待ってしまうので書かない（20 秒で打ち切って失敗にする）。
 - 2026-09-28 の時点で 348 ケース。342 が GNU Emacs 31.1 と同じで、6 つは下の違い。

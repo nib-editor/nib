@@ -122,6 +122,10 @@ before the error unwinds it."
     ;; nib's defaults: spaces, and tabs 4 columns wide.
     (setq indent-tabs-mode nil)
     (setq tab-width 4)
+    ;; Emacs on macOS moves Home and End to the ends of the buffer (ns-win);
+    ;; elsewhere they go to the ends of the line.
+    (global-set-key [home] 'move-beginning-of-line)
+    (global-set-key [end] 'move-end-of-line)
     (insert (alist-get 'text case))
     (goto-char (1+ (alist-get 'point case)))
     (setq buffer-undo-list nil)

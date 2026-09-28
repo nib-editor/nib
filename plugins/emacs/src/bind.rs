@@ -15,10 +15,14 @@ pub const COMMANDS: &[(&str, &[&str], &str)] = &[
     ("previous-line", &["C-p", "up"], "Move up a line"),
     (
         "move-beginning-of-line",
-        &["C-a"],
+        &["C-a", "home"],
         "Move to the start of the line",
     ),
-    ("move-end-of-line", &["C-e"], "Move to the end of the line"),
+    (
+        "move-end-of-line",
+        &["C-e", "end"],
+        "Move to the end of the line",
+    ),
     (
         "back-to-indentation",
         &["A-m"],
@@ -74,12 +78,12 @@ pub const COMMANDS: &[(&str, &[&str], &str)] = &[
     ),
     (
         "beginning-of-buffer",
-        &["A-<", "C-home", "home"],
+        &["A-<", "C-home"],
         "Move to the start of the buffer, leaving the mark",
     ),
     (
         "end-of-buffer",
-        &["A->", "C-end", "end"],
+        &["A->", "C-end"],
         "Move to the end of the buffer, leaving the mark",
     ),
     (
