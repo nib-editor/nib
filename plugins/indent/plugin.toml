@@ -1,4 +1,5 @@
 name = "indent"
 version = "0.1.0"
+description = "Sets each language's indentation and tab width."
 api = "0.7"
 events = ["buffer-opened"]

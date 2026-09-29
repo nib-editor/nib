@@ -15,6 +15,7 @@ mod history;
 pub mod input;
 mod layout;
 pub mod marks;
+mod menu;
 mod plugin;
 mod process;
 mod prompt;

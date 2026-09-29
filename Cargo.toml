@@ -4,7 +4,7 @@ members = ["core", "tui", "sdk/rust", "xtask"]
 exclude = ["plugins"]
 
 [workspace.package]
-version = "0.11.1"
+version = "0.12.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 authors = ["Q0tzly <contact@q0tzly.dev>"]
@@ -13,7 +13,7 @@ homepage = "https://github.com/nib-editor/nib"
 
 [workspace.dependencies]
 # The same version as the workspace's, which crates.io needs.
-nib-editor-core = { path = "core", version = "0.11.1" }
+nib-editor-core = { path = "core", version = "0.12.0" }
 
 # Debug builds take gigabytes a build, most of it debug info of the
 # dependencies, wasmtime above all. Line tables keep panics' locations.

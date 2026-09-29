@@ -9,7 +9,7 @@ use nib_core::{
 };
 
 mod common;
-use common::{key, plugin_dir, screen};
+use common::{key, menu, plugin_dir, screen};
 
 fn editor_with(name: &str, options: PluginOptions) -> Editor {
     let mut editor = Editor::default();
@@ -53,8 +53,7 @@ fn plugin_edits_the_buffer() {
     assert!(editor.key_hint().is_some());
 
     // Unsaved changes: quitting asks first.
-    editor.handle_key(KeyEvent::ctrl('g'));
-    editor.handle_key(key('q'));
+    menu(&mut editor, &["quit"]);
     editor.handle_key(key('y'));
     assert!(editor.should_quit());
 }
@@ -93,8 +92,7 @@ fn failing_plugin_is_restarted_then_disabled() {
     assert!(editor.key_hint().is_some());
 
     // The core menu brings it back.
-    editor.handle_key(KeyEvent::ctrl('g'));
-    editor.handle_key(key('r'));
+    menu(&mut editor, &["restart all"]);
     assert_eq!(editor.message(), Some("plugins restarted"));
     assert!(editor.plugins()[0].enabled);
     assert_eq!(editor.key_hint(), None);
@@ -176,38 +174,36 @@ fn key_latency() {
 #[test]
 fn core_menu_manages_each_plugin() {
     let mut editor = editor_with("test-insert", PluginOptions::default());
-    editor.resize(100, 6);
+    editor.resize(100, 20);
 
     editor.handle_key(KeyEvent::ctrl('g'));
-    let rows = screen(&editor);
-    assert!(rows[4].starts_with(" 1  test-insert"), "{rows:#?}");
-    assert!(rows[4].contains("running"), "{rows:#?}");
-    assert!(
-        rows[5].contains("[1-9] or [↑↓][enter] choose a plugin"),
-        "{rows:#?}"
-    );
+    let shown = screen(&editor).join("\n");
+    assert!(shown.contains("│ test-insert  0.0.0  running"), "{shown}");
+    assert!(shown.contains("│ Restart all plugins"), "{shown}");
 
     // Choose it and disable it: keys no longer reach it.
-    editor.handle_key(key('1'));
+    editor.handle_key(KeyEvent::new(KeyCode::Enter));
     assert_eq!(editor.menu(), Some(Menu::Plugin(0)));
-    assert!(screen(&editor)[5].contains("[d] disable  [l] reload from disk"));
-    editor.handle_key(key('d'));
+    let shown = screen(&editor).join("\n");
+    for row in ["│ Disable", "│ Reload from disk", "│ Open its settings"] {
+        assert!(shown.contains(row), "{row} in {shown}");
+    }
+    for c in "disable".chars() {
+        editor.handle_key(key(c));
+    }
+    editor.handle_key(KeyEvent::new(KeyCode::Enter));
     assert_eq!(editor.message(), Some("test-insert disabled"));
     editor.handle_key(key('x'));
     assert_eq!(editor.buffer().text().to_string(), "");
 
     // Enable it again.
-    editor.handle_key(KeyEvent::ctrl('g'));
-    editor.handle_key(key('1'));
-    editor.handle_key(key('d'));
+    menu(&mut editor, &["test-insert", "enable"]);
     assert_eq!(editor.message(), Some("test-insert enabled"));
     editor.handle_key(key('x'));
     assert_eq!(editor.buffer().text().to_string(), "x");
 
     // Reload it from disk; its layer comes back with it.
-    editor.handle_key(KeyEvent::ctrl('g'));
-    editor.handle_key(key('1'));
-    editor.handle_key(key('l'));
+    menu(&mut editor, &["test-insert", "reload"]);
     assert_eq!(editor.message(), Some("test-insert reloaded"));
     editor.handle_key(key('y'));
     assert_eq!(editor.buffer().text().to_string(), "xy");
@@ -292,9 +288,7 @@ fn data_outlives_restarts() {
         "kept"
     );
 
-    editor.handle_key(KeyEvent::ctrl('g'));
-    editor.handle_key(key('1'));
-    editor.handle_key(key('l'));
+    menu(&mut editor, &["test-events", "reload"]);
     assert_eq!(editor.message(), Some("test-events reloaded"));
     assert_eq!(editor.call_command("test-events.load", "").unwrap(), "kept");
     // The plugin holds its directory open, which Windows will not remove.
@@ -421,18 +415,17 @@ fn plugins_update_from_the_core_menu() {
         next: std::sync::Mutex::new(None),
     });
     let mut editor = Editor::default();
-    editor.resize(100, 6);
+    editor.resize(100, 20);
     editor.set_plugin_store(Some(updates.clone()));
     editor.load_plugin(&dir).unwrap();
     let update = |editor: &mut Editor| {
-        editor.handle_key(KeyEvent::ctrl('g'));
-        editor.handle_key(key('1'));
-        assert!(
-            screen(editor)[5].contains("[u] update"),
-            "{:#?}",
-            screen(editor)
-        );
-        editor.handle_key(key('u'));
+        menu(editor, &["test-insert"]);
+        let shown = screen(editor).join("\n");
+        assert!(shown.contains("│ Update"), "{shown}");
+        for c in "update".chars() {
+            editor.handle_key(key(c));
+        }
+        editor.handle_key(KeyEvent::new(KeyCode::Enter));
         // Checked on a thread; the answer comes back through the inbox.
         let deadline = Instant::now() + Duration::from_secs(10);
         while editor.message().is_some_and(|m| m.starts_with("checking")) {
@@ -462,11 +455,8 @@ fn plugins_update_from_the_core_menu() {
     *updates.next.lock().unwrap() = Some(("0.2.0".into(), vec!["process".into()]));
     update(&mut editor);
     assert_eq!(editor.menu(), Some(Menu::ConfirmUpdate(0)));
-    assert!(
-        screen(&editor)[5].contains("0.2.0 also wants: process"),
-        "{:#?}",
-        screen(&editor)
-    );
+    let shown = screen(&editor).join("\n");
+    assert!(shown.contains("0.2.0 also wants: process"), "{shown}");
     editor.handle_key(key('n'));
     assert_eq!(editor.message(), Some("test-insert left as it was"));
     update(&mut editor);
@@ -474,39 +464,49 @@ fn plugins_update_from_the_core_menu() {
     assert_eq!(editor.message(), Some("test-insert updated to 0.2.0"));
     assert_eq!(editor.plugins()[0].version, "0.2.0");
 
-    // Without the frontend's updates, there is no [u].
+    // Without the frontend's updates, there is no Update.
     editor.set_plugin_store(None);
-    editor.handle_key(KeyEvent::ctrl('g'));
-    editor.handle_key(key('1'));
-    assert!(!screen(&editor)[5].contains("[u] update"));
+    menu(&mut editor, &["test-insert"]);
+    assert!(!screen(&editor).join("\n").contains("│ Update"));
     fs::remove_dir_all(&dir).unwrap();
 }
 
-/// Arrows reach plugins past the ninth, as installed ones are.
+/// Arrows, Tab, and Ctrl-n and Ctrl-p move in the core menu, and Esc goes
+/// back to where it was.
 #[test]
-fn arrows_choose_in_the_core_menu() {
+fn keys_move_in_the_core_menu() {
     let mut editor = Editor::default();
     editor.load_plugin(&plugin_dir("test-insert")).unwrap();
     editor.load_plugin(&plugin_dir("test-events")).unwrap();
-    editor.resize(100, 8);
+    editor.resize(100, 20);
+    let press = |editor: &mut Editor, codes: &[KeyCode]| {
+        for &code in codes {
+            editor.handle_key(KeyEvent::new(code));
+        }
+    };
     editor.handle_key(KeyEvent::ctrl('g'));
-    editor.handle_key(KeyEvent::new(KeyCode::Down));
-    editor.handle_key(KeyEvent::new(KeyCode::Down));
-    assert_eq!(
-        editor.menu(),
-        Some(Menu::Main),
-        "past the last one, it stays"
-    );
-    editor.handle_key(KeyEvent::new(KeyCode::Enter));
+    press(&mut editor, &[KeyCode::Down, KeyCode::Enter]);
     assert_eq!(editor.menu(), Some(Menu::Plugin(1)));
+    press(&mut editor, &[KeyCode::Escape, KeyCode::Enter]);
+    assert_eq!(editor.menu(), Some(Menu::Plugin(1)), "back where it was");
+    press(&mut editor, &[KeyCode::Escape, KeyCode::Escape]);
+    assert_eq!(editor.menu(), None);
 
-    // Opened again, it starts at the top.
-    editor.handle_key(key('x'));
+    // Above the first one, it stays; opened again, it starts at the top.
     editor.handle_key(KeyEvent::ctrl('g'));
-    editor.handle_key(key('j'));
-    editor.handle_key(key('k'));
-    editor.handle_key(key('k'));
-    editor.handle_key(KeyEvent::new(KeyCode::Enter));
+    press(&mut editor, &[KeyCode::Up, KeyCode::Enter]);
+    assert_eq!(editor.menu(), Some(Menu::Plugin(0)));
+    press(&mut editor, &[KeyCode::Escape, KeyCode::Tab]);
+    editor.handle_key(KeyEvent::ctrl('n'));
+    editor.handle_key(KeyEvent::ctrl('p'));
+    editor.handle_key(KeyEvent {
+        code: KeyCode::Tab,
+        modifiers: nib_core::Modifiers {
+            shift: true,
+            ..Default::default()
+        },
+    });
+    press(&mut editor, &[KeyCode::Enter]);
     assert_eq!(editor.menu(), Some(Menu::Plugin(0)));
 }
 
@@ -530,7 +530,7 @@ fn plugins_install_and_remove_from_the_core_menu() {
         next: std::sync::Mutex::new(None),
     });
     let mut editor = Editor::default();
-    editor.resize(120, 6);
+    editor.resize(120, 20);
     editor.set_plugin_store(Some(store));
     let type_in = |editor: &mut Editor, text: &str| {
         for c in text.chars() {
@@ -539,38 +539,28 @@ fn plugins_install_and_remove_from_the_core_menu() {
     };
 
     // A source that cannot be fetched says why.
-    editor.handle_key(KeyEvent::ctrl('g'));
-    assert!(
-        screen(&editor)[5].contains("[a] add"),
-        "{:#?}",
-        screen(&editor)
-    );
-    editor.handle_key(key('a'));
+    menu(&mut editor, &["add"]);
+    assert_eq!(editor.menu(), Some(Menu::AddPlugin));
     type_in(&mut editor, "nothing/her");
     editor.handle_key(KeyEvent::new(KeyCode::Char('x')));
     editor.handle_key(KeyEvent::new(KeyCode::Backspace));
     type_in(&mut editor, "e");
-    assert!(
-        screen(&editor)[5].contains("nothing/here_"),
-        "{:#?}",
-        screen(&editor)
-    );
+    let shown = screen(&editor).join("\n");
+    assert!(shown.contains("add: nothing/here "), "{shown}");
     editor.handle_key(KeyEvent::new(KeyCode::Enter));
     wait_for_menu(&mut editor, "fetching");
     assert_eq!(editor.message(), Some("nothing/here: no such release"));
 
     // One that can is asked about, then loaded at once.
-    editor.handle_key(KeyEvent::ctrl('g'));
-    editor.handle_key(key('a'));
+    menu(&mut editor, &["add"]);
     type_in(&mut editor, "someone/insert");
     editor.handle_key(KeyEvent::new(KeyCode::Enter));
     wait_for_menu(&mut editor, "fetching");
     assert_eq!(editor.menu(), Some(Menu::ConfirmInstall));
+    let shown = screen(&editor).join("\n");
     assert!(
-        screen(&editor)[5]
-            .contains("install test-insert 0.0.0 from someone/insert? no capabilities"),
-        "{:#?}",
-        screen(&editor)
+        shown.contains("install test-insert 0.0.0 from someone/insert? no capabilities"),
+        "{shown}"
     );
     editor.handle_key(key('y'));
     assert_eq!(editor.message(), Some("test-insert 0.0.0 installed"));
@@ -578,11 +568,9 @@ fn plugins_install_and_remove_from_the_core_menu() {
     assert_eq!(editor.buffer().text().to_string(), "z");
 
     // Removed, it stops taking keys.
-    editor.handle_key(KeyEvent::ctrl('g'));
-    editor.handle_key(key('1'));
-    assert!(screen(&editor)[5].contains("[x] remove"));
-    editor.handle_key(key('x'));
+    menu(&mut editor, &["test-insert", "remove"]);
     assert_eq!(editor.menu(), Some(Menu::ConfirmRemove(0)));
+    assert!(screen(&editor).join("\n").contains("Remove test-insert?"));
     editor.handle_key(key('y'));
     assert_eq!(
         editor.message(),
@@ -734,9 +722,7 @@ fn only_the_chosen_base_runs() {
     assert_eq!(running(&editor), ["helix"]);
 
     // The menu switches, and restarting everything keeps one base.
-    editor.handle_key(KeyEvent::ctrl('g'));
-    editor.handle_key(key('2'));
-    editor.handle_key(key('d'));
+    menu(&mut editor, &["other", "use as"]);
     assert_eq!(running(&editor), ["other"]);
     assert!(
         editor
@@ -744,8 +730,8 @@ fn only_the_chosen_base_runs() {
             .unwrap()
             .starts_with("other is the base now")
     );
-    editor.handle_key(KeyEvent::new(KeyCode::F(10)));
-    editor.handle_key(key('r'));
+    assert_eq!(editor.menu_key(), KeyEvent::new(KeyCode::F(10)));
+    menu(&mut editor, &["restart all"]);
     assert_eq!(running(&editor), ["other"]);
 
     // So does the core.menu command, and the settings when read again.
@@ -767,7 +753,7 @@ fn only_the_chosen_base_runs() {
 fn the_first_start_asks_for_a_base_and_keeps_the_answer() {
     let dir = env::temp_dir().join(format!("nib-{}-first-start", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
-    let start = |key: KeyEvent| {
+    let start = |keys: &[KeyEvent]| {
         let mut editor = Editor::default();
         editor.set_config_dir(Some(dir.clone()));
         let (helix, nano) = (plugin_dir("helix"), plugin_dir("nano"));
@@ -776,7 +762,9 @@ fn the_first_start_asks_for_a_base_and_keeps_the_answer() {
         }
         editor.ask_for_base();
         assert_eq!(editor.menu(), Some(Menu::ChooseBase));
-        editor.handle_key(key);
+        for &key in keys {
+            editor.handle_key(key);
+        }
         let config = Config::load(&dir).unwrap();
         (
             running(&editor),
@@ -785,16 +773,17 @@ fn the_first_start_asks_for_a_base_and_keeps_the_answer() {
         )
     };
 
-    let (running, base, message) = start(key('2'));
+    let enter = KeyEvent::new(KeyCode::Enter);
+    let (running, base, message) = start(&[key('n'), enter]);
     assert_eq!((running, base.as_str()), (vec!["nano".to_string()], "nano"));
     assert_eq!(
         message.as_deref(),
         Some("nano is the base; base in config.toml keeps it")
     );
 
-    // Any other key keeps the one in use, and says so in config.toml too.
+    // Esc keeps the one in use, and says so in config.toml too.
     fs::remove_file(dir.join("config.toml")).unwrap();
-    let (running, base, _) = start(KeyEvent::new(KeyCode::Escape));
+    let (running, base, _) = start(&[KeyEvent::new(KeyCode::Escape)]);
     assert_eq!(
         (running, base.as_str()),
         (vec!["helix".to_string()], "helix")

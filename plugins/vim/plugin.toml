@@ -1,5 +1,6 @@
 name = "vim"
 version = "0.1.0"
+description = "A base: Vim's keys, checked key for key against Neovim."
 api = "0.7"
 # The whole way of editing (docs/base.md); only one base runs.
 base = true

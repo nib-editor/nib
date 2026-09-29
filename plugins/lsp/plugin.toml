@@ -1,5 +1,6 @@
 name = "lsp"
 version = "0.1.5"
+description = "Diagnostics, hovers, definitions, and completions from language servers."
 api = "0.7"
 # Runs the language servers.
 capabilities = ["process"]

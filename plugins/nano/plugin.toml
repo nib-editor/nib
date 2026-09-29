@@ -1,5 +1,6 @@
 name = "nano"
 version = "0.1.0"
+description = "A base: GNU nano's keys, with no modes; Ctrl and Alt keys do the rest."
 api = "0.7"
 # The whole way of editing (docs/base.md); only one base runs.
 base = true

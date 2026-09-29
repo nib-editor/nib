@@ -126,6 +126,8 @@ impl Default for PluginOptions {
 pub struct PluginInfo {
     pub name: String,
     pub version: String,
+    /// One line on what it is, from its manifest.
+    pub description: Option<String>,
     pub enabled: bool,
     /// Calls that took longer than `PluginOptions::warn_after`.
     pub slow_calls: u32,
@@ -302,6 +304,7 @@ impl Drop for Ticker {
 struct Plugin {
     name: String,
     version: String,
+    description: Option<String>,
     /// `None` for plugins built into the editor.
     dir: Option<PathBuf>,
     code: Code,
@@ -580,6 +583,7 @@ impl Editor {
         self.plugins.entries.push(Plugin {
             name: manifest.name.clone(),
             version: manifest.version,
+            description: manifest.description,
             dir: match *source {
                 PluginSource::Dir(dir) => Some(dir.to_path_buf()),
                 PluginSource::Bytes { .. } => None,
@@ -848,6 +852,7 @@ impl Editor {
             .map(|p| PluginInfo {
                 name: p.name.clone(),
                 version: p.version.clone(),
+                description: p.description.clone(),
                 enabled: p.enabled,
                 slow_calls: p.slow_calls,
                 last_error: p.last_error.clone(),

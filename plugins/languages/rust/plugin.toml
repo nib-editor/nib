@@ -1,6 +1,7 @@
 # Data only: a grammar and its queries, no plugin code.
 name = "rust"
 version = "0.1.2"
+description = "Rust: the grammar and queries for highlighting and the syntax tree."
 api = "0.7"
 
 [[languages]]

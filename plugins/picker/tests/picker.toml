@@ -48,7 +48,7 @@ expect.screen = ["commands> ", "buffer.save", "Save the current buffer"]
 
 [[test.step]]
 keys = "coremenu<ret>"
-expect.screen = ["[r] restart all"]
+expect.screen = ["╭─ nib ─", "Restart all plugins"]
 
 [[test]]
 name = "the palette opens the other picker, and finds commands by what they do"

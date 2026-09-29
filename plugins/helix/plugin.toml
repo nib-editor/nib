@@ -1,5 +1,6 @@
 name = "helix"
 version = "0.1.18"
+description = "A base: Helix's keys, where you select first and then act."
 api = "0.7"
 # The whole way of editing (docs/base.md); only one base runs.
 base = true

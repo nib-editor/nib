@@ -31,6 +31,7 @@ wordcount/
 ```toml
 name = "wordcount"        # also the prefix of its commands and events
 version = "0.1.0"
+description = "Counts the words of the buffer"  # one line, shown in the core menu
 api = "0.7"               # the nib:plugin version it is built for
 capabilities = []         # what it may do beyond the editor API
 events = ["buffer-opened", "buffer-changed"]

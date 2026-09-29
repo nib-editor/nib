@@ -3,11 +3,11 @@ use std::borrow::Cow;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::buffer::Buffer;
-use crate::editor::{Editor, Menu};
+use crate::editor::Editor;
 use crate::grid::{Cursor, CursorShape, Grid, Style, display_width, graphemes};
 use crate::layout;
 use crate::prompt::Prompt;
-use crate::ui::{Panel, PopupAnchor, Side, Span, StyledLine, Theme};
+use crate::ui::{PopupAnchor, Side, Span, StyledLine, Theme};
 use crate::view::View;
 use crate::windows::{Rect, Separator};
 
@@ -31,93 +31,16 @@ impl Editor {
         if let Some(y) = status_row {
             self.render_status(grid, y);
         }
+        // Over everything, and with the cursor in its input line.
+        if let Some(menu_cursor) = self.render_menu(grid) {
+            cursor = Some(menu_cursor);
+        }
         cursor
     }
 
     /// Rows left for the views above the panels and the status line.
     pub(crate) fn text_rows(&self) -> u16 {
-        let menu = self.menu_lines().len().min(u16::MAX as usize) as u16;
-        self.state().text_area_rows().saturating_sub(menu)
-    }
-
-    /// The bases to choose from on the first start.
-    fn base_lines(&self) -> Vec<StyledLine> {
-        let cursor = self.state().menu_cursor;
-        let in_use = self.base_in_use();
-        self.bases()
-            .iter()
-            .enumerate()
-            .map(|(i, name)| {
-                let note = if Some(name.as_str()) == in_use {
-                    "  (in use)"
-                } else {
-                    ""
-                };
-                let style = if i == cursor { "ui.menu.selected" } else { "" };
-                vec![Span {
-                    text: format!(" {}  {name}{note}", i + 1),
-                    style: style.into(),
-                }]
-            })
-            .collect()
-    }
-
-    /// The plugin list shown while the core menu is open, below any panels.
-    fn menu_lines(&self) -> Vec<StyledLine> {
-        let selected = match self.menu() {
-            Some(Menu::Main) => Some(self.state().menu_cursor),
-            Some(Menu::Plugin(id) | Menu::ConfirmUpdate(id) | Menu::ConfirmRemove(id)) => Some(id),
-            Some(Menu::AddPlugin | Menu::ConfirmInstall) => None,
-            Some(Menu::ChooseBase) => return self.base_lines(),
-            Some(Menu::ConfirmQuit) | None => return Vec::new(),
-        };
-        let plugins = self.plugins();
-        if plugins.is_empty() {
-            return vec![vec![plain(" no plugins are loaded")]];
-        }
-        plugins
-            .iter()
-            .enumerate()
-            .map(|(id, plugin)| {
-                let state = match (&plugin.last_error, plugin.enabled) {
-                    (_, true) if !plugin.has_code => "languages".to_string(),
-                    (_, true) if plugin.waiting => "waiting".to_string(),
-                    // Such as a call stopped with the menu key just now.
-                    (Some(err), true) => format!("running; last error: {err}"),
-                    (None, true) if plugin.base => "running, the base".to_string(),
-                    (None, true) => "running".to_string(),
-                    (None, false) if plugin.base && self.base_in_use() != Some(&plugin.name) => {
-                        "base, not in use".to_string()
-                    }
-                    (Some(err), false) => format!("disabled: {err}"),
-                    (None, false) => "disabled".to_string(),
-                };
-                let can = if plugin.capabilities.is_empty() {
-                    String::new()
-                } else {
-                    format!("  can: {}", plugin.capabilities.join(", "))
-                };
-                let text = format!(
-                    " {}  {:<12} {:<8} limit: {:<7} slow calls: {:<4} {state}{can}",
-                    id + 1,
-                    plugin.name,
-                    plugin.version,
-                    plugin
-                        .timeout
-                        .map_or("none".into(), |t| format!("{}ms", t.as_millis())),
-                    plugin.slow_calls,
-                );
-                let style = if selected == Some(id) {
-                    "ui.menu.selected"
-                } else {
-                    ""
-                };
-                vec![Span {
-                    text,
-                    style: style.into(),
-                }]
-            })
-            .collect()
+        self.state().text_area_rows()
     }
 
     /// Draws panels from row `top` down to `end`, oldest first. Returns the
@@ -125,21 +48,8 @@ impl Editor {
     fn render_panels(&self, grid: &mut Grid, top: u16, end: u16) -> Option<Cursor> {
         let mut cursor = None;
         let mut y = top;
-        let menu = self.menu_lines();
-        let menu_panel = Panel {
-            id: 0,
-            owner: 0,
-            lines: menu,
-            cursor: None,
-        };
         let prompt = self.state().prompts.last().map(Prompt::panel);
-        for panel in self
-            .state()
-            .panels
-            .iter()
-            .chain(&prompt)
-            .chain([&menu_panel])
-        {
+        for panel in self.state().panels.iter().chain(&prompt) {
             for (i, line) in panel.lines.iter().enumerate() {
                 if y >= end {
                     return cursor;
@@ -436,114 +346,6 @@ impl Editor {
             ..Style::default()
         };
         grid.fill_row(0, y, style);
-        match self.menu() {
-            Some(Menu::Main) => {
-                let choose = if self.plugins().is_empty() {
-                    ""
-                } else {
-                    "[1-9] or [↑↓][enter] choose a plugin  "
-                };
-                let add = if self.can_install() { "[a] add  " } else { "" };
-                let keys = format!(
-                    "{choose}{add}[r] restart all  [w] save all and quit  [q] quit  [any other key] back"
-                );
-                grid.put_str(1, y, &keys, style);
-                return;
-            }
-            Some(Menu::Plugin(id)) => {
-                let plugin = &self.plugins()[id];
-                let toggle = match (plugin.enabled, plugin.base) {
-                    (true, _) => "disable",
-                    (false, true) => "use as the base",
-                    (false, false) => "enable",
-                };
-                let reload = if plugin.reloadable {
-                    "  [l] reload from disk"
-                } else {
-                    ""
-                };
-                let update = if self.can_update(id) {
-                    "  [u] update"
-                } else {
-                    ""
-                };
-                let remove = if self.can_remove(id) {
-                    "  [x] remove"
-                } else {
-                    ""
-                };
-                let keys = format!(
-                    "{}: [r] restart  [d] {toggle}{reload}{update}{remove}  [any other key] back",
-                    plugin.name
-                );
-                grid.put_str(1, y, &keys, style);
-                return;
-            }
-            Some(Menu::AddPlugin) => {
-                let prompt = format!(
-                    "add (a name, owner/repo, or URL): {}_  [enter] fetch  [esc] back",
-                    self.state().menu_input
-                );
-                grid.put_str(1, y, &prompt, style);
-                return;
-            }
-            Some(Menu::ConfirmInstall) => {
-                let prompt = match self.pending_install() {
-                    Some(p) => {
-                        let can = match p.capabilities() {
-                            [] => "no capabilities".to_string(),
-                            can => format!("can: {}", can.join(", ")),
-                        };
-                        format!(
-                            "install {} {} from {}? {can}  [y] install  [any other key] cancel",
-                            p.name(),
-                            p.version(),
-                            p.source()
-                        )
-                    }
-                    None => String::new(),
-                };
-                grid.put_str(1, y, &prompt, style);
-                return;
-            }
-            Some(Menu::ConfirmRemove(id)) => {
-                let prompt = format!(
-                    "remove {}? its settings and data are kept  [y] remove  [any other key] back",
-                    self.plugins()[id].name
-                );
-                grid.put_str(1, y, &prompt, style);
-                return;
-            }
-            Some(Menu::ConfirmUpdate(id)) => {
-                let name = &self.plugins()[id].name;
-                let prompt = match self.pending_update() {
-                    Some(pending) => format!(
-                        "{name} {} also wants: {}. [y] update  [any other key] keep it as it is",
-                        pending.version(),
-                        pending.added_capabilities().join(", ")
-                    ),
-                    None => String::new(),
-                };
-                grid.put_str(1, y, &prompt, style);
-                return;
-            }
-            Some(Menu::ChooseBase) => {
-                let keys = "which way of editing? [1-9] or [↑↓][enter] choose  \
-                            [any other key] keep this one";
-                grid.put_str(1, y, keys, style);
-                return;
-            }
-            Some(Menu::ConfirmQuit) => {
-                let n = self.modified_buffers();
-                let prompt = format!(
-                    "quit without saving {n} modified buffer{}? [y] quit  [any other key] back",
-                    if n == 1 { "" } else { "s" }
-                );
-                grid.put_str(1, y, &prompt, style);
-                return;
-            }
-            None => {}
-        }
 
         let state = self.state();
         let items = |side| {
@@ -648,7 +450,14 @@ fn put_line(grid: &mut Grid, theme: &Theme, mut x: u16, y: u16, line: &[Span], b
 
 /// Puts `text` from `x`, stopping before column `end`. Returns the column
 /// after the last grapheme put.
-fn put_clipped(grid: &mut Grid, mut x: u16, y: u16, text: &str, style: Style, end: u16) -> u16 {
+pub(crate) fn put_clipped(
+    grid: &mut Grid,
+    mut x: u16,
+    y: u16,
+    text: &str,
+    style: Style,
+    end: u16,
+) -> u16 {
     for grapheme in graphemes(text) {
         if x + display_width(grapheme) > end {
             break;
@@ -744,13 +553,34 @@ mod tests {
     }
 
     #[test]
-    fn menu_replaces_the_status_line() {
+    fn the_menu_is_a_box_over_the_middle_with_the_cursor_in_its_input() {
         let mut editor = Editor::with_text("a");
-        editor.resize(100, 3);
+        editor.resize(80, 20);
         editor.handle_key(crate::KeyEvent::ctrl('g'));
-        let (rows, _) = render(&editor);
-        assert!(rows[1].starts_with(" no plugins are loaded"), "{}", rows[1]);
-        assert!(rows[2].starts_with(" [r] restart all"), "{}", rows[2]);
+        editor.handle_key(crate::KeyEvent::new(crate::KeyCode::Char('r')));
+        let (rows, cursor) = render(&editor);
+        // 72 by 16, from (4, 2).
+        assert!(rows[2].starts_with("    ╭─ nib ─"), "{rows:#?}");
+        assert!(rows[3].starts_with("    │ > r "), "{rows:#?}");
+        assert!(rows[3].contains("2/5 │"), "{rows:#?}");
+        assert!(rows[4].contains("┬"), "{rows:#?}");
+        // Starting with it first, the rest in list order.
+        assert!(rows[5].contains("│ Reload the settings "), "{rows:#?}");
+        assert!(rows[6].contains("│ Restart all plugins "), "{rows:#?}");
+        assert!(
+            rows[7].starts_with("    │                               │"),
+            "{rows:#?}"
+        );
+        // The details of the one under the cursor.
+        assert!(rows[5].contains("Read config.toml and the"), "{rows:#?}");
+        assert!(
+            rows[17].contains("╰─ ↑↓ move · enter choose · esc back ─"),
+            "{rows:#?}"
+        );
+        // The status line is as it always is.
+        assert!(rows[19].contains("[scratch]"), "{rows:#?}");
+        let cursor = cursor.unwrap();
+        assert_eq!((cursor.x, cursor.y, cursor.shape), (9, 3, CursorShape::Bar));
     }
 
     fn span(text: &str, style: &str) -> Span {

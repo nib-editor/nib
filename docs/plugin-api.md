@@ -28,6 +28,7 @@ helix-keymap/
 ```toml
 name = "helix"            # コマンドの名前空間にもなる
 version = "0.1.0"
+description = "A base: Helix's keys"  # 任意。1 行の説明。コアメニューに出す（core-menu.md）
 api = "0.7"               # 対応する nib:plugin のバージョン（メジャー.マイナー）
 
 capabilities = []         # "fs-read" / "fs-write" / "process" / "network"

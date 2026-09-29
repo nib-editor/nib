@@ -1,5 +1,6 @@
 name = "picker"
 version = "0.1.4"
+description = "Finds files and commands by typing part of their names."
 api = "0.7"
 # Lists the files of the working directory.
 capabilities = ["fs-read"]

@@ -1,5 +1,6 @@
 name = "{{name}}"
 version = "0.1.0"
+description = "What it does, in one line, for the core menu."
 # The nib:plugin API it is built for; nib loads only plugins of its own.
 api = "{{api}}"
 # What it may do beyond the editor API: "process", "fs-read", "fs-write",

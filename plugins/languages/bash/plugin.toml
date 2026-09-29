@@ -1,6 +1,7 @@
 # Data only: a grammar and its queries, no plugin code.
 name = "bash"
 version = "0.1.0"
+description = "Bash: the grammar and queries for highlighting and the syntax tree."
 api = "0.7"
 
 [[languages]]

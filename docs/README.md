@@ -9,6 +9,7 @@
 | [plugin-api.md](plugin-api.md) | WIT の設計方針、イベントとコマンドの流れ、ライフサイクル、権限 |
 | [api-0.6.md](api-0.6.md) | プラグイン API 0.6 の改革: コアの操作とイベントを型に、interface の分け直し、足したもの。1.0 で固めるときの決まり |
 | [plugin-buffers.md](plugin-buffers.md) | プラグインが中身を持つバッファ（magit や dired のようなもの）: 作る、書く、そのバッファでだけ効くキーと、ベースごとの譲り方 |
+| [core-menu.md](core-menu.md) | コアメニュー: 真ん中の箱、絞り込み、プラグインと操作の一覧、詳しい中身 |
 | [keymap.md](keymap.md) | モーダルの扱い、キーマップをプラグインで実現するしくみ |
 | [nano.md](nano.md) | nano ベースのキーと、nano との違い |
 | [vim.md](vim.md) | vim ベースのキー、コマンドライン、Neovim との比べ方と違い |

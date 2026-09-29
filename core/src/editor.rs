@@ -13,7 +13,7 @@ use crate::config::{CONFIG_TEMPLATE, Config, Indent, PluginConfig, Settings, plu
 use crate::events::{Command, Event, Mode, Timer};
 use crate::files::FileJobs;
 use crate::history::UndoMode;
-use crate::input::{KeyCode, KeyEvent};
+use crate::input::KeyEvent;
 use crate::layout;
 use crate::plugin::{LeaderKey, PluginId, Plugins};
 use crate::process::Processes;
@@ -627,6 +627,7 @@ impl State {
     pub fn open_menu(&mut self) {
         self.menu = Some(Menu::Main);
         self.menu_cursor = 0;
+        self.menu_input.clear();
     }
 
     /// Moves the focus to the next view, or the one on a side.
@@ -1005,11 +1006,11 @@ pub struct Editor {
     plugin_configs: BTreeMap<String, PluginConfig>,
     /// From the frontend, for installing, updating, and removing plugins
     /// in the core menu.
-    store: Option<Arc<dyn PluginStore>>,
+    pub(crate) store: Option<Arc<dyn PluginStore>>,
     /// A newer release that wants more capabilities, waiting for a yes.
-    pending_update: Option<(PluginId, Box<dyn PendingUpdate>)>,
+    pub(crate) pending_update: Option<(PluginId, Box<dyn PendingUpdate>)>,
     /// A plugin fetched for installing, waiting for a yes.
-    pending_install: Option<Box<dyn PendingInstall>>,
+    pub(crate) pending_install: Option<Box<dyn PendingInstall>>,
 }
 
 const LENT: &str = "editor state is only lent during plugin calls";
@@ -1244,9 +1245,7 @@ impl Editor {
         if let Some(menu) = self.state_mut().menu.take() {
             self.handle_menu_key(menu, key);
         } else if key == self.menu_key() {
-            let state = self.state_mut();
-            state.menu = Some(Menu::Main);
-            state.menu_cursor = 0;
+            self.state_mut().open_menu();
         } else if self.state().prompts.is_empty() {
             self.send_to_plugins_offering(key);
         } else {
@@ -1392,7 +1391,7 @@ impl Editor {
 
     /// Fetches the plugin `source` names on a thread; what it found comes
     /// back through the inbox.
-    fn start_install(&mut self, source: String) {
+    pub(crate) fn start_install(&mut self, source: String) {
         let Some(store) = self.store.clone() else {
             return;
         };
@@ -1418,7 +1417,7 @@ impl Editor {
         }
     }
 
-    fn install(&mut self, pending: Box<dyn PendingInstall>) -> String {
+    pub(crate) fn install(&mut self, pending: Box<dyn PendingInstall>) -> String {
         let (name, version) = (pending.name().to_string(), pending.version().to_string());
         let dir = match pending.apply() {
             Ok(dir) => dir,
@@ -1437,7 +1436,7 @@ impl Editor {
 
     /// Checks for a newer release of plugin `id` on a thread; what it found
     /// comes back through the inbox.
-    fn start_update(&mut self, id: PluginId) {
+    pub(crate) fn start_update(&mut self, id: PluginId) {
         let Some(updates) = self.store.clone() else {
             return;
         };
@@ -1478,7 +1477,7 @@ impl Editor {
         self.state_mut().message = Some(message);
     }
 
-    fn apply_update(&mut self, id: PluginId, pending: Box<dyn PendingUpdate>) -> String {
+    pub(crate) fn apply_update(&mut self, id: PluginId, pending: Box<dyn PendingUpdate>) -> String {
         let name = self.plugins()[id].name.clone();
         let version = pending.version().to_string();
         if let Err(err) = pending.apply() {
@@ -1659,155 +1658,6 @@ impl Editor {
         self.state().modified_buffers()
     }
 
-    fn handle_menu_key(&mut self, menu: Menu, key: KeyEvent) {
-        let plain = |c: char| key == KeyEvent::new(KeyCode::Char(c));
-        match menu {
-            Menu::Main if plain('r') => self.restart_plugins(),
-            Menu::Main if plain('w') => match self.save_all() {
-                Ok(()) => self.state_mut().quit = true,
-                Err(failures) => {
-                    self.state_mut().message =
-                        Some(format!("not quitting: {}", failures.join("; ")));
-                }
-            },
-            Menu::Main if plain('a') && self.can_install() => {
-                let state = self.state_mut();
-                state.menu_input.clear();
-                state.menu = Some(Menu::AddPlugin);
-            }
-            Menu::Main if plain('q') => {
-                if self.modified_buffers() == 0 {
-                    self.state_mut().quit = true;
-                } else {
-                    self.state_mut().menu = Some(Menu::ConfirmQuit);
-                }
-            }
-            Menu::Main => {
-                // Arrows reach past the ninth plugin: installed ones come
-                // after a dozen standard ones.
-                let count = self.plugins().len();
-                let state = self.state_mut();
-                let step = match key.code {
-                    KeyCode::Down => Some(1),
-                    KeyCode::Up => Some(-1),
-                    KeyCode::Char('j') if key.modifiers == Default::default() => Some(1),
-                    KeyCode::Char('k') if key.modifiers == Default::default() => Some(-1),
-                    _ => None,
-                };
-                if let Some(step) = step {
-                    let last = count.saturating_sub(1);
-                    state.menu_cursor = state.menu_cursor.saturating_add_signed(step).min(last);
-                    state.menu = Some(Menu::Main);
-                    return;
-                }
-                let chosen = match key.code {
-                    KeyCode::Enter => Some(state.menu_cursor),
-                    KeyCode::Char(c @ '1'..='9') if key.modifiers == Default::default() => {
-                        Some(c as usize - '1' as usize)
-                    }
-                    _ => None,
-                };
-                if let Some(id) = chosen.filter(|&id| id < count) {
-                    state.menu = Some(Menu::Plugin(id));
-                }
-            }
-            Menu::Plugin(id) if plain('u') && self.can_update(id) => self.start_update(id),
-            Menu::Plugin(id) if plain('x') && self.can_remove(id) => {
-                self.state_mut().menu = Some(Menu::ConfirmRemove(id));
-            }
-            Menu::ConfirmRemove(id) if plain('y') => {
-                let name = self.plugins()[id].name.clone();
-                let store = self.store.clone().expect("offered with a store");
-                let message = match store.remove(&name) {
-                    // Loaded, it stays, disabled, until nib starts again.
-                    Ok(()) => {
-                        self.disable_plugin(id);
-                        format!("{name} removed; its settings and data are kept")
-                    }
-                    Err(err) => format!("{name}: removing failed: {err}"),
-                };
-                self.state_mut().message = Some(message);
-            }
-            Menu::AddPlugin => {
-                let state = self.state_mut();
-                match key.code {
-                    KeyCode::Char(c) if !key.modifiers.ctrl && !key.modifiers.alt => {
-                        state.menu_input.push(c);
-                    }
-                    KeyCode::Backspace => {
-                        state.menu_input.pop();
-                    }
-                    KeyCode::Escape => return,
-                    KeyCode::Enter if !state.menu_input.trim().is_empty() => {
-                        let source = state.menu_input.trim().to_string();
-                        self.start_install(source);
-                        return;
-                    }
-                    _ => {}
-                }
-                self.state_mut().menu = Some(Menu::AddPlugin);
-            }
-            Menu::ConfirmInstall => {
-                let Some(pending) = self.pending_install.take() else {
-                    return;
-                };
-                let message = if plain('y') {
-                    self.install(pending)
-                } else {
-                    format!("{} not installed", pending.name())
-                };
-                self.state_mut().message = Some(message);
-            }
-            Menu::ConfirmUpdate(id) => {
-                let Some((_, pending)) = self.pending_update.take() else {
-                    return;
-                };
-                let name = self.plugins()[id].name.clone();
-                let message = if plain('y') {
-                    self.apply_update(id, pending)
-                } else {
-                    format!("{name} left as it was")
-                };
-                self.state_mut().message = Some(message);
-            }
-            Menu::Plugin(id) if plain('r') || plain('d') || plain('l') => {
-                let plugin = &self.plugins()[id];
-                let name = plugin.name.clone();
-                let message = if plain('r') {
-                    match self.restart_plugin(id) {
-                        Ok(()) => format!("{name} restarted"),
-                        Err(err) => format!("{name}: restarting failed: {err}"),
-                    }
-                } else if plain('d') && plugin.enabled {
-                    self.disable_plugin(id);
-                    format!("{name} disabled")
-                } else if plain('d') && plugin.base {
-                    match self.restart_plugin(id) {
-                        Ok(()) => format!(
-                            "{name} is the base now; base = \"{name}\" in config.toml's [core] keeps it"
-                        ),
-                        Err(err) => format!("{name}: starting failed: {err}"),
-                    }
-                } else if plain('d') {
-                    match self.restart_plugin(id) {
-                        Ok(()) => format!("{name} enabled"),
-                        Err(err) => format!("{name}: enabling failed: {err}"),
-                    }
-                } else {
-                    match self.reload_plugin(id) {
-                        Ok(()) => format!("{name} reloaded"),
-                        Err(err) => format!("{name}: reloading failed: {err}"),
-                    }
-                };
-                self.state_mut().message = Some(message);
-            }
-            Menu::ChooseBase => self.choose_base_key(key),
-            Menu::ConfirmQuit if plain('y') => self.state_mut().quit = true,
-            // Any other key goes back, so a mistyped menu key is harmless.
-            _ => {}
-        }
-    }
-
     /// The bases loaded, in load order.
     pub(crate) fn bases(&self) -> Vec<String> {
         self.plugins()
@@ -1830,35 +1680,14 @@ impl Editor {
             .iter()
             .position(|b| Some(b) == current.as_ref())
             .unwrap_or(0);
+        state.menu_input.clear();
         state.menu = Some(Menu::ChooseBase);
     }
 
-    fn choose_base_key(&mut self, key: KeyEvent) {
-        let bases = self.bases();
-        let state = self.state_mut();
-        let step = match key.code {
-            KeyCode::Down => 1,
-            KeyCode::Up => -1,
-            _ => 0,
-        };
-        if step != 0 {
-            let last = bases.len().saturating_sub(1);
-            state.menu_cursor = state.menu_cursor.saturating_add_signed(step).min(last);
-            state.menu = Some(Menu::ChooseBase);
-            return;
-        }
-        let chosen = match key.code {
-            KeyCode::Enter => Some(state.menu_cursor),
-            KeyCode::Char(c @ '1'..='9') if key.modifiers == Default::default() => {
-                Some(c as usize - '1' as usize)
-            }
-            _ => None,
-        };
-        // Any other key keeps the base in use, which is an answer too.
-        let name = match chosen.and_then(|i| bases.get(i)) {
-            Some(name) => name.clone(),
-            None => self.base_in_use().unwrap_or_default().to_string(),
-        };
+    /// Uses base `name`, or keeps the one in use for `None`, and writes
+    /// the answer into a new config.toml.
+    pub(crate) fn choose_base(&mut self, name: Option<String>) {
+        let name = name.unwrap_or_else(|| self.base_in_use().unwrap_or_default().to_string());
         let switched = match self.base_in_use() == Some(name.as_str()) {
             true => Ok(()),
             false => self.switch_base(&name),
@@ -1885,7 +1714,7 @@ impl Editor {
     }
 
     /// Saves every modified buffer. Returns what could not be saved.
-    fn save_all(&mut self) -> Result<(), Vec<String>> {
+    pub(crate) fn save_all(&mut self) -> Result<(), Vec<String>> {
         let mut failures = Vec::new();
         let state = self.state_mut();
         for index in 0..state.buffers.len() {
@@ -1928,6 +1757,7 @@ mod tests {
     use super::*;
     use crate::Edit;
     use crate::history::UndoMode;
+    use crate::input::KeyCode;
     use crate::selection::Selection;
 
     fn press(editor: &mut Editor, keys: &[KeyEvent]) {
@@ -1938,6 +1768,15 @@ mod tests {
 
     fn char_key(c: char) -> KeyEvent {
         KeyEvent::new(KeyCode::Char(c))
+    }
+
+    /// Opens the menu and chooses the first row `typed` narrows it to.
+    fn choose(editor: &mut Editor, typed: &str) {
+        editor.handle_key(KeyEvent::ctrl('g'));
+        for c in typed.chars() {
+            editor.handle_key(char_key(c));
+        }
+        editor.handle_key(KeyEvent::new(KeyCode::Enter));
     }
 
     fn modify(editor: &mut Editor) {
@@ -2134,11 +1973,15 @@ mod tests {
         let mut editor = Editor::default();
         press(&mut editor, &[KeyEvent::ctrl('g')]);
         assert_eq!(editor.menu(), Some(Menu::Main));
-        press(&mut editor, &[KeyEvent::new(KeyCode::Escape)]);
+        // Typing narrows the list; nothing else happens.
+        press(
+            &mut editor,
+            &[char_key('q'), KeyEvent::new(KeyCode::Escape)],
+        );
         assert_eq!(editor.menu(), None);
         assert!(!editor.should_quit());
 
-        press(&mut editor, &[KeyEvent::ctrl('g'), char_key('q')]);
+        choose(&mut editor, "quit");
         assert!(editor.should_quit());
     }
 
@@ -2146,19 +1989,17 @@ mod tests {
     fn quitting_with_unsaved_changes_needs_confirmation() {
         let mut editor = Editor::with_text("a");
         modify(&mut editor);
-        press(&mut editor, &[KeyEvent::ctrl('g'), char_key('q')]);
+        choose(&mut editor, "quit");
         assert_eq!(editor.menu(), Some(Menu::ConfirmQuit));
         assert!(!editor.should_quit());
 
-        // Anything but "y" goes back, e.g. a second "q" from a typo.
+        // Anything but "y" goes back, e.g. a "q" from a typo.
         press(&mut editor, &[char_key('q')]);
         assert_eq!(editor.menu(), None);
         assert!(!editor.should_quit());
 
-        press(
-            &mut editor,
-            &[KeyEvent::ctrl('g'), char_key('q'), char_key('y')],
-        );
+        choose(&mut editor, "quit");
+        press(&mut editor, &[char_key('y')]);
         assert!(editor.should_quit());
     }
 
@@ -2170,7 +2011,7 @@ mod tests {
         editor.open(&path).unwrap();
         modify(&mut editor);
 
-        press(&mut editor, &[KeyEvent::ctrl('g'), char_key('w')]);
+        choose(&mut editor, "save all");
         let saved = fs::read_to_string(&path).unwrap();
         fs::remove_file(&path).unwrap();
         assert!(editor.should_quit());
@@ -2181,7 +2022,7 @@ mod tests {
     fn menu_does_not_quit_when_saving_fails() {
         let mut editor = Editor::with_text("a");
         modify(&mut editor);
-        press(&mut editor, &[KeyEvent::ctrl('g'), char_key('w')]);
+        choose(&mut editor, "save all");
         assert!(!editor.should_quit());
         assert_eq!(
             editor.message(),

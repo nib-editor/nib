@@ -48,6 +48,18 @@ pub fn type_keys(editor: &mut Editor, keys: &str) {
     }
 }
 
+/// Opens the core menu and, for each of `steps`, types it and presses
+/// Enter, choosing the first row it narrows the list to.
+pub fn menu(editor: &mut Editor, steps: &[&str]) {
+    editor.handle_key(editor.menu_key());
+    for step in steps {
+        for c in step.chars() {
+            editor.handle_key(key(c));
+        }
+        editor.handle_key(KeyEvent::new(KeyCode::Enter));
+    }
+}
+
 /// The screen as text, one string per row.
 pub fn screen(editor: &Editor) -> Vec<String> {
     let mut grid = Grid::default();

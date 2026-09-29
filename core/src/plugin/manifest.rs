@@ -13,6 +13,9 @@ pub(crate) struct Manifest {
     /// Also the namespace of the plugin's commands.
     pub name: String,
     pub version: String,
+    /// One line on what it is, for the core menu.
+    #[serde(default)]
+    pub description: Option<String>,
     /// The `nib:plugin` version the plugin was built against.
     pub api: String,
     #[serde(default)]
