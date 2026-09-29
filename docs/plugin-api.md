@@ -227,6 +227,9 @@ interface prompt {
         set: func(text: string, cursor: u32);
         set-label: func(label: string);
         set-hint: func(hint: string); // 右端に出す。"3/10" など
+        show-in-box: func(title: string);   // 真ん中の箱の入力の行にする（finder.md）
+        set-rows: func(rows: list<styled-line>, selected: option<u32>);
+        set-preview: func(preview: preview); // none、lines、file(path, line)
     }
 
     resource choices {
@@ -251,7 +254,8 @@ interface prompt {
   - 知らないキーは `pass` を返す。コアが既定の動きをする: 修飾のない文字は入れる、Backspace は 1 文字消す（空なら `cancel`）、Delete、左右、Home、End で動く、上下は `previous` / `next`、PageUp と PageDown は `page-previous` / `page-next`、Tab と Shift-Tab は `complete` / `complete-back`、Enter は `accept`、Esc は `cancel`。ベースがない、または作りかけでも、欄は使える。
 - 持ち主は、イベントを受けて動く。決定や取り消しで欄を閉じるのも持ち主（捨てる）。欄を開いたまま持ち主が止まると、コアが閉じる。
 - `set` は持ち主が補完などで文字列を書き換えるためのもので、`prompt-changed` は出ない。
-- 一覧（picker の候補、補完の候補）は、持ち主がパネルやポップアップで描く。欄が持つのは 1 行の文字と右端の hint だけ。
+- 一覧（補完の候補など）は、持ち主がパネルやポップアップで描く。欄が持つのは 1 行の文字と右端の hint だけ。
+- `show-in-box` で、欄をコアメニューと同じ真ん中の箱の入力の行にできる（picker が使う。[finder.md](finder.md)）。一覧は `set-rows` で渡し、右の欄は `set-preview` で渡す。ファイルを渡せば、コアが読んで構文の色を付ける。キーの流れは、下に出す欄と変わらない。
 
 ### 文字を打つ欄のない一覧（choices）
 

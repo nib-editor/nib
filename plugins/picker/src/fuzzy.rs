@@ -1,5 +1,19 @@
 //! Scores how well a query matches a path, for sorting candidates.
 
+/// The char indices of `text` that `query`'s chars match, as `score`
+/// takes them: each at its first place after the one before.
+pub fn positions(query: &str, text: &str) -> Vec<usize> {
+    let mut found = Vec::new();
+    let mut chars = text.chars().enumerate();
+    for wanted in query.chars().flat_map(char::to_lowercase) {
+        match chars.find(|(_, c)| c.to_lowercase().eq(std::iter::once(wanted))) {
+            Some((i, _)) => found.push(i),
+            None => break,
+        }
+    }
+    found
+}
+
 /// The score of `path` for `query`, or `None` if the query's chars do not
 /// all appear in order. Case is ignored. Matches at the start of a path
 /// segment or a word, runs of chars, and matches in the file name score

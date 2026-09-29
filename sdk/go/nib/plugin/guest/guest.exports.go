@@ -6,7 +6,7 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// Exports represents the caller-defined exports from "nib:plugin/guest@0.7.1".
+// Exports represents the caller-defined exports from "nib:plugin/guest@0.7.2".
 var Exports struct {
 	// Init represents the caller-defined, exported function "init".
 	//

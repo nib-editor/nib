@@ -14,15 +14,26 @@ fn editor() -> Editor {
     let mut editor = Editor::default();
     editor.load_plugin(&plugin_dir("helix")).unwrap();
     editor.load_plugin(&plugin_dir("picker")).unwrap();
-    editor.resize(60, 16);
+    editor.resize(80, 20);
     editor
 }
 
-/// Opens the picker and waits for its list.
+/// Opens the picker and waits for its list: the count after the query
+/// ends with "…" while files are still coming.
 fn open_picker(editor: &mut Editor) {
     type_keys(editor, " f");
     let deadline = Instant::now() + Duration::from_secs(20);
-    while shows(editor, "listing") {
+    let listing = |editor: &Editor| {
+        screen(editor).iter().any(|row| {
+            row.contains("files> ")
+                && row
+                    .trim_end()
+                    .trim_end_matches('│')
+                    .trim_end()
+                    .ends_with('…')
+        })
+    };
+    while listing(editor) {
         assert!(Instant::now() < deadline, "no file list within 20 seconds");
         editor.run_background();
         thread::sleep(Duration::from_millis(10));
@@ -39,14 +50,13 @@ fn picks_a_file_by_fuzzy_name() {
     open_picker(&mut editor);
     assert!(shows(&editor, "files> "));
     type_keys(&mut editor, "cargotoml");
-    // Above the prompt, the best match first.
+    // Under the query, past the line between, the best match first.
     let rows = screen(&editor);
-    let prompt = rows
-        .iter()
-        .position(|row| row.starts_with("files> "))
-        .unwrap();
-    let first = rows[..prompt].iter().find(|row| !row.trim().is_empty());
-    assert_eq!(first.map(|row| row.trim()), Some("Cargo.toml"), "{rows:#?}");
+    let prompt = rows.iter().position(|row| row.contains("files> ")).unwrap();
+    assert!(
+        rows[prompt + 2].trim_start().starts_with("│ Cargo.toml "),
+        "{rows:#?}"
+    );
     type_keys(&mut editor, "<ret>");
     let path = editor.buffer().path().unwrap().to_path_buf();
     assert!(path.ends_with("Cargo.toml"), "{path:?}");

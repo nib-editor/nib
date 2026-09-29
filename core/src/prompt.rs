@@ -7,7 +7,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::input::{KeyCode, KeyEvent};
 use crate::plugin::PluginId;
-use crate::ui::{Panel, Span};
+use crate::ui::{Panel, Span, StyledLine};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Action {
@@ -31,6 +31,30 @@ pub(crate) struct Prompt {
     pub cursor: usize,
     /// Shown after the text, such as "3/10".
     pub hint: String,
+    /// Shown as the input of a box in the middle, not above the status
+    /// line.
+    pub boxed: Option<PromptBox>,
+}
+
+/// What the box of a prompt shows under and beside it (docs/finder.md).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PromptBox {
+    pub title: String,
+    pub rows: Vec<StyledLine>,
+    pub selected: Option<usize>,
+    pub preview: Preview,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) enum Preview {
+    #[default]
+    None,
+    Lines(Vec<StyledLine>),
+    /// A file, read into the editor's `preview`, and a line to mark.
+    File {
+        path: std::path::PathBuf,
+        line: Option<usize>,
+    },
 }
 
 /// A list without a line to type into, such as completions: keys the base
@@ -58,6 +82,7 @@ impl Prompt {
             text: String::new(),
             cursor: 0,
             hint: String::new(),
+            boxed: None,
         }
     }
 

@@ -1,4 +1,4 @@
-package nib:plugin@0.7.1;
+package nib:plugin@0.7.2;
 
 interface types {
     /// A UTF-8 byte offset into a buffer.
@@ -471,6 +471,8 @@ interface ui {
 /// The plugin that opens one owns it and hears what happens to it through
 /// events; the base in use decides what each key does to it.
 interface prompt {
+    use types.{styled-line};
+
     /// What a key can ask of a prompt's owner, besides editing the text.
     enum action {
         /// Take the text, as Enter does.
@@ -505,7 +507,30 @@ interface prompt {
         set-label: func(label: string);
         /// Shown at the right end, such as "3/10".
         set-hint: func(hint: string);
+        /// Shows it as the input of a box in the middle of the screen, as
+        /// the core menu, titled `title`, with the rows of `set-rows` under
+        /// it and `set-preview` beside them (docs/finder.md). Without it,
+        /// it is drawn above the status line.
+        show-in-box: func(title: string);
+        /// The rows under the input in the box, and the one selected. A
+        /// window of rows around the selected one is enough: the box shows
+        /// as many as fit, with the selected one among them.
+        set-rows: func(rows: list<styled-line>, selected: option<u32>);
+        /// What the box shows beside the rows.
+        set-preview: func(preview: preview);
     }
+
+    variant preview {
+        none,
+        /// Lines of text, such as a command's description.
+        lines(list<styled-line>),
+        /// The start of a file, colored as its language; or, with `line`,
+        /// the lines around that one, which is marked. The core reads the
+        /// file, and the plugin never sees it.
+        file(file-preview),
+    }
+
+    record file-preview { path: string, line: option<u64> }
 
     /// A list shown without a line to type into, such as completions, which
     /// its owner draws. While it is the newest one open and no prompt is,

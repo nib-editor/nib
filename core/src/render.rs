@@ -31,7 +31,10 @@ impl Editor {
         if let Some(y) = status_row {
             self.render_status(grid, y);
         }
-        // Over everything, and with the cursor in its input line.
+        // Over the text, and with the cursor in its input line.
+        if let Some(box_cursor) = self.render_prompt_box(grid) {
+            cursor = Some(box_cursor);
+        }
         if let Some(menu_cursor) = self.render_menu(grid) {
             cursor = Some(menu_cursor);
         }
@@ -48,7 +51,12 @@ impl Editor {
     fn render_panels(&self, grid: &mut Grid, top: u16, end: u16) -> Option<Cursor> {
         let mut cursor = None;
         let mut y = top;
-        let prompt = self.state().prompts.last().map(Prompt::panel);
+        let prompt = self
+            .state()
+            .prompts
+            .last()
+            .filter(|p| p.boxed.is_none())
+            .map(Prompt::panel);
         for panel in self.state().panels.iter().chain(&prompt) {
             for (i, line) in panel.lines.iter().enumerate() {
                 if y >= end {

@@ -17,7 +17,7 @@ use crate::history::UndoMode;
 use crate::input::{KeyCode, KeyEvent};
 use crate::layout;
 use crate::process::Stream;
-use crate::prompt::{Action, Choices, Prompt};
+use crate::prompt::{Action, Choices, Preview, Prompt, PromptBox};
 use crate::selection::{Range, Selection};
 use crate::syntax::{self as trees, NodeInfo};
 use crate::ui::{Panel, Popup, PopupAnchor, Side, Span, StatusItem, StyledLine};
@@ -1311,6 +1311,51 @@ impl wit_prompt::HostLine for PluginData {
 
     fn set_hint(&mut self, prompt: Resource<PromptHandle>, hint: String) -> HostResult<()> {
         self.prompt(&prompt)?.hint = hint;
+        Ok(())
+    }
+
+    fn show_in_box(&mut self, prompt: Resource<PromptHandle>, title: String) -> HostResult<()> {
+        let prompt = self.prompt(&prompt)?;
+        let boxed = prompt.boxed.get_or_insert_with(PromptBox::default);
+        boxed.title = title;
+        Ok(())
+    }
+
+    fn set_rows(
+        &mut self,
+        prompt: Resource<PromptHandle>,
+        rows: Vec<Vec<wit::Span>>,
+        selected: Option<u32>,
+    ) -> HostResult<()> {
+        if let Some(boxed) = &mut self.prompt(&prompt)?.boxed {
+            boxed.rows = rows.into_iter().map(styled_line).collect();
+            boxed.selected = selected.map(|s| s as usize);
+        }
+        Ok(())
+    }
+
+    fn set_preview(
+        &mut self,
+        prompt: Resource<PromptHandle>,
+        preview: wit_prompt::Preview,
+    ) -> HostResult<()> {
+        let preview = match preview {
+            wit_prompt::Preview::None => Preview::None,
+            wit_prompt::Preview::Lines(lines) => {
+                Preview::Lines(lines.into_iter().map(styled_line).collect())
+            }
+            wit_prompt::Preview::File(file) => {
+                let path = std::env::current_dir().unwrap_or_default().join(file.path);
+                self.state()?.load_preview(&path);
+                Preview::File {
+                    path,
+                    line: file.line.map(|l| l as usize),
+                }
+            }
+        };
+        if let Some(boxed) = &mut self.prompt(&prompt)?.boxed {
+            boxed.preview = preview;
+        }
         Ok(())
     }
 

@@ -3,12 +3,12 @@
 //! narrowed by what is typed. The core draws it and takes its keys itself,
 //! so it works when the base does not.
 
+use crate::boxed::{Content, Frame, Input, Side, width as text_width};
 use crate::editor::{Editor, Menu};
-use crate::grid::{Cursor, CursorShape, Grid, Style, display_width, graphemes};
+use crate::grid::{Cursor, Grid, display_width, graphemes};
 use crate::input::{KeyCode, KeyEvent};
 use crate::plugin::{PluginId, PluginInfo};
-use crate::render::put_clipped;
-use crate::ui::{Span, StyledLine, Theme};
+use crate::ui::{Span, StyledLine};
 
 /// Something to choose in one of the menu's lists.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -81,58 +81,6 @@ enum PluginAction {
 struct Row {
     item: Item,
     name: String,
-}
-
-/// Where the box goes: its corner and size, and the width of the list
-/// inside it, with the details beside the list when there is room.
-struct Frame {
-    x: u16,
-    y: u16,
-    width: u16,
-    height: u16,
-    /// Columns of the list, between the left border and the divider.
-    list: u16,
-    split: bool,
-}
-
-impl Frame {
-    fn new(width: u16, height: u16) -> Option<Frame> {
-        let fit = |size: u16, small: u16, part: u16, most: u16| {
-            if size < small {
-                size
-            } else {
-                (size * part / 10).clamp(small, most)
-            }
-        };
-        let w = fit(width, 44, 9, 120);
-        let h = fit(height, 12, 8, 30);
-        if w < 10 || h < 4 {
-            return None;
-        }
-        let inner = w - 2;
-        let split = w >= 72;
-        Some(Frame {
-            x: (width - w) / 2,
-            y: (height - h) / 2,
-            width: w,
-            height: h,
-            list: if split { inner * 45 / 100 } else { inner },
-            split,
-        })
-    }
-
-    /// Rows for the list and the details, below the input line.
-    fn body_rows(&self) -> u16 {
-        self.height - 4
-    }
-
-    fn right(&self) -> u16 {
-        self.x + self.width - 1
-    }
-
-    fn divider(&self) -> u16 {
-        self.x + 1 + self.list
-    }
 }
 
 impl Editor {
@@ -452,166 +400,106 @@ impl Editor {
     /// its input line.
     pub(crate) fn render_menu(&self, grid: &mut Grid) -> Option<Cursor> {
         let menu = self.menu()?;
-        let frame = Frame::new(grid.width(), grid.height())?;
-        let theme = &self.state().theme;
-        let base = theme.style("ui.menu").unwrap_or_default();
-        let dim = base.patch(theme.style("ui.window").unwrap_or_default());
-        self.draw_frame(grid, &frame, menu, base, dim);
-
-        // The input line: what narrows a list, a source to add, or the
-        // question to answer.
-        let (label, input) = match menu {
-            Menu::Main | Menu::Plugin(_) | Menu::ChooseBase => ("> ", true),
-            Menu::AddPlugin => ("add: ", true),
-            _ => ("", false),
-        };
-        let y = frame.y + 1;
-        let end = frame.right() - 1;
-        let mut at = put_clipped(grid, frame.x + 2, y, label, dim, end);
-        if input {
-            at = put_clipped(grid, at, y, &self.state().menu_input, base, end);
-        } else {
-            let title = base.patch(theme.style("ui.popup.title").unwrap_or_default());
-            put_clipped(grid, at, y, &self.question(menu), title, end);
-        }
-        let cursor = input.then_some(Cursor {
-            x: at.min(end),
-            y,
-            shape: CursorShape::Bar,
+        let side_width = Frame::new(grid.width(), grid.height()).map_or(0, |frame| {
+            let side_x = match frame.split {
+                true => frame.divider() + 2,
+                false => frame.x + 2,
+            };
+            usize::from((frame.right() - 1).saturating_sub(side_x))
         });
-
-        let details_x = if frame.split {
-            frame.divider() + 2
-        } else {
-            frame.x + 2
-        };
-        let details_width = end.saturating_sub(details_x) as usize;
-        let details = match menu {
-            Menu::Main | Menu::Plugin(_) | Menu::ChooseBase => {
-                let shown = self.shown(menu);
-                let total = self.rows(menu).len();
-                let count = format!("{}/{total}", shown.len());
-                let x = end.saturating_sub(text_width(&count) as u16);
-                if x > at + 1 {
-                    put_clipped(grid, x, y, &count, dim, end);
-                }
-                self.draw_list(grid, &frame, &shown, theme, base);
-                if !frame.split {
-                    return cursor;
-                }
-                let cursor_row = shown
-                    .get(self.state().menu_cursor)
-                    .map(|(row, _)| &row.item);
-                match cursor_row {
-                    Some(item) => self.item_details(item, details_width),
-                    None => Vec::new(),
-                }
-            }
-            Menu::AddPlugin => text_lines(
-                "Type what to install, then Enter:\n\
-                 - a name from `nib plugin search`\n\
-                 - owner/repo, or owner/repo@tag, on GitHub\n\
-                 - the URL of a .nib.tar.gz\n\
-                 - the path of a .nib.tar.gz",
-                details_width,
-            ),
-            Menu::ConfirmQuit => {
-                let mut lines = text_lines("Not saved:", details_width);
-                for buffer in self.state().buffers.iter().filter(|b| b.is_modified()) {
-                    lines.push(vec![span(&format!("  {}", buffer.name()), "")]);
-                }
-                lines
-            }
-            Menu::ConfirmRemove(id) | Menu::ConfirmUpdate(id) => {
-                self.plugin_details(id, details_width)
-            }
-            Menu::ConfirmInstall => match self.pending_install() {
-                Some(pending) => {
-                    let can = match pending.capabilities() {
-                        [] => "nothing beyond the editor".to_string(),
-                        can => can.join(", "),
-                    };
-                    field("can", &can, "", details_width)
-                }
-                None => Vec::new(),
-            },
-        };
-        let first = frame.y + 3;
-        for (i, line) in details.iter().take(frame.body_rows() as usize).enumerate() {
-            put_spans(grid, theme, details_x, first + i as u16, line, base, end);
-        }
-        cursor
-    }
-
-    fn draw_frame(&self, grid: &mut Grid, frame: &Frame, menu: Menu, base: Style, dim: Style) {
-        let Frame { x, y, .. } = *frame;
-        let right = frame.right();
-        let bottom = y + frame.height - 1;
-        for row in y..=bottom {
-            let mut at = x;
-            while at <= right {
-                at = grid.put_grapheme(at, row, " ", base);
-            }
-            grid.put_grapheme(x, row, "│", dim);
-            grid.put_grapheme(right, row, "│", dim);
-        }
-        let lists = matches!(menu, Menu::Main | Menu::Plugin(_) | Menu::ChooseBase);
-        let divider = (lists && frame.split).then(|| frame.divider());
-        for (row, left, middle, end) in [
-            (y, "╭", "─", "╮"),
-            (y + 2, "├", if divider.is_some() { "┬" } else { "─" }, "┤"),
-            (bottom, "╰", if divider.is_some() { "┴" } else { "─" }, "╯"),
-        ] {
-            grid.put_grapheme(x, row, left, dim);
-            for at in x + 1..right {
-                let line = if Some(at) == divider { middle } else { "─" };
-                grid.put_grapheme(at, row, line, dim);
-            }
-            grid.put_grapheme(right, row, end, dim);
-        }
-        if let Some(divider) = divider {
-            for row in y + 3..bottom {
-                grid.put_grapheme(divider, row, "│", dim);
-            }
-        }
         let title = match menu {
             Menu::Plugin(id) | Menu::ConfirmRemove(id) | Menu::ConfirmUpdate(id) => {
-                format!(" nib › {} ", self.plugins()[id].name)
+                format!("nib › {}", self.plugins()[id].name)
             }
-            Menu::ChooseBase => " Choose a base ".into(),
-            Menu::AddPlugin | Menu::ConfirmInstall => " nib › add a plugin ".into(),
-            Menu::Main | Menu::ConfirmQuit => " nib ".into(),
+            Menu::ChooseBase => "Choose a base".into(),
+            Menu::AddPlugin | Menu::ConfirmInstall => "nib › add a plugin".into(),
+            Menu::Main | Menu::ConfirmQuit => "nib".into(),
         };
-        let bold = base.patch(
-            self.state()
-                .theme
-                .style("ui.popup.title")
-                .unwrap_or_default(),
-        );
-        put_clipped(grid, x + 2, y, &title, bold, right - 1);
         let keys = match menu {
             Menu::Main | Menu::Plugin(_) => " ↑↓ move · enter choose · esc back ",
             Menu::ChooseBase => " ↑↓ move · enter choose · esc keep the one in use ",
             Menu::AddPlugin => " enter fetch · esc back ",
             _ => " y yes · any other key back ",
         };
-        put_clipped(grid, x + 2, bottom, keys, dim, right - 1);
+        let line = |label: &str| Input::Line {
+            label: label.into(),
+            text: self.state().menu_input.clone(),
+            cursor: self.state().menu_input.len(),
+        };
+        let (input, count, rows, side) = match menu {
+            Menu::Main | Menu::Plugin(_) | Menu::ChooseBase => {
+                let shown = self.shown(menu);
+                let count = format!("{}/{}", shown.len(), self.rows(menu).len());
+                let cursor = self.state().menu_cursor;
+                let side = match shown.get(cursor) {
+                    Some((row, _)) => self.item_details(&row.item, side_width),
+                    None => Vec::new(),
+                };
+                let rows = self.list_rows(&shown);
+                (line("> "), count, Some((rows, Some(cursor))), side)
+            }
+            Menu::AddPlugin => {
+                let help = text_lines(
+                    "Type what to install, then Enter:\n\
+                     - a name from `nib plugin search`\n\
+                     - owner/repo, or owner/repo@tag, on GitHub\n\
+                     - the URL of a .nib.tar.gz\n\
+                     - the path of a .nib.tar.gz",
+                    side_width,
+                );
+                (line("add: "), String::new(), None, help)
+            }
+            Menu::ConfirmQuit => {
+                let mut lines = text_lines("Not saved:", side_width);
+                for buffer in self.state().buffers.iter().filter(|b| b.is_modified()) {
+                    lines.push(vec![span(&format!("  {}", buffer.name()), "")]);
+                }
+                (
+                    Input::Question(self.question(menu)),
+                    String::new(),
+                    None,
+                    lines,
+                )
+            }
+            Menu::ConfirmRemove(id) | Menu::ConfirmUpdate(id) => (
+                Input::Question(self.question(menu)),
+                String::new(),
+                None,
+                self.plugin_details(id, side_width),
+            ),
+            Menu::ConfirmInstall => {
+                let can = match self.pending_install() {
+                    Some(pending) => match pending.capabilities() {
+                        [] => field("can", "nothing beyond the editor", "", side_width),
+                        can => field("can", &can.join(", "), "", side_width),
+                    },
+                    None => Vec::new(),
+                };
+                (
+                    Input::Question(self.question(menu)),
+                    String::new(),
+                    None,
+                    can,
+                )
+            }
+        };
+        let content = Content {
+            title,
+            input,
+            count,
+            rows: rows
+                .as_ref()
+                .map(|(rows, selected)| (rows.as_slice(), *selected)),
+            side: Side::Lines(side),
+            keys,
+        };
+        self.draw_box(grid, &content)
     }
 
-    fn draw_list(
-        &self,
-        grid: &mut Grid,
-        frame: &Frame,
-        shown: &[(Row, Vec<usize>)],
-        theme: &Theme,
-        base: Style,
-    ) {
+    /// The rows of a list as the box shows them: plugins with their version
+    /// and state, and the chars that matched in the match color.
+    fn list_rows(&self, shown: &[(Row, Vec<usize>)]) -> Vec<StyledLine> {
         let plugins = self.plugins();
-        let rows = frame.body_rows() as usize;
-        let cursor = self.state().menu_cursor;
-        let top = cursor.saturating_sub(rows.saturating_sub(1));
-        let left = frame.x + 1;
-        let end = left + frame.list;
         let names = shown
             .iter()
             .filter(|(row, _)| matches!(row.item, Item::Plugin(_) | Item::Base(_)))
@@ -625,43 +513,31 @@ impl Editor {
             .max()
             .unwrap_or(0)
             .min(10);
-        let selected = base.patch(theme.style("ui.menu.selected").unwrap_or_default());
         let in_use = self.base_in_use();
-        for (i, (row, matched)) in shown.iter().enumerate().skip(top).take(rows) {
-            let y = frame.y + 3 + (i - top) as u16;
-            let style = if i == cursor { selected } else { base };
-            let mut at = left;
-            while at < end {
-                at = grid.put_grapheme(at, y, " ", style);
-            }
-            let mut line = highlighted(&row.name, matched);
-            match &row.item {
-                Item::Plugin(id) => {
-                    let plugin = &plugins[*id];
-                    let (state, look) = self.plugin_state(plugin);
-                    pad(&mut line, names);
-                    line.push(span(
-                        &format!("  {:<versions$}  ", plugin.version),
-                        "ui.window",
-                    ));
-                    line.push(span(&state, look));
+        shown
+            .iter()
+            .map(|(row, matched)| {
+                let mut line = highlighted(&row.name, matched);
+                match &row.item {
+                    Item::Plugin(id) => {
+                        let plugin = &plugins[*id];
+                        let (state, look) = self.plugin_state(plugin);
+                        pad(&mut line, names);
+                        line.push(span(
+                            &format!("  {:<versions$}  ", plugin.version),
+                            "ui.window",
+                        ));
+                        line.push(span(&state, look));
+                    }
+                    Item::Base(id) if Some(plugins[*id].name.as_str()) == in_use => {
+                        pad(&mut line, names);
+                        line.push(span("  in use", "ui.window"));
+                    }
+                    _ => {}
                 }
-                Item::Base(id) if Some(plugins[*id].name.as_str()) == in_use => {
-                    pad(&mut line, names);
-                    line.push(span("  in use", "ui.window"));
-                }
-                _ => {}
-            }
-            put_spans(
-                grid,
-                theme,
-                left + 1,
-                y,
-                &line,
-                style,
-                end.saturating_sub(1),
-            );
-        }
+                line
+            })
+            .collect()
     }
 
     /// The question a confirmation asks.
@@ -908,34 +784,10 @@ fn wrap(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
-/// Columns `text` takes on screen.
-fn text_width(text: &str) -> usize {
-    graphemes(text).map(|g| display_width(g) as usize).sum()
-}
-
 fn span(text: &str, style: &str) -> Span {
     Span {
         text: text.into(),
         style: style.into(),
-    }
-}
-
-/// Puts spans from `x`, each styled by the theme over `base`, stopping
-/// before column `end`.
-fn put_spans(
-    grid: &mut Grid,
-    theme: &Theme,
-    mut x: u16,
-    y: u16,
-    line: &[Span],
-    base: Style,
-    end: u16,
-) {
-    for span in line {
-        let style = theme
-            .style(&span.style)
-            .map_or(base, |style| base.patch(style));
-        x = put_clipped(grid, x, y, &span.text, style, end);
     }
 }
 
@@ -956,16 +808,5 @@ mod tests {
         assert_eq!(wrap("a bb ccc", 4), ["a bb", "ccc"]);
         assert_eq!(wrap("abcdef", 4), ["abcd", "ef"]);
         assert_eq!(wrap("a\nb", 4), ["a", "b"]);
-    }
-
-    #[test]
-    fn the_box_takes_most_of_the_screen_and_leaves_out_details_when_narrow() {
-        let wide = Frame::new(100, 40).unwrap();
-        assert_eq!((wide.width, wide.height, wide.x, wide.y), (90, 30, 5, 5));
-        assert!(wide.split);
-        let narrow = Frame::new(50, 10).unwrap();
-        assert_eq!((narrow.width, narrow.height), (45, 10));
-        assert!(!narrow.split);
-        assert!(Frame::new(8, 3).is_none());
     }
 }

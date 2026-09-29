@@ -18,7 +18,7 @@ expect.screen = ["files> ", "src/main.rs"]
 
 [[test.step]]
 keys = "smain"
-expect.screen = ["files> smain"]
+expect.screen = ["files> smain", "│ src/main.rs", "│ fn main() {}"]
 
 [[test.step]]
 keys = "<ret>"
@@ -44,10 +44,15 @@ file = "notes.md"
 
 [[test.step]]
 keys = "<space>?"
-expect.screen = ["commands> ", "buffer.save", "Save the current buffer"]
+expect.screen = ["commands> ", "│ buffer.save"]
+
+# The one chosen, and all of what it does, beside the list.
+[[test.step]]
+keys = "bufsave"
+expect.screen = ["commands> bufsave", "Save the current buffer, or as"]
 
 [[test.step]]
-keys = "coremenu<ret>"
+keys = "<backspace><backspace><backspace><backspace><backspace><backspace><backspace>coremenu<ret>"
 expect.screen = ["╭─ nib ─", "Restart all plugins"]
 
 [[test]]

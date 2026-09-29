@@ -88,6 +88,9 @@ pub(crate) struct State {
     /// Each plugin's `settings.example.toml`, by name, for the template of
     /// its settings file.
     pub settings_examples: BTreeMap<String, String>,
+    /// The file a prompt's box shows last, kept while the same one is
+    /// asked for.
+    pub(crate) preview: Option<crate::preview::LoadedFile>,
     /// A file there was saved, or config.reload called: the editor reads
     /// the settings again after the call.
     pub reload_config: bool,
@@ -491,8 +494,10 @@ impl State {
     /// Rows left for text above the panels and the status line.
     pub fn text_area_rows(&self) -> u16 {
         let status = u16::from(self.height > 1);
-        let panels: usize = self.panels.iter().map(|p| p.lines.len()).sum::<usize>()
-            + usize::from(!self.prompts.is_empty());
+        // A prompt in a box is over the text, not below it.
+        let prompt = self.prompts.last().is_some_and(|p| p.boxed.is_none());
+        let panels: usize =
+            self.panels.iter().map(|p| p.lines.len()).sum::<usize>() + usize::from(prompt);
         self.height
             .saturating_sub(status)
             .saturating_sub(panels.min(u16::MAX as usize) as u16)
@@ -1131,6 +1136,7 @@ impl Default for Editor {
                 menu_cursor: 0,
                 config_dir: None,
                 settings_examples: BTreeMap::new(),
+                preview: None,
                 reload_config: false,
                 menu_input: String::new(),
                 hidden_views: HashMap::new(),

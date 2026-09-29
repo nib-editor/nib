@@ -109,7 +109,7 @@ The base (the keymap in use) says what mode it is in with `input.set-mode(name, 
 
 ### Prompts
 
-A line to type into, such as a picker's query: `prompt.line(label)` opens one, drawn above the status line with `label` in front, and dropping it closes it. While it is the newest one open, keys go to the base in use (helix, by default), which edits the text its own way; you hear about it through events, only to you: `prompt-changed` with the text and cursor, and `prompt-action` for what a key asked, such as `accept` (Enter), `cancel` (Escape), `next` / `previous` (Down / Up), `page-next` / `page-previous` (PageDown / PageUp), and `complete` / `complete-back` (Tab / Shift-Tab). Closing it on `accept` or `cancel` is yours to do. Lists of candidates are yours to draw, in a panel.
+A line to type into, such as a picker's query: `prompt.line(label)` opens one, drawn above the status line with `label` in front, and dropping it closes it. While it is the newest one open, keys go to the base in use (helix, by default), which edits the text its own way; you hear about it through events, only to you: `prompt-changed` with the text and cursor, and `prompt-action` for what a key asked, such as `accept` (Enter), `cancel` (Escape), `next` / `previous` (Down / Up), `page-next` / `page-previous` (PageDown / PageUp), and `complete` / `complete-back` (Tab / Shift-Tab). Closing it on `accept` or `cancel` is yours to do. Lists of candidates are yours to draw, in a panel; or call `show-in-box(title)` to make the line the input of a box in the middle of the screen, as the picker does, and give it rows with `set-rows` (a window around the selected one is enough) and what to show beside them with `set-preview`: lines, or a file path, which nib reads and colors itself.
 
 For a list without a line to type into, such as completions, open `prompt.choices(actions)` with the actions it takes (`next`, `previous`, `accept`) and draw it yourself. Keys go on as usual; the base turns its own keys for those actions into `prompt-action` events for you, and any other key is handled as usual and sends you `cancel` first, as the list no longer fits.
 
@@ -274,7 +274,7 @@ To make it findable by name, add it to [nib-editor/plugins](https://github.com/n
 crate-type = ["cdylib"]
 
 [dependencies]
-nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.7.1" }
+nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.7.2" }
 ```
 
 Implement `nib_plugin::exports::nib::plugin::guest::Guest` and export it with `nib_plugin::export!(YourType)`. The API is under `nib_plugin::nib::plugin::<interface>`. Build for `wasm32-wasip2`; `nib plugin build` does it.
@@ -285,4 +285,4 @@ Built with [TinyGo](https://tinygo.org/) 0.42 or later, since Go itself cannot m
 
 ### Versions
 
-SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.7.1`, `sdk/go/v0.7.1`.
+SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.7.2`, `sdk/go/v0.7.2`.

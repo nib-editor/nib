@@ -6,52 +6,52 @@ import (
 	"github.com/nib-editor/nib/sdk/go/nib/plugin/types"
 )
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.7.1".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.7.2".
 
-//go:wasmimport nib:plugin/ui@0.7.1 [resource-drop]panel
+//go:wasmimport nib:plugin/ui@0.7.2 [resource-drop]panel
 //go:noescape
 func wasmimport_PanelResourceDrop(self0 uint32)
 
-//go:wasmimport nib:plugin/ui@0.7.1 [constructor]panel
+//go:wasmimport nib:plugin/ui@0.7.2 [constructor]panel
 //go:noescape
 func wasmimport_NewPanel(lines0 *StyledLine, lines1 uint32) (result0 uint32)
 
-//go:wasmimport nib:plugin/ui@0.7.1 [method]panel.set-cursor
+//go:wasmimport nib:plugin/ui@0.7.2 [method]panel.set-cursor
 //go:noescape
 func wasmimport_PanelSetCursor(self0 uint32, cursor0 uint32, cursor1 uint32, cursor2 uint32)
 
-//go:wasmimport nib:plugin/ui@0.7.1 [method]panel.update
+//go:wasmimport nib:plugin/ui@0.7.2 [method]panel.update
 //go:noescape
 func wasmimport_PanelUpdate(self0 uint32, lines0 *StyledLine, lines1 uint32)
 
-//go:wasmimport nib:plugin/ui@0.7.1 [resource-drop]popup
+//go:wasmimport nib:plugin/ui@0.7.2 [resource-drop]popup
 //go:noescape
 func wasmimport_PopupResourceDrop(self0 uint32)
 
-//go:wasmimport nib:plugin/ui@0.7.1 [constructor]popup
+//go:wasmimport nib:plugin/ui@0.7.2 [constructor]popup
 //go:noescape
 func wasmimport_NewPopup(anchor0 uint32, anchor1 uint64, lines0 *StyledLine, lines1 uint32) (result0 uint32)
 
-//go:wasmimport nib:plugin/ui@0.7.1 [method]popup.update
+//go:wasmimport nib:plugin/ui@0.7.2 [method]popup.update
 //go:noescape
 func wasmimport_PopupUpdate(self0 uint32, lines0 *StyledLine, lines1 uint32)
 
-//go:wasmimport nib:plugin/ui@0.7.1 set-status
+//go:wasmimport nib:plugin/ui@0.7.2 set-status
 //go:noescape
 func wasmimport_SetStatus(id0 *uint8, id1 uint32, side0 uint32, priority0 uint32, content0 *types.Span, content1 uint32)
 
-//go:wasmimport nib:plugin/ui@0.7.1 remove-status
+//go:wasmimport nib:plugin/ui@0.7.2 remove-status
 //go:noescape
 func wasmimport_RemoveStatus(id0 *uint8, id1 uint32)
 
-//go:wasmimport nib:plugin/ui@0.7.1 show-message
+//go:wasmimport nib:plugin/ui@0.7.2 show-message
 //go:noescape
 func wasmimport_ShowMessage(text0 *uint8, text1 uint32)
 
-//go:wasmimport nib:plugin/ui@0.7.1 set-decorations
+//go:wasmimport nib:plugin/ui@0.7.2 set-decorations
 //go:noescape
 func wasmimport_SetDecorations(buf0 uint32, namespace0 *uint8, namespace1 uint32, decorations0 *Decoration, decorations1 uint32)
 
-//go:wasmimport nib:plugin/ui@0.7.1 set-notes
+//go:wasmimport nib:plugin/ui@0.7.2 set-notes
 //go:noescape
 func wasmimport_SetNotes(buf0 uint32, namespace0 *uint8, namespace1 uint32, notes0 *Note, notes1 uint32)

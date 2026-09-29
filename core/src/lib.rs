@@ -1,6 +1,7 @@
 //! Core of the nib editor: buffers, selections, rendering, and the plugin host.
 
 mod background;
+mod boxed;
 pub mod buffer;
 pub mod change;
 mod clipboard;
@@ -17,6 +18,7 @@ mod layout;
 pub mod marks;
 mod menu;
 mod plugin;
+mod preview;
 mod process;
 mod prompt;
 mod render;
