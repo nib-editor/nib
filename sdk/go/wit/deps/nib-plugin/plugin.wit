@@ -1,4 +1,4 @@
-package nib:plugin@0.7.2;
+package nib:plugin@0.7.3;
 
 interface types {
     /// A UTF-8 byte offset into a buffer.
@@ -217,6 +217,12 @@ interface editor {
     reload-config: func();
     /// Opens the core menu.
     open-menu: func();
+
+    record date-time { year: u32, month: u8, day: u8, hour: u8, minute: u8 }
+
+    /// A time, in seconds since 1970, in the time zone nib runs in, which
+    /// a plugin cannot know: UTC on Windows.
+    local-time: func(seconds: u64) -> date-time;
 }
 
 interface input {
@@ -300,6 +306,17 @@ interface files {
         directory: bool,
         /// In bytes; 0 for a directory.
         size: u64,
+        /// The Unix permission bits, such as 0o755; none elsewhere.
+        mode: option<u32>,
+        /// When it last changed, in seconds since 1970.
+        modified: option<u64>,
+    }
+
+    record walk-options {
+        /// Hidden files and directories too.
+        hidden: bool,
+        /// What .gitignore and the like leave out too.
+        ignored: bool,
     }
 
     /// What `dir` holds, hidden files too, sorted by name: one level, not
@@ -310,6 +327,11 @@ interface files {
     /// `files-listed` events, relative to `dir` and with `/` between names.
     /// Returns the job's id.
     walk: func(dir: option<string>) -> result<u64, string>;
+    /// As `walk`, with hidden files and ignored ones when asked.
+    walk-with: func(dir: option<string>, options: walk-options) -> result<u64, string>;
+    /// Makes a directory, and those above it that are missing. Needs the
+    /// "fs-write" capability.
+    make-dir: func(path: string) -> result<_, string>;
     /// Stops a job; nothing more arrives from it.
     cancel: func(id: u64);
 }

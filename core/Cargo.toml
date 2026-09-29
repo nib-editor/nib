@@ -34,6 +34,11 @@ tree-sitter = { version = "0.27", features = ["wasm"] }
 # Lists files for plugins the way ripgrep does, honoring .gitignore.
 ignore = "0.4"
 
+# The local time zone, for plugins' times (localtime_r); already in the tree
+# through wasmtime.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 # Its own main: started with --fake-lsp, the test binary acts as the
 # language server the tests talk to.
 [[test]]

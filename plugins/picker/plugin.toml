@@ -1,11 +1,14 @@
 name = "picker"
-version = "0.2.0"
-description = "Finds files and commands by typing part of their names."
+version = "0.3.0"
+description = "Finds files and commands by typing part of their names, and lists directories as netrw or dired."
 api = "0.7"
-# Lists the files of the working directory.
-capabilities = ["fs-read"]
+# Lists files, and makes directories from a directory's listing.
+capabilities = ["fs-read", "fs-write"]
+# To forget the listings closed from outside it.
+events = ["buffer-closed"]
 
-# Under the base's leader: Space f and Space ? in helix.
+# Under the base's leader: Space f, Space e, and Space ? in helix and vim.
 [keys]
 f = "picker.files"
+e = "picker.all-files"
 "?" = "picker.commands"

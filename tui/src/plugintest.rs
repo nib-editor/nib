@@ -274,9 +274,21 @@ fn run_case(setup: &Setup, case: &Case) -> Result<(), Vec<String>> {
     editor.set_plugin_data_dir(Some(setup.work.with_extension("data")));
     editor.resize(SIZE.0, SIZE.1);
     let mut config = Config::default();
-    // A base under test is the one in use.
+    // A base under test is the one in use, or else the first base `with`
+    // names, such as vim for a plugin tested with vim's keys.
+    let named_base = || {
+        setup.with?.iter().find(|name| {
+            builtin::PLUGINS.iter().any(|(n, manifest, _)| {
+                n == name
+                    && toml::from_str::<toml::Table>(manifest)
+                        .is_ok_and(|m| m.get("base").and_then(toml::Value::as_bool) == Some(true))
+            })
+        })
+    };
     if read_manifest(setup.dir).is_ok_and(|manifest| manifest.base) {
         config.core.base = setup.name.to_string();
+    } else if let Some(base) = named_base() {
+        config.core.base = base.clone();
     }
     if let Some(table) = setup.settings {
         let plugin = PluginConfig {

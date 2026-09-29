@@ -378,6 +378,8 @@ pub(crate) struct PluginData {
     can_spawn: bool,
     /// It may list files: "fs-read" or "fs-write".
     can_read_files: bool,
+    /// It may make directories: "fs-write".
+    can_write_files: bool,
     can_use_clipboard: bool,
     /// It is a base, so it may say what mode it is in.
     is_base: bool,
@@ -1256,6 +1258,7 @@ fn start_in(plugins: &mut Plugins, state: &mut Option<State>, id: PluginId) -> R
             .capabilities
             .iter()
             .any(|c| c == "fs-read" || c == "fs-write"),
+        can_write_files: plugin.capabilities.iter().any(|c| c == "fs-write"),
         can_use_clipboard: plugin.capabilities.iter().any(|c| c == "clipboard"),
         is_base: plugin.base,
         clock: CallClock {

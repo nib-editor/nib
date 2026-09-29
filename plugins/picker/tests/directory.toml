@@ -1,0 +1,83 @@
+# Directory listings (docs/files.md), netrw's way with the vim base and
+# dired's with helix. Run with
+# `nib plugin test target/plugins/picker plugins/picker/tests/directory.toml`
+# after `cargo xtask build-plugins`; tui/tests/plugin_test.rs does.
+#
+# Each test runs in a directory of its own, holding the test's file and
+# `files`, so the listings show only those.
+
+with = ["vim"]
+
+[[test]]
+name = "netrw: the file's directory, Enter goes in and opens, - goes up"
+file = "notes.md"
+text = "notes\n"
+files = { "src/main.rs" = "fn main() {}\n", "a.txt" = "a\n" }
+
+# Directories first, with the cursor on the file shown before.
+[[test.step]]
+command = "picker.directory"
+expect.screen = ["\" nib directory listing", "../", "src/", "a.txt", "notes.md"]
+
+[[test.step]]
+keys = "kk<ret>"
+expect.screen = ["../", "main.rs"]
+expect.absent = ["a.txt"]
+
+# Up again, with the cursor on the directory left.
+[[test.step]]
+keys = "-<ret>"
+expect.screen = ["main.rs"]
+
+[[test.step]]
+keys = "<ret>"
+expect.text = "fn main() {}\n"
+
+[[test]]
+name = "netrw: % opens a new file, d makes a directory, q closes"
+file = "notes.md"
+text = "notes\n"
+
+[[test.step]]
+command = "picker.directory"
+
+[[test.step]]
+keys = "dmade<ret>"
+expect.screen = ["made/", "notes.md"]
+
+# Saved, the new file is there, in the directory made for it.
+[[test.step]]
+keys = "%deep/new.txt<ret>ihi<esc>:w<ret>"
+expect.text = "hi"
+
+[[test.step]]
+command = "picker.directory"
+expect.screen = ["\"   ", "new.txt"]
+
+[[test.step]]
+keys = "q"
+expect.text = "hi"
+expect.absent = ["nib directory listing"]
+
+[[test]]
+name = "a listing is read-only"
+file = "notes.md"
+text = "notes\n"
+
+[[test.step]]
+command = "picker.directory"
+
+[[test.step]]
+keys = "x"
+expect.screen = ["notes.md"]
+
+[[test]]
+name = "the settings choose dired's way over the base's"
+file = "notes.md"
+text = "notes\n"
+settings = { directory-style = "dired" }
+
+[[test.step]]
+command = "picker.directory"
+expect.screen = ["./", "../", "  notes.md"]
+expect.absent = ["nib directory listing"]

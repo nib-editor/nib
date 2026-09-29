@@ -6,24 +6,28 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.7.2".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.7.3".
 
-//go:wasmimport nib:plugin/editor@0.7.2 working-directory
+//go:wasmimport nib:plugin/editor@0.7.3 working-directory
 //go:noescape
 func wasmimport_WorkingDirectory(result *string)
 
-//go:wasmimport nib:plugin/editor@0.7.2 quit
+//go:wasmimport nib:plugin/editor@0.7.3 quit
 //go:noescape
 func wasmimport_Quit(force0 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport nib:plugin/editor@0.7.2 open-config
+//go:wasmimport nib:plugin/editor@0.7.3 open-config
 //go:noescape
 func wasmimport_OpenConfig(plugin0 uint32, plugin1 *uint8, plugin2 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport nib:plugin/editor@0.7.2 reload-config
+//go:wasmimport nib:plugin/editor@0.7.3 reload-config
 //go:noescape
 func wasmimport_ReloadConfig()
 
-//go:wasmimport nib:plugin/editor@0.7.2 open-menu
+//go:wasmimport nib:plugin/editor@0.7.3 open-menu
 //go:noescape
 func wasmimport_OpenMenu()
+
+//go:wasmimport nib:plugin/editor@0.7.3 local-time
+//go:noescape
+func wasmimport_LocalTime(seconds0 uint64, result *DateTime)

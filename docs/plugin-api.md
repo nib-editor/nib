@@ -416,7 +416,8 @@ interface files {
 }
 ```
 
-- `list` は、ファイルの一覧（files プラグイン、[files.md](files.md)）のためのもの。1 段だけなので、呼び出しの中で待って返す。`directory` はリンクの先で決める。
+- `list` は、ディレクトリの一覧（picker の `picker.directory`、[files.md](files.md)）のためのもの。1 段だけなので、呼び出しの中で待って返す。`directory` はリンクの先で決める。権限（`mode`）と更新の日時（`modified`）も返す。日時を地域の時刻にするのは `editor.local-time`（WASI からは時間帯が分からないため）。
+- `walk-with` は、隠しファイルと ignore されたものも含めて数える（`picker.all-files`）。`.git` の中は数えない。`make-dir` は `fs-write` の権限でディレクトリを作る。
 - `walk` は `.gitignore`（と `.ignore`、git の除外設定）を守り、隠しファイルは数えない。ripgrep と同じ `ignore` クレートを使う。
 - 結果は `files-listed(id, paths, done)` のイベントで、1,000 件ずつ届く。`paths` は `dir` からの相対パスで、区切りは `/`。最後の 1 回は `done` が真。
 - イベントは、一覧を頼んだプラグインにだけ届く。

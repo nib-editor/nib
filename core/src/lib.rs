@@ -25,6 +25,7 @@ mod render;
 pub mod search;
 pub mod selection;
 mod syntax;
+mod time;
 pub mod ui;
 pub mod updates;
 pub mod view;

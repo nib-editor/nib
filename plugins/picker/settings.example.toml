@@ -1,0 +1,4 @@
+# How picker.directory lists a directory, as `nib <dir>` and :config-dir
+# open it: "netrw" or "dired". Without it, netrw with the vim base and dired
+# with the others.
+# directory-style = "dired"

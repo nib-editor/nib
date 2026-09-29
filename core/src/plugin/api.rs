@@ -11,6 +11,7 @@ use crate::buffer::Buffer;
 use crate::config::Indent;
 use crate::editor::{CORE_COMMANDS, ScrollAmount, State, Toward};
 use crate::events::{Command, Event, Mode, Timer};
+use crate::files::WalkOptions;
 use crate::grapheme;
 use crate::grid::CursorShape;
 use crate::history::UndoMode;
@@ -125,6 +126,17 @@ impl PluginData {
 impl wit::Host for PluginData {}
 
 impl editor::Host for PluginData {
+    fn local_time(&mut self, seconds: u64) -> HostResult<editor::DateTime> {
+        let time = crate::time::local(seconds);
+        Ok(editor::DateTime {
+            year: time.year,
+            month: time.month,
+            day: time.day,
+            hour: time.hour,
+            minute: time.minute,
+        })
+    }
+
     fn working_directory(&mut self) -> HostResult<String> {
         let dir = std::env::current_dir().unwrap_or_default();
         Ok(dir.to_string_lossy().into_owned())
@@ -914,9 +926,16 @@ impl files::Host for PluginData {
                 // Through links, so a link to a directory can be entered.
                 let metadata = std::fs::metadata(entry.path()).ok();
                 let directory = metadata.as_ref().is_some_and(|m| m.is_dir());
+                let modified = metadata
+                    .as_ref()
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs());
                 files::DirEntry {
                     name: entry.file_name().to_string_lossy().into_owned(),
                     directory,
+                    mode: metadata.as_ref().and_then(unix_mode),
+                    modified,
                     size: metadata.filter(|_| !directory).map_or(0, |m| m.len()),
                 }
             })
@@ -926,15 +945,28 @@ impl files::Host for PluginData {
     }
 
     fn walk(&mut self, dir: Option<String>) -> HostResult<Result<u64, String>> {
-        if !self.can_read_files {
-            return Ok(Err("listing files needs the \"fs-read\" capability".into()));
-        }
-        let dir = match dir {
-            Some(dir) => dir.into(),
-            None => std::env::current_dir().unwrap_or_default(),
+        self.start_walk(dir, WalkOptions::default())
+    }
+
+    fn walk_with(
+        &mut self,
+        dir: Option<String>,
+        options: files::WalkOptions,
+    ) -> HostResult<Result<u64, String>> {
+        let options = WalkOptions {
+            hidden: options.hidden,
+            ignored: options.ignored,
         };
-        let owner = self.plugin;
-        Ok(self.state()?.files.list(owner, dir).map(u64::from))
+        self.start_walk(dir, options)
+    }
+
+    fn make_dir(&mut self, path: String) -> HostResult<Result<(), String>> {
+        if !self.can_write_files {
+            return Ok(Err(
+                "making directories needs the \"fs-write\" capability".into()
+            ));
+        }
+        Ok(std::fs::create_dir_all(&path).map_err(|err| format!("{path}: {err}")))
     }
 
     fn cancel(&mut self, id: u64) -> HostResult<()> {
@@ -1552,6 +1584,37 @@ fn wit_mode(mode: &Mode) -> input::Mode {
         name: mode.name.clone(),
         typing: mode.typing,
     }
+}
+
+impl PluginData {
+    /// Starts listing the files under `dir`, or the working directory.
+    fn start_walk(
+        &mut self,
+        dir: Option<String>,
+        options: WalkOptions,
+    ) -> HostResult<Result<u64, String>> {
+        if !self.can_read_files {
+            return Ok(Err("listing files needs the \"fs-read\" capability".into()));
+        }
+        let dir = match dir {
+            Some(dir) => dir.into(),
+            None => std::env::current_dir().unwrap_or_default(),
+        };
+        let owner = self.plugin;
+        Ok(self.state()?.files.list(owner, dir, options).map(u64::from))
+    }
+}
+
+/// A file's Unix permission bits, with the kind of file above them.
+#[cfg(unix)]
+fn unix_mode(metadata: &std::fs::Metadata) -> Option<u32> {
+    use std::os::unix::fs::PermissionsExt;
+    Some(metadata.permissions().mode())
+}
+
+#[cfg(not(unix))]
+fn unix_mode(_metadata: &std::fs::Metadata) -> Option<u32> {
+    None
 }
 
 impl PluginData {

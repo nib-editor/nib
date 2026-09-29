@@ -668,7 +668,7 @@ fn settings_files_start_from_their_plugins_examples() {
     let mut config = Config::default();
     config.core.base = "vim".into();
     editor.apply_config(config);
-    for name in ["vim", "files"] {
+    for name in ["vim", "picker"] {
         editor.load_plugin(&plugin_dir(name)).unwrap();
     }
     editor.resize(80, 20);
@@ -683,7 +683,7 @@ fn settings_files_start_from_their_plugins_examples() {
     assert!(editor.buffer().is_modified(), "not saved until saved");
     assert!(!dir.join("plugins").exists());
 
-    // The settings directory, listed by files.
+    // The settings directory, listed by the picker.
     editor.call_command("config.open-directory", "").unwrap();
     assert_eq!(
         editor.buffer().name(),

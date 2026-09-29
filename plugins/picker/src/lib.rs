@@ -1,11 +1,14 @@
-//! Fuzzy pickers, in a box in the middle of the screen (docs/finder.md):
-//! `picker.files` lists the files of the working directory, or of
-//! `{"path": dir}`, with the core's `files.walk`, which honors .gitignore,
-//! shows the chosen one beside the list, and opens it; `picker.commands`
-//! lists every command with its description and runs the chosen one. The
-//! query is a prompt: the base in use decides what keys do to it, and the
-//! picker hears the result.
+//! Ways to open files and run commands (docs/files.md, docs/finder.md).
+//! Fuzzy pickers, in a box in the middle of the screen: `picker.files`
+//! lists the files of the working directory, or of `{"path": dir}`, with
+//! the core's `files.walk`, which honors .gitignore, shows the chosen one
+//! beside the list, and opens it; `picker.all-files` lists hidden and
+//! ignored ones too; `picker.commands` lists every command with its
+//! description and runs the chosen one. The query is a prompt: the base in
+//! use decides what keys do to it, and the picker hears the result. And
+//! `picker.directory` lists a directory in a buffer, as netrw or dired.
 
+mod directory;
 mod fuzzy;
 
 use std::cell::RefCell;
@@ -13,6 +16,7 @@ use std::cmp::Reverse;
 
 use nib_plugin::exports::nib::plugin::guest::{Guest, KeyResult};
 use nib_plugin::nib::plugin::events::Event;
+use nib_plugin::nib::plugin::files::WalkOptions;
 use nib_plugin::nib::plugin::prompt::{Action, FilePreview, Line, Preview};
 use nib_plugin::nib::plugin::types::{KeyEvent, Span};
 use nib_plugin::nib::plugin::ui;
@@ -28,6 +32,8 @@ const SORT_ALL: usize = 20_000;
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Kind {
     Files,
+    /// Hidden files and ignored ones too.
+    AllFiles,
     Commands,
 }
 
@@ -35,6 +41,7 @@ impl Kind {
     fn prompt(self) -> &'static str {
         match self {
             Kind::Files => "files> ",
+            Kind::AllFiles => "all files> ",
             Kind::Commands => "commands> ",
         }
     }
@@ -42,6 +49,7 @@ impl Kind {
     fn title(self) -> &'static str {
         match self {
             Kind::Files => "files",
+            Kind::AllFiles => "all files",
             Kind::Commands => "commands",
         }
     }
@@ -78,9 +86,21 @@ thread_local! {
 struct Plugin;
 
 impl Guest for Plugin {
-    fn init(_config: String) -> Result<(), String> {
+    fn init(config: String) -> Result<(), String> {
+        let config: serde_json::Value =
+            serde_json::from_str(&config).map_err(|err| err.to_string())?;
+        let style = config["directory-style"]
+            .as_str()
+            .map(directory::Style::parse)
+            .transpose()?;
+        directory::STYLE.set(style);
         commands::register("files", "Pick a file to open");
+        commands::register(
+            "all-files",
+            "Pick a file to open, hidden and ignored ones too",
+        );
         commands::register("commands", "Pick a command to run");
+        directory::register();
         Ok(())
     }
 
@@ -93,8 +113,12 @@ impl Guest for Plugin {
     }
 
     fn run_command(name: String, args: String) -> Result<String, String> {
+        if let Some(done) = directory::run(&name, &args) {
+            return done.map(|()| "null".into());
+        }
         let kind = match name.as_str() {
             "files" => Kind::Files,
+            "all-files" => Kind::AllFiles,
             "commands" => Kind::Commands,
             _ => return Err(format!("no command {name}")),
         };
@@ -107,6 +131,18 @@ impl Guest for Plugin {
     }
 
     fn on_event(ev: Event) {
+        match &ev {
+            Event::BufferClosed(closed) if closed.path.is_none() => {
+                return directory::closed(&closed.name);
+            }
+            Event::PromptChanged(change)
+                if directory::prompt_changed(change.id, change.text.clone()) =>
+            {
+                return;
+            }
+            Event::PromptAction(act) if directory::prompt_action(act.id, act.action) => return,
+            _ => {}
+        }
         let chosen = PICKER.with_borrow_mut(|picker| {
             let open = picker.as_mut()?;
             match ev {
@@ -151,7 +187,7 @@ impl Guest for Plugin {
         // open a picker again.
         if let Some((kind, text)) = chosen {
             let done = match kind {
-                Kind::Files => open_file(&text),
+                Kind::Files | Kind::AllFiles => open_file(&text),
                 Kind::Commands => run(&text),
             };
             if let Err(err) = done {
@@ -166,8 +202,16 @@ fn open(kind: Kind, dir: Option<String>) -> Result<(), String> {
         if picker.is_some() {
             return Ok(());
         }
+        let everything = WalkOptions {
+            hidden: true,
+            ignored: true,
+        };
         let (items, listing) = match kind {
             Kind::Files => (Vec::new(), Some(files::walk(dir.as_deref())?)),
+            Kind::AllFiles => (
+                Vec::new(),
+                Some(files::walk_with(dir.as_deref(), everything)?),
+            ),
             Kind::Commands => {
                 let mut items: Vec<Item> = commands::all()
                     .into_iter()
@@ -207,7 +251,12 @@ fn open_file(path: &str) -> Result<(), String> {
 fn run(name: &str) -> Result<(), String> {
     match name {
         "picker.files" => open(Kind::Files, None),
+        "picker.all-files" => open(Kind::AllFiles, None),
         "picker.commands" => open(Kind::Commands, None),
+        own if own.starts_with("picker.") => {
+            let short = &own["picker.".len()..];
+            directory::run(short, "").unwrap_or_else(|| Err(format!("no command {own}")))
+        }
         _ => commands::call(name, "{}").map(|_| ()),
     }
 }
@@ -323,7 +372,7 @@ impl Picker {
         let preview = match self.matches.get(self.selected) {
             None => Preview::None,
             Some(&(_, i)) => match self.kind {
-                Kind::Files => Preview::File(FilePreview {
+                Kind::Files | Kind::AllFiles => Preview::File(FilePreview {
                     path: self.chosen().unwrap_or_default(),
                     line: None,
                 }),

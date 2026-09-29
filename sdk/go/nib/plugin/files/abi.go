@@ -16,3 +16,9 @@ func lower_OptionString(v cm.Option[string]) (f0 uint32, f1 *uint8, f2 uint32) {
 	}
 	return
 }
+
+func lower_WalkOptions(v WalkOptions) (f0 uint32, f1 uint32) {
+	f0 = (uint32)(cm.BoolToU32(v.Hidden))
+	f1 = (uint32)(cm.BoolToU32(v.Ignored))
+	return
+}

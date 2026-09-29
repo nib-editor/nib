@@ -88,3 +88,19 @@ expect.absent = ["a.txt"]
 [[test.step]]
 keys = "deep<ret>"
 expect.text = "deep\n"
+
+[[test]]
+name = "Space e picks hidden and ignored files too, which Space f leaves out"
+file = "notes.md"
+files = { ".gitignore" = "built.txt\n", "built.txt" = "", ".secret" = "", "plain.txt" = "" }
+
+[[test.step]]
+keys = "<space>f"
+wait = 5000
+expect.screen = ["files> ", "plain.txt"]
+expect.absent = ["built.txt", ".secret"]
+
+[[test.step]]
+keys = "<esc><space>e"
+wait = 5000
+expect.screen = ["all files> ", "plain.txt", "built.txt", ".secret", ".gitignore"]

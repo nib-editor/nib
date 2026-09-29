@@ -34,7 +34,12 @@ impl FileJobs {
     }
 
     /// Starts listing the files under `dir`, and returns the job's id.
-    pub fn list(&mut self, owner: PluginId, dir: PathBuf) -> Result<u32, String> {
+    pub fn list(
+        &mut self,
+        owner: PluginId,
+        dir: PathBuf,
+        options: WalkOptions,
+    ) -> Result<u32, String> {
         if !dir.is_dir() {
             return Err(format!("{}: not a directory", dir.display()));
         }
@@ -44,7 +49,7 @@ impl FileJobs {
         let (inbox, stop) = (self.inbox.clone(), cancelled.clone());
         thread::Builder::new()
             .name(format!("nib-files-{id}"))
-            .spawn(move || walk(id, &dir, &inbox, &stop))
+            .spawn(move || walk(id, &dir, options, &inbox, &stop))
             .map_err(|err| err.to_string())?;
         self.jobs.push(Job {
             id,
@@ -85,10 +90,24 @@ impl FileJobs {
     }
 }
 
-fn walk(id: u32, dir: &Path, inbox: &Inbox, cancelled: &AtomicBool) {
+/// What a walk leaves in that it leaves out by default.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct WalkOptions {
+    pub hidden: bool,
+    pub ignored: bool,
+}
+
+fn walk(id: u32, dir: &Path, options: WalkOptions, inbox: &Inbox, cancelled: &AtomicBool) {
     let walker = ignore::WalkBuilder::new(dir)
         // .gitignore counts outside a repository too, as the docs say.
         .require_git(false)
+        .hidden(!options.hidden)
+        .ignore(!options.ignored)
+        .git_ignore(!options.ignored)
+        .git_global(!options.ignored)
+        .git_exclude(!options.ignored)
+        // Git's own files are never what is looked for.
+        .filter_entry(|entry| entry.file_name() != ".git")
         .build();
     let mut paths = Vec::new();
     for entry in walker.flatten() {
@@ -135,23 +154,37 @@ mod tests {
         fs::write(dir.join("target/out"), "").unwrap();
         fs::write(dir.join(".hidden"), "").unwrap();
 
-        let inbox = Inbox::default();
-        walk(7, &dir, &inbox, &AtomicBool::new(false));
-        let mut listed = Vec::new();
-        let messages = inbox.take();
-        for message in &messages {
-            let Message::Files { job, paths, .. } = message else {
-                panic!("{message:?}");
-            };
-            assert_eq!(*job, 7);
-            listed.extend(paths.iter().cloned());
-        }
-        assert!(matches!(
-            messages.last(),
-            Some(Message::Files { done: true, .. })
-        ));
-        listed.sort();
-        assert_eq!(listed, ["b.txt", "src/a.rs"]);
+        let listed = |options| {
+            let inbox = Inbox::default();
+            walk(7, &dir, options, &inbox, &AtomicBool::new(false));
+            let mut listed = Vec::new();
+            let messages = inbox.take();
+            for message in &messages {
+                let Message::Files { job, paths, .. } = message else {
+                    panic!("{message:?}");
+                };
+                assert_eq!(*job, 7);
+                listed.extend(paths.iter().cloned());
+            }
+            assert!(matches!(
+                messages.last(),
+                Some(Message::Files { done: true, .. })
+            ));
+            listed.sort();
+            listed
+        };
+        assert_eq!(listed(WalkOptions::default()), ["b.txt", "src/a.rs"]);
+        // All of them when asked, but for git's own files.
+        fs::create_dir_all(dir.join(".git")).unwrap();
+        fs::write(dir.join(".git/HEAD"), "").unwrap();
+        let all = WalkOptions {
+            hidden: true,
+            ignored: true,
+        };
+        assert_eq!(
+            listed(all),
+            [".gitignore", ".hidden", "b.txt", "src/a.rs", "target/out"]
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 }

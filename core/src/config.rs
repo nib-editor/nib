@@ -53,7 +53,7 @@ impl Default for Settings {
             scroll_margin: 5,
             base: "helix".into(),
             menu_key: None,
-            open_directory: "files.open".into(),
+            open_directory: "picker.directory".into(),
             plugin_timeout: Duration::from_secs(1),
             plugin_init_timeout: Duration::from_secs(5),
             plugin_memory: 256 << 20,
@@ -464,8 +464,8 @@ pub const CONFIG_TEMPLATE: &str = r##"# nib's settings. Every line is optional; 
 # base has its own (C-g for helix), and this replaces it.
 # menu-key = "C-g"
 # A directory given to nib runs this command with {"path": "<dir>"}:
-# "files.open" lists it, and "picker.files" picks a file under it.
-# open-directory = "files.open"
+# "picker.directory" lists it, and "picker.files" picks a file under it.
+# open-directory = "picker.directory"
 # Limits for every plugin; plugins/<name>.toml can set its own.
 # plugin-timeout-ms = 1000
 # plugin-init-timeout-ms = 5000

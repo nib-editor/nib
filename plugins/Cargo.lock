@@ -104,7 +104,7 @@ dependencies = [
 
 [[package]]
 name = "nib-plugin"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "wit-bindgen",
 ]
@@ -114,14 +114,6 @@ name = "nib-plugin-emacs"
 version = "0.1.0"
 dependencies = [
  "nib-base-kit",
- "nib-plugin",
- "serde_json",
-]
-
-[[package]]
-name = "nib-plugin-files"
-version = "0.1.0"
-dependencies = [
  "nib-plugin",
  "serde_json",
 ]
@@ -162,7 +154,7 @@ dependencies = [
 
 [[package]]
 name = "nib-plugin-picker"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "nib-plugin",
  "serde_json",

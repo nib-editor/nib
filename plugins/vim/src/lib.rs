@@ -211,7 +211,7 @@ fn vim_keeps(key: &KeyEvent, leader: &KeyEvent) -> bool {
         return true;
     }
     match (plain(key), ctrl(key), key.code) {
-        (Some(c), ..) => "hjklwWbBeE0123456789^$gG/?nN*#:fFtT;,%{}HMLvVy\"'`mz".contains(c),
+        (Some(c), ..) => "hjklwWbBeE0123456789^$gG/?nN*#:fFtT;,{}HMLvVy\"'`mz".contains(c),
         (_, Some(c), _) => "wdufbeyoiv[c".contains(c),
         (None, None, code) => matches!(
             code,

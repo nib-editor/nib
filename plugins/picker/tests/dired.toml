@@ -1,0 +1,42 @@
+# Directory listings as dired's, the way with helix (docs/files.md). Run
+# with `nib plugin test target/plugins/picker plugins/picker/tests/dired.toml`
+# after `cargo xtask build-plugins`; tui/tests/plugin_test.rs does.
+
+with = ["helix"]
+
+[[test]]
+name = "dired: ls -l's columns, Enter goes in and opens, ^ goes up"
+file = "notes.md"
+text = "notes\n"
+files = { "src/main.rs" = "fn main() {}\n", "a.txt" = "a\n" }
+
+[[test.step]]
+command = "picker.directory"
+expect.screen = [":", "  ./", "  ../", "  src/", "  a.txt", "  notes.md", "-rw-", "drwx"]
+
+# The cursor is on the file shown before; src/ is two lines up.
+[[test.step]]
+keys = "kk<ret>"
+expect.screen = ["  main.rs"]
+expect.absent = ["  a.txt"]
+
+[[test.step]]
+keys = "^"
+expect.screen = ["  a.txt"]
+
+[[test]]
+name = "dired: + makes a directory, q closes"
+file = "notes.md"
+text = "notes\n"
+
+[[test.step]]
+command = "picker.directory"
+
+[[test.step]]
+keys = "+made<ret>"
+expect.screen = ["  made/", "  notes.md"]
+
+[[test.step]]
+keys = "q"
+expect.text = "notes\n"
+expect.absent = ["  made/"]

@@ -6,7 +6,6 @@ nano
 vim
 emacs
 picker
-files
 lsp
 indent
 bash

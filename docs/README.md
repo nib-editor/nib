@@ -10,7 +10,7 @@
 | [api-0.6.md](api-0.6.md) | プラグイン API 0.6 の改革: コアの操作とイベントを型に、interface の分け直し、足したもの。1.0 で固めるときの決まり |
 | [plugin-buffers.md](plugin-buffers.md) | プラグインが中身を持つバッファ（magit や dired のようなもの）: 作る、書く、そのバッファでだけ効くキーと、ベースごとの譲り方 |
 | [core-menu.md](core-menu.md) | コアメニュー: 真ん中の箱、絞り込み、プラグインと操作の一覧、詳しい中身 |
-| [files.md](files.md) | ファイルの一覧（files プラグイン）、`nib <ディレクトリ>` と `open-directory`、設定のファイルの雛形 |
+| [files.md](files.md) | ファイルを開く道具（picker）、ディレクトリの一覧（netrw 風と dired 風）、`nib <ディレクトリ>` と `open-directory`、設定のファイルの雛形 |
 | [finder.md](finder.md) | 真ん中の箱で選ぶ: picker の見た目、ファイルのプレビュー、大きなディレクトリでの重さ |
 | [keymap.md](keymap.md) | モーダルの扱い、キーマップをプラグインで実現するしくみ |
 | [nano.md](nano.md) | nano ベースのキーと、nano との違い |
