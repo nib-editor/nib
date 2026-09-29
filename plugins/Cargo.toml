@@ -6,6 +6,7 @@ resolver = "3"
 members = [
     "base-kit",
     "emacs",
+    "files",
     "helix",
     "indent",
     "lsp",

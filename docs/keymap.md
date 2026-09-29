@@ -168,6 +168,7 @@ M1 のあとに回すもの:
 - `Space` で始まるキーを足す。`Space` を押すと、ほかの前置きキーと同じく候補を右下に出す。
   - `Space` は helix のリーダー（[base.md](base.md) の「リーダー」）。helix 自身が持つのは `Space w`、`Space y`、`Space p`、`Space P` だけで、ほかはプラグインの `plugin.toml` の `[keys]` から来る。押したときに `input.leader-keys()` で読み、候補にはコマンドの説明を出す。ぶつかって負けたキーは、候補の最後に「taken」として出す。
   - `Space f`: ファイル選択（`picker.files`、picker の `[keys]`）
+  - `Space e`: ディレクトリの一覧（`files.open`、files の `[keys]`。[files.md](files.md)）
   - `Space ?`: コマンドの一覧（`picker.commands`、picker の `[keys]`）。名前と説明で絞り込み、選んだものを引数なしで呼ぶ。Helix の command palette と同じ位置。
 
 ファイル選択そのものは、`picker` プラグインが入力スタックに層を積んで受け持つ。ファイルの一覧は、コアの `files.walk` で得る（M4.4 までは git / rg で得ていた）。

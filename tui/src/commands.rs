@@ -6,13 +6,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use nib_core::Config;
+use nib_core::{Config, SETTINGS_EXAMPLE};
 
 use crate::builtin;
 use crate::install::{self, Outcome, Store};
 use crate::settings::{self, Source};
 
-pub const USAGE: &str = "usage: nib [--plugin DIR]... [FILE]...
+pub const USAGE: &str = "usage: nib [--plugin DIR]... [FILE or DIR]...
        nib --version                   show nib's version
        nib config [edit]               open config.toml in nib
        nib config path                 show where the settings are
@@ -229,18 +229,25 @@ fn show_paths(dir: &Path) {
     }
 }
 
-/// Writes the templates that do not exist yet, never overwriting a file.
+/// Writes the templates that do not exist yet, never overwriting a file:
+/// config.toml and the settings of the base in use.
 fn init(dir: &Path) -> Result<(), String> {
     let plugins = dir.join("plugins");
     fs::create_dir_all(&plugins).map_err(|err| format!("{}: {err}", plugins.display()))?;
+    let base = Config::load(dir)?.core.base;
+    let example = builtin::PLUGINS
+        .iter()
+        .find(|(name, _, _)| *name == base)
+        .and_then(|(_, _, files)| files.iter().find(|(path, _)| *path == SETTINGS_EXAMPLE))
+        .map(|(_, bytes)| String::from_utf8_lossy(bytes).into_owned());
     let files = [
         (
             dir.join("config.toml"),
             nib_core::CONFIG_TEMPLATE.to_string(),
         ),
         (
-            plugins.join("helix.toml"),
-            nib_core::plugin_template("helix"),
+            plugins.join(format!("{base}.toml")),
+            nib_core::plugin_template(&base, example.as_deref()),
         ),
     ];
     for (path, template) in files {

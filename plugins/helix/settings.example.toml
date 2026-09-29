@@ -1,0 +1,11 @@
+# Keys over the built-in ones, written as in Helix's [keys.*]. The right
+# side is a helix command, a nib command such as "buffer.save", or a table
+# for keys that follow.
+# [settings.keys.normal]
+# "C-s" = "buffer.save"
+# g = { a = "goto_last_accessed_file" }
+#
+# [settings.keys.insert]
+# j = { k = "normal_mode" }
+#
+# [settings.keys.select]

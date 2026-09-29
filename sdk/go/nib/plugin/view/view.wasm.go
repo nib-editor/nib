@@ -7,80 +7,80 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.7.0".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.7.1".
 
-//go:wasmimport nib:plugin/view@0.7.0 [resource-drop]view
+//go:wasmimport nib:plugin/view@0.7.1 [resource-drop]view
 //go:noescape
 func wasmimport_ViewResourceDrop(self0 uint32)
 
-//go:wasmimport nib:plugin/view@0.7.0 [method]view.apply
+//go:wasmimport nib:plugin/view@0.7.1 [method]view.apply
 //go:noescape
 func wasmimport_ViewApply(self0 uint32, baseVersion0 uint64, edits0 *Edit, edits1 uint32, after0 uint32, after1 *types.SelRange, after2 uint32, after3 uint32, undo0 uint32, result *cm.Result[Error, struct{}, Error])
 
-//go:wasmimport nib:plugin/view@0.7.0 [method]view.buffer
+//go:wasmimport nib:plugin/view@0.7.1 [method]view.buffer
 //go:noescape
 func wasmimport_ViewBuffer(self0 uint32) (result0 uint32)
 
-//go:wasmimport nib:plugin/view@0.7.0 [method]view.move-vertically
+//go:wasmimport nib:plugin/view@0.7.1 [method]view.move-vertically
 //go:noescape
 func wasmimport_ViewMoveVertically(self0 uint32, pos0 uint64, lines0 uint32, column0 uint32, column1 uint32, result *cm.Result[TupleOffsetU32Shape, cm.Tuple[Offset, uint32], Error])
 
-//go:wasmimport nib:plugin/view@0.7.0 [method]view.redo
+//go:wasmimport nib:plugin/view@0.7.1 [method]view.redo
 //go:noescape
 func wasmimport_ViewRedo(self0 uint32, result *cm.Option[Range])
 
-//go:wasmimport nib:plugin/view@0.7.0 [method]view.scroll
+//go:wasmimport nib:plugin/view@0.7.1 [method]view.scroll
 //go:noescape
 func wasmimport_ViewScroll(self0 uint32, amount0 uint32, amount1 uint32) (result0 uint32)
 
-//go:wasmimport nib:plugin/view@0.7.0 [method]view.selection
+//go:wasmimport nib:plugin/view@0.7.1 [method]view.selection
 //go:noescape
 func wasmimport_ViewSelection(self0 uint32, result *Selection)
 
-//go:wasmimport nib:plugin/view@0.7.0 [method]view.set-cursor-shape
+//go:wasmimport nib:plugin/view@0.7.1 [method]view.set-cursor-shape
 //go:noescape
 func wasmimport_ViewSetCursorShape(self0 uint32, shape0 uint32)
 
-//go:wasmimport nib:plugin/view@0.7.0 [method]view.set-selection
+//go:wasmimport nib:plugin/view@0.7.1 [method]view.set-selection
 //go:noescape
 func wasmimport_ViewSetSelection(self0 uint32, sel0 *types.SelRange, sel1 uint32, sel2 uint32, result *cm.Result[Error, struct{}, Error])
 
-//go:wasmimport nib:plugin/view@0.7.0 [method]view.show
+//go:wasmimport nib:plugin/view@0.7.1 [method]view.show
 //go:noescape
 func wasmimport_ViewShow(self0 uint32, buf0 uint32)
 
-//go:wasmimport nib:plugin/view@0.7.0 [method]view.show-next
+//go:wasmimport nib:plugin/view@0.7.1 [method]view.show-next
 //go:noescape
 func wasmimport_ViewShowNext(self0 uint32)
 
-//go:wasmimport nib:plugin/view@0.7.0 [method]view.show-previous
+//go:wasmimport nib:plugin/view@0.7.1 [method]view.show-previous
 //go:noescape
 func wasmimport_ViewShowPrevious(self0 uint32)
 
-//go:wasmimport nib:plugin/view@0.7.0 [method]view.undo
+//go:wasmimport nib:plugin/view@0.7.1 [method]view.undo
 //go:noescape
 func wasmimport_ViewUndo(self0 uint32, result *cm.Option[Range])
 
-//go:wasmimport nib:plugin/view@0.7.0 [method]view.visible-range
+//go:wasmimport nib:plugin/view@0.7.1 [method]view.visible-range
 //go:noescape
 func wasmimport_ViewVisibleRange(self0 uint32, result *Range)
 
-//go:wasmimport nib:plugin/view@0.7.0 active
+//go:wasmimport nib:plugin/view@0.7.1 active
 //go:noescape
 func wasmimport_Active() (result0 uint32)
 
-//go:wasmimport nib:plugin/view@0.7.0 split
+//go:wasmimport nib:plugin/view@0.7.1 split
 //go:noescape
 func wasmimport_Split(direction0 uint32)
 
-//go:wasmimport nib:plugin/view@0.7.0 close
+//go:wasmimport nib:plugin/view@0.7.1 close
 //go:noescape
 func wasmimport_Close(result *cm.Result[string, struct{}, string])
 
-//go:wasmimport nib:plugin/view@0.7.0 only
+//go:wasmimport nib:plugin/view@0.7.1 only
 //go:noescape
 func wasmimport_Only()
 
-//go:wasmimport nib:plugin/view@0.7.0 focus
+//go:wasmimport nib:plugin/view@0.7.1 focus
 //go:noescape
 func wasmimport_Focus(toward0 uint32)

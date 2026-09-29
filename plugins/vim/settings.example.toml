@@ -1,0 +1,14 @@
+# The key plugins' keys go under, as <leader> in Vim.
+# leader = "space"
+#
+# Keys over the built-in ones. The right side is a nib command, such as
+# "picker.files", or keys as a Vim mapping writes them ("<CR>", "<C-w>");
+# they do not go through other mappings, as with noremap.
+# [settings.keys.normal]
+# Y = "yy"
+# "C-s" = ":w<CR>"
+# "C-p" = "picker.files"
+#
+# [settings.keys.insert]
+#
+# [settings.keys.visual]

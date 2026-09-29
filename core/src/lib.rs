@@ -43,7 +43,7 @@ pub use history::UndoMode;
 pub use input::{KeyCode, KeyEvent, Modifiers, parse_keys};
 pub use plugin::{
     API_VERSION, INTERRUPT_KEY, Interrupter, PluginInfo, PluginManifest, PluginOptions,
-    PluginSource, plugin_name, read_manifest,
+    PluginSource, SETTINGS_EXAMPLE, plugin_name, read_manifest,
 };
 pub use process::Stream;
 pub use selection::{Range, Selection};

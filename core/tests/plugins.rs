@@ -655,6 +655,55 @@ fn settings_open_and_reload_when_saved() {
     fs::remove_dir_all(&dir).unwrap();
 }
 
+/// A settings file not made yet starts with its plugin's example, however
+/// it is opened, and the settings directory opens with open-directory's
+/// command.
+#[test]
+fn settings_files_start_from_their_plugins_examples() {
+    let dir = env::temp_dir().join(format!("nib-{}-examples", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let mut editor = Editor::default();
+    editor.set_config_dir(Some(dir.clone()));
+    let mut config = Config::default();
+    config.core.base = "vim".into();
+    editor.apply_config(config);
+    for name in ["vim", "files"] {
+        editor.load_plugin(&plugin_dir(name)).unwrap();
+    }
+    editor.resize(80, 20);
+
+    editor.open(dir.join("plugins/vim.toml")).unwrap();
+    let text = editor.buffer().text().to_string();
+    assert!(text.contains("# How nib runs the vim plugin"), "{text}");
+    assert!(
+        text.contains("[settings]\n# The key plugins' keys go under"),
+        "{text}"
+    );
+    assert!(editor.buffer().is_modified(), "not saved until saved");
+    assert!(!dir.join("plugins").exists());
+
+    // The settings directory, listed by files.
+    editor.call_command("config.open-directory", "").unwrap();
+    assert_eq!(
+        editor.buffer().name(),
+        format!("{}/", dir.display()),
+        "{:#?}",
+        screen(&editor)
+    );
+
+    // Without the command, it says which is missing.
+    let mut config = Config::default();
+    config.core.open_directory = "nothing.here".into();
+    editor.apply_config(config);
+    assert_eq!(
+        editor.open_directory(&dir),
+        Err("open-directory: no command named nothing.here".into())
+    );
+    drop(editor);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
 /// helix, copied as another base named `other` whose menu key is F10.
 fn other_base(dir: &std::path::Path) -> std::path::PathBuf {
     let other = dir.join("other");

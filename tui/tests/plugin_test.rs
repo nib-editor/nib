@@ -83,7 +83,12 @@ fn the_emacs_plugin_passes_its_tests() {
 
 #[test]
 fn the_picker_plugin_passes_its_tests() {
-    passes_its_tests("picker", "picker", 4);
+    passes_its_tests("picker", "picker", 5);
+}
+
+#[test]
+fn the_files_plugin_passes_its_tests() {
+    passes_its_tests("files", "files", 4);
 }
 
 /// Its fake language server is a Python script.

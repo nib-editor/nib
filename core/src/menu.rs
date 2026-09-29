@@ -22,6 +22,7 @@ enum Item {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EditorAction {
     OpenConfig,
+    OpenSettingsDirectory,
     ReloadSettings,
     AddPlugin,
     RestartAll,
@@ -33,6 +34,7 @@ impl EditorAction {
     fn label(self) -> &'static str {
         match self {
             Self::OpenConfig => "Open config.toml",
+            Self::OpenSettingsDirectory => "Open the settings directory",
             Self::ReloadSettings => "Reload the settings",
             Self::AddPlugin => "Add a plugin",
             Self::RestartAll => "Restart all plugins",
@@ -44,6 +46,10 @@ impl EditorAction {
     fn about(self) -> &'static str {
         match self {
             Self::OpenConfig => "Open config.toml, nib's settings. Saving it applies them.",
+            Self::OpenSettingsDirectory => {
+                "Open the directory of config.toml and of plugins/, which holds a file of \
+                 settings for each plugin."
+            }
             Self::ReloadSettings => "Read config.toml and the plugins' settings again.",
             Self::AddPlugin => {
                 "Install a plugin: by its name in the plugin list, from a GitHub \
@@ -278,6 +284,9 @@ impl Editor {
     fn do_to_editor(&mut self, action: EditorAction) {
         let result = match action {
             EditorAction::OpenConfig => self.call_command("config.open", "").map(drop),
+            EditorAction::OpenSettingsDirectory => {
+                self.call_command("config.open-directory", "").map(drop)
+            }
             EditorAction::ReloadSettings => self.call_command("config.reload", "").map(drop),
             EditorAction::AddPlugin => {
                 self.open_list(Menu::AddPlugin, 0);
@@ -364,6 +373,7 @@ impl Editor {
                     .collect();
                 let actions = [
                     EditorAction::OpenConfig,
+                    EditorAction::OpenSettingsDirectory,
                     EditorAction::ReloadSettings,
                     EditorAction::AddPlugin,
                     EditorAction::RestartAll,

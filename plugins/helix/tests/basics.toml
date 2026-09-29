@@ -62,7 +62,7 @@ text = "abc\n"
 
 [[test.step]]
 keys = ":conf"
-expect.screen = [":conf", "config-reload  Read the settings again"]
+expect.screen = [":conf", " config-reload  ", "config-dir"]
 
 [[test.step]]
 keys = "<tab><tab>"

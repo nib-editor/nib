@@ -1,0 +1,6 @@
+# Keys over the built-in ones. The right side is a nano function, as
+# nanorc's bind names it ("writeout", "exit", "whereis"), or a nib command
+# ("picker.files").
+# [settings.keys.global]
+# "C-s" = "writeout"
+# "C-q" = "exit"

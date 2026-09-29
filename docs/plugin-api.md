@@ -46,6 +46,7 @@ f = "picker.files"        # helix なら Space f
 
 - ベースは常に起動時に始まる（`load = "lazy"` は効かない）。選ばれていないベースは、止めたまま読み込み、コアメニューから切り替えられる。
 - 名前の `buffer`、`config`、`core`、`editor`、`view` はコアのコマンドと重なるので使えない。
+- マニフェストの隣に `settings.example.toml` を置くと、利用者が `plugins/<name>.toml` を開いたときの雛形の `[settings]` の下に入る。中身は、設定の例をコメントにしたもの（[files.md](files.md) の「設定のファイルを作りやすくする」）。
 
 権限をマニフェストで宣言させるのは、WASM の import だけでは権限を判定できないため。たとえば Rust の標準ライブラリを使うと、使っていなくても `wasi:filesystem` を import する。
 
@@ -183,6 +184,7 @@ interface syntax {
 | `buffer.next` / `buffer.previous` | 次 / 前のバッファを表示する |
 | `config.open` | `config.toml` を開く。`{"plugin": name}` なら `plugins/<name>.toml`。なければ既定値のコメントを書いた状態で開く |
 | `config.reload` | 設定を読み直す（設定のディレクトリのファイルを保存したときも読み直す） |
+| `config.open-directory` | 設定のディレクトリを、`[core]` の `open-directory` のコマンドで開く（[files.md](files.md)） |
 | `core.menu` | コアメニューを開く |
 | `buffer.close` | 表示中のバッファを閉じる。保存していない変更があれば断り、`{"force": true}` で捨てる |
 | `view.split` | `{"direction": "vertical" \| "horizontal"}` で分割する |
@@ -400,6 +402,9 @@ tab-width = 8
 
 ```wit
 interface files {
+    record dir-entry { name: string, directory: bool, size: u64 }
+    /// dir の中身（1 段だけ、隠しファイルも）を、名前の順に返す
+    %list: func(dir: string) -> result<list<dir-entry>, string>;
     /// dir（なければ作業ディレクトリ）の下のファイルを、裏のスレッドで数える。
     /// 結果は files-listed イベントで少しずつ届く。仕事の id を返す
     walk: func(dir: option<string>) -> result<u64, string>;
@@ -407,7 +412,8 @@ interface files {
 }
 ```
 
-- `.gitignore`（と `.ignore`、git の除外設定）を守り、隠しファイルは数えない。ripgrep と同じ `ignore` クレートを使う。
+- `list` は、ファイルの一覧（files プラグイン、[files.md](files.md)）のためのもの。1 段だけなので、呼び出しの中で待って返す。`directory` はリンクの先で決める。
+- `walk` は `.gitignore`（と `.ignore`、git の除外設定）を守り、隠しファイルは数えない。ripgrep と同じ `ignore` クレートを使う。
 - 結果は `files-listed(id, paths, done)` のイベントで、1,000 件ずつ届く。`paths` は `dir` からの相対パスで、区切りは `/`。最後の 1 回は `done` が真。
 - イベントは、一覧を頼んだプラグインにだけ届く。
 - 使うには `fs-read` の権限が要る。ファイル名から、利用者のディレクトリの中身がわかるため。

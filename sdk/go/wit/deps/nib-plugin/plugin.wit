@@ -1,4 +1,4 @@
-package nib:plugin@0.7.0;
+package nib:plugin@0.7.1;
 
 interface types {
     /// A UTF-8 byte offset into a buffer.
@@ -294,6 +294,17 @@ interface clipboard {
 /// File lists, for plugins with the "fs-read" capability. The files are
 /// counted on a background thread, so plugins never wait for them.
 interface files {
+    record dir-entry {
+        name: string,
+        /// A directory, or a link to one.
+        directory: bool,
+        /// In bytes; 0 for a directory.
+        size: u64,
+    }
+
+    /// What `dir` holds, hidden files too, sorted by name: one level, not
+    /// the files under it. Needs the "fs-read" capability.
+    %list: func(dir: string) -> result<list<dir-entry>, string>;
     /// Lists the files under `dir`, or the working directory, honoring
     /// .gitignore and leaving out hidden files. The paths arrive as
     /// `files-listed` events, relative to `dir` and with `/` between names.

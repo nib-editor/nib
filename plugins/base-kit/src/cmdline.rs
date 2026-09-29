@@ -17,6 +17,10 @@ pub const ALIASES: &[(&str, &str)] = &[
     ("open", "Open a file: open <path> (also o, e, edit)"),
     ("config", "Open config.toml, or a plugin's: config <plugin>"),
     ("config-reload", "Read the settings again"),
+    (
+        "config-dir",
+        "Open the settings directory, with its plugins/",
+    ),
 ];
 
 /// Runs `input`, the line without its `:`.
@@ -35,6 +39,7 @@ pub fn run(input: &str) -> Result<(), String> {
             editor::reload_config();
             Ok(())
         }
+        "config-dir" => call("config.open-directory", ""),
         "o" | "open" | "e" | "edit" if !arg.is_empty() => crate::open_file(arg),
         "o" | "open" | "e" | "edit" => Err(format!(":{command} needs a path")),
         "" => Ok(()),

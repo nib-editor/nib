@@ -6,108 +6,108 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.7.0".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.7.1".
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [resource-drop]buffer
+//go:wasmimport nib:plugin/buffer@0.7.1 [resource-drop]buffer
 //go:noescape
 func wasmimport_BufferResourceDrop(self0 uint32)
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.apply
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.apply
 //go:noescape
 func wasmimport_BufferApply(self0 uint32, baseVersion0 uint64, edits0 *Edit, edits1 uint32, undo0 uint32, result *cm.Result[Error, struct{}, Error])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.close
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.close
 //go:noescape
 func wasmimport_BufferClose(self0 uint32, force0 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.find
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.find
 //go:noescape
 func wasmimport_BufferFind(self0 uint32, pattern0 *uint8, pattern1 uint32, start0 uint64, backward0 uint32, result *cm.Result[OptionRangeShape, cm.Option[Range], Error])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.find-all
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.find-all
 //go:noescape
 func wasmimport_BufferFindAll(self0 uint32, pattern0 *uint8, pattern1 uint32, start0 uint64, end0 uint64, result *cm.Result[ErrorShape, cm.List[Range], Error])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.find-groups
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.find-groups
 //go:noescape
 func wasmimport_BufferFindGroups(self0 uint32, pattern0 *uint8, pattern1 uint32, start0 uint64, backward0 uint32, result *cm.Result[OptionListOptionRangeShape, cm.Option[cm.List[cm.Option[Range]]], Error])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.keys
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.keys
 //go:noescape
 func wasmimport_BufferKeys(self0 uint32, result *cm.List[[2]string])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.len
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.len
 //go:noescape
 func wasmimport_BufferLen(self0 uint32) (result0 uint64)
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.line-count
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.line-count
 //go:noescape
 func wasmimport_BufferLineCount(self0 uint32) (result0 uint64)
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.line-of
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.line-of
 //go:noescape
 func wasmimport_BufferLineOf(self0 uint32, pos0 uint64, result *cm.Result[ErrorShape, uint64, Error])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.line-start
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.line-start
 //go:noescape
 func wasmimport_BufferLineStart(self0 uint32, line0 uint64, result *cm.Option[Offset])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.marks
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.marks
 //go:noescape
 func wasmimport_BufferMarks(self0 uint32, namespace0 *uint8, namespace1 uint32, result *cm.List[Offset])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.modified
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.modified
 //go:noescape
 func wasmimport_BufferModified(self0 uint32) (result0 uint32)
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.name
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.name
 //go:noescape
 func wasmimport_BufferName(self0 uint32, result *string)
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.next-grapheme
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.next-grapheme
 //go:noescape
 func wasmimport_BufferNextGrapheme(self0 uint32, pos0 uint64, result *cm.Result[ErrorShape, Offset, Error])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.path
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.path
 //go:noescape
 func wasmimport_BufferPath(self0 uint32, result *cm.Option[string])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.prev-grapheme
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.prev-grapheme
 //go:noescape
 func wasmimport_BufferPrevGrapheme(self0 uint32, pos0 uint64, result *cm.Result[ErrorShape, Offset, Error])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.save
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.save
 //go:noescape
 func wasmimport_BufferSave(self0 uint32, path0 uint32, path1 *uint8, path2 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.set-editable
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.set-editable
 //go:noescape
 func wasmimport_BufferSetEditable(self0 uint32, editable0 uint32)
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.set-keys
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.set-keys
 //go:noescape
 func wasmimport_BufferSetKeys(self0 uint32, keys0 *[2]string, keys1 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.set-marks
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.set-marks
 //go:noescape
 func wasmimport_BufferSetMarks(self0 uint32, namespace0 *uint8, namespace1 uint32, marks0 *Offset, marks1 uint32)
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.slice
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.slice
 //go:noescape
 func wasmimport_BufferSlice(self0 uint32, start0 uint64, end0 uint64, result *cm.Result[ErrorShape, string, Error])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 [method]buffer.version
+//go:wasmimport nib:plugin/buffer@0.7.1 [method]buffer.version
 //go:noescape
 func wasmimport_BufferVersion(self0 uint32) (result0 uint64)
 
-//go:wasmimport nib:plugin/buffer@0.7.0 create
+//go:wasmimport nib:plugin/buffer@0.7.1 create
 //go:noescape
 func wasmimport_Create(name0 *uint8, name1 uint32) (result0 uint32)
 
-//go:wasmimport nib:plugin/buffer@0.7.0 open
+//go:wasmimport nib:plugin/buffer@0.7.1 open
 //go:noescape
 func wasmimport_Open(path0 *uint8, path1 uint32, result *cm.Result[string, Buffer, string])
 
-//go:wasmimport nib:plugin/buffer@0.7.0 all
+//go:wasmimport nib:plugin/buffer@0.7.1 all
 //go:noescape
 func wasmimport_All(result *cm.List[Buffer])

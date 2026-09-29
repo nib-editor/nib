@@ -178,7 +178,8 @@ nib parses on a thread of its own, so an answer right after an edit waits for th
 ### And more
 
 - `settings`: the tab width and indentation of a buffer, changing them for one buffer, and the scroll margin.
-- `files.walk`: lists files under a directory, honoring `.gitignore`, on a background thread; the names arrive as `files-listed` events. Needs `fs-read`.
+- `files.walk`: lists files under a directory, honoring `.gitignore`, on a background thread; the names arrive as `files-listed` events. `files.list` gives what one directory holds, hidden files too, with sizes. Both need `fs-read`.
+- `settings.example.toml` beside `plugin.toml`: your settings as examples, commented out. nib puts them under `[settings]` in the template of `plugins/<name>.toml` that people open to set your plugin up.
 - `clipboard`: the system clipboard. Needs `clipboard`.
 - `process.spawn`: starts a program; its output and exit arrive as events, and it is killed when the plugin stops. Needs `process`.
 - `/data`: a directory of the plugin's own, through WASI's file API (`std::fs` in Rust, `os` in Go), with no capability to declare. What the plugin writes there outlives restarts and updates; other plugins cannot see it. Tests get an empty one each.
@@ -273,7 +274,7 @@ To make it findable by name, add it to [nib-editor/plugins](https://github.com/n
 crate-type = ["cdylib"]
 
 [dependencies]
-nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.7.0" }
+nib-plugin = { git = "https://github.com/nib-editor/nib", tag = "sdk/rust/v0.7.1" }
 ```
 
 Implement `nib_plugin::exports::nib::plugin::guest::Guest` and export it with `nib_plugin::export!(YourType)`. The API is under `nib_plugin::nib::plugin::<interface>`. Build for `wasm32-wasip2`; `nib plugin build` does it.
@@ -284,4 +285,4 @@ Built with [TinyGo](https://tinygo.org/) 0.42 or later, since Go itself cannot m
 
 ### Versions
 
-SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.7.0`, `sdk/go/v0.7.0`.
+SDKs are versioned apart from the editor: an SDK's version changes only when the API in `api/` changes. The one exception is a change that makes the SDK unreachable at its current version, such as the Go module path moving; that gets a patch release. Their tags carry the directory: `sdk/rust/v0.7.1`, `sdk/go/v0.7.1`.

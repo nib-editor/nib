@@ -6,24 +6,24 @@ import (
 	"go.bytecodealliance.org/cm"
 )
 
-// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.7.0".
+// This file contains wasmimport and wasmexport declarations for "nib:plugin@0.7.1".
 
-//go:wasmimport nib:plugin/settings@0.7.0 tab-width
+//go:wasmimport nib:plugin/settings@0.7.1 tab-width
 //go:noescape
 func wasmimport_TabWidth(buf0 uint32) (result0 uint32)
 
-//go:wasmimport nib:plugin/settings@0.7.0 indent
+//go:wasmimport nib:plugin/settings@0.7.1 indent
 //go:noescape
 func wasmimport_Indent(buf0 uint32, result *Indentation)
 
-//go:wasmimport nib:plugin/settings@0.7.0 scroll-margin
+//go:wasmimport nib:plugin/settings@0.7.1 scroll-margin
 //go:noescape
 func wasmimport_ScrollMargin() (result0 uint32)
 
-//go:wasmimport nib:plugin/settings@0.7.0 set-tab-width
+//go:wasmimport nib:plugin/settings@0.7.1 set-tab-width
 //go:noescape
 func wasmimport_SetTabWidth(buf0 uint32, width0 uint32, width1 uint32, result *cm.Result[string, struct{}, string])
 
-//go:wasmimport nib:plugin/settings@0.7.0 set-indent
+//go:wasmimport nib:plugin/settings@0.7.1 set-indent
 //go:noescape
 func wasmimport_SetIndent(buf0 uint32, indent0 uint32, indent1 uint32, indent2 uint32, result *cm.Result[string, struct{}, string])

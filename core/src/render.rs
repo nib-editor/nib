@@ -562,13 +562,13 @@ mod tests {
         // 72 by 16, from (4, 2).
         assert!(rows[2].starts_with("    ╭─ nib ─"), "{rows:#?}");
         assert!(rows[3].starts_with("    │ > r "), "{rows:#?}");
-        assert!(rows[3].contains("2/5 │"), "{rows:#?}");
+        assert!(rows[3].contains("3/6 │"), "{rows:#?}");
         assert!(rows[4].contains("┬"), "{rows:#?}");
         // Starting with it first, the rest in list order.
         assert!(rows[5].contains("│ Reload the settings "), "{rows:#?}");
         assert!(rows[6].contains("│ Restart all plugins "), "{rows:#?}");
         assert!(
-            rows[7].starts_with("    │                               │"),
+            rows[7].contains("│ Open the settings directory "),
             "{rows:#?}"
         );
         // The details of the one under the cursor.

@@ -28,6 +28,9 @@ pub struct Settings {
     pub base: String,
     /// Set by the user; otherwise the base's, or Ctrl-g.
     pub menu_key: Option<KeyEvent>,
+    /// The command a directory given to nib goes to, as `{"path": dir}`
+    /// (docs/files.md).
+    pub open_directory: String,
     /// A plugin call taking longer is stopped, unless the plugin's own
     /// settings say otherwise.
     pub plugin_timeout: Duration,
@@ -50,6 +53,7 @@ impl Default for Settings {
             scroll_margin: 5,
             base: "helix".into(),
             menu_key: None,
+            open_directory: "files.open".into(),
             plugin_timeout: Duration::from_secs(1),
             plugin_init_timeout: Duration::from_secs(5),
             plugin_memory: 256 << 20,
@@ -250,6 +254,7 @@ struct RawCore {
     scroll_margin: Option<u16>,
     base: Option<String>,
     menu_key: Option<String>,
+    open_directory: Option<String>,
     /// Moved to `path` in `plugins/<name>.toml`; read only to say so.
     plugin_dirs: Option<toml::Value>,
     plugin_timeout_ms: Option<u64>,
@@ -302,6 +307,9 @@ impl Config {
                 key.parse()
                     .map_err(|err| fail(format!("menu-key: {err}")))?,
             );
+        }
+        if let Some(command) = raw_core.open_directory {
+            core.open_directory = command;
         }
         if raw_core.plugin_dirs.is_some() {
             return Err(fail(
@@ -443,6 +451,9 @@ pub const CONFIG_TEMPLATE: &str = r##"# nib's settings. Every line is optional; 
 # Opens the core menu to manage plugins; plugins never see this key. The
 # base has its own (C-g for helix), and this replaces it.
 # menu-key = "C-g"
+# A directory given to nib runs this command with {"path": "<dir>"}:
+# "files.open" lists it, and "picker.files" picks a file under it.
+# open-directory = "files.open"
 # Limits for every plugin; plugins/<name>.toml can set its own.
 # plugin-timeout-ms = 1000
 # plugin-init-timeout-ms = 5000
@@ -458,8 +469,10 @@ pub const CONFIG_TEMPLATE: &str = r##"# nib's settings. Every line is optional; 
 # comment = { fg = "bright-black", italic = true }
 "##;
 
-/// A `plugins/<name>.toml` with every key commented out.
-pub fn plugin_template(name: &str) -> String {
+/// A `plugins/<name>.toml` with every key commented out, and under
+/// `[settings]`, `example`: the plugin's own `settings.example.toml`.
+pub fn plugin_template(name: &str, example: Option<&str>) -> String {
+    let example = example.map_or(String::new(), |e| format!("{}\n", e.trim_end()));
     format!(
         r##"# How nib runs the {name} plugin, and the settings it gets. Every line is
 # optional.
@@ -479,7 +492,7 @@ pub fn plugin_template(name: &str) -> String {
 
 # Given to the plugin when it starts.
 [settings]
-"##
+{example}"##
     )
 }
 
@@ -488,8 +501,11 @@ mod tests {
     #[test]
     fn templates_parse_to_the_defaults() {
         assert_eq!(Config::parse(CONFIG_TEMPLATE).unwrap(), Config::default());
-        let plugin = Config::parse_plugin("helix", &plugin_template("helix")).unwrap();
-        assert_eq!(plugin, PluginConfig::default());
+        let example = "# leader = \"space\"\n# [settings.keys.normal]\n# Y = \"yy\"\n";
+        for example in [None, Some(example)] {
+            let plugin = Config::parse_plugin("vim", &plugin_template("vim", example)).unwrap();
+            assert_eq!(plugin, PluginConfig::default());
+        }
     }
 
     use super::*;

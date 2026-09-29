@@ -95,26 +95,32 @@ fn main() -> ExitCode {
         };
         editor.set_plugin_store(Some(std::sync::Arc::new(plugins)));
     }
-    for path in &files {
-        if let Err(err) = editor.open(path) {
-            eprintln!("nib: {}: {err}", path.display());
-            return ExitCode::FAILURE;
-        }
-    }
     editor.set_plugin_cache_dir(settings::cache_dir());
     editor.set_config_dir(dir.clone());
-    if open_config && let Err(err) = editor.call_command("config.open", "{}") {
-        eprintln!("nib: {err}");
-        return ExitCode::FAILURE;
-    }
     editor.set_plugin_data_dir(settings::data_dir().map(|dir| dir.join("plugins")));
-    let failures = match load_plugins(&mut editor, entries, &plugins) {
+    let mut failures = match load_plugins(&mut editor, entries, &plugins) {
         Ok(failures) => failures,
         Err(err) => {
             eprintln!("nib: {err}");
             return ExitCode::FAILURE;
         }
     };
+    // After the plugins: a directory goes to one of their commands, and a
+    // missing settings file starts with its plugin's example.
+    for path in &files {
+        if path.is_dir() {
+            if let Err(err) = editor.open_directory(path) {
+                failures.push(err);
+            }
+        } else if let Err(err) = editor.open(path) {
+            eprintln!("nib: {}: {err}", path.display());
+            return ExitCode::FAILURE;
+        }
+    }
+    if open_config && let Err(err) = editor.call_command("config.open", "{}") {
+        eprintln!("nib: {err}");
+        return ExitCode::FAILURE;
+    }
     if let Some(err) = config_error {
         editor.show_message(format!("{err}; using the defaults"));
     } else if let Some(err) = store_error {

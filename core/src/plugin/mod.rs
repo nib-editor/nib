@@ -175,6 +175,10 @@ impl std::fmt::Display for Interrupted {
 
 impl std::error::Error for Interrupted {}
 
+/// The file beside a plugin's manifest with its settings, commented out,
+/// that goes into the template of its settings file.
+pub const SETTINGS_EXAMPLE: &str = "settings.example.toml";
+
 /// Where a plugin's manifest and code come from.
 pub enum PluginSource<'a> {
     Dir(&'a Path),
@@ -579,6 +583,13 @@ impl Editor {
             key.parse()
                 .expect("the manifest's menu key was checked when it was read")
         });
+        // For the template of its settings file (docs/files.md).
+        if let Ok(Some(example)) = source.read(SETTINGS_EXAMPLE) {
+            let example = String::from_utf8_lossy(&example).into_owned();
+            self.state_mut()
+                .settings_examples
+                .insert(manifest.name.clone(), example);
+        }
         let id = self.plugins.entries.len();
         self.plugins.entries.push(Plugin {
             name: manifest.name.clone(),
@@ -981,6 +992,10 @@ impl Editor {
 
     /// Calls a command a plugin registered, or a core command.
     pub fn call_command(&mut self, name: &str, args: &str) -> Result<String, String> {
+        if let Some(redirected) = self.state().redirect(name) {
+            let (name, args) = redirected?;
+            return self.call_command(&name, &args);
+        }
         self.wake_for_command(name);
         let command = self
             .state()

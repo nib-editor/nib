@@ -1,6 +1,6 @@
-//! Fuzzy pickers: `picker.files` lists the files of the working directory
-//! with the core's `files.walk`, which honors .gitignore, and opens the
-//! chosen one; `picker.commands` lists every command with its description
+//! Fuzzy pickers: `picker.files` lists the files of the working directory,
+//! or of `{"path": dir}`, with the core's `files.walk`, which honors
+//! .gitignore, and opens the chosen one; `picker.commands` lists every command with its description
 //! and runs the chosen one. The query is a prompt: the base in use decides
 //! what keys do to it, and the picker hears the result.
 
@@ -53,6 +53,8 @@ struct Picker {
     selected: usize,
     /// The `files.walk` job still listing, if any.
     listing: Option<u64>,
+    /// Where the files are listed from, when not the working directory.
+    dir: Option<String>,
 }
 
 thread_local! {
@@ -76,13 +78,17 @@ impl Guest for Plugin {
         KeyResult::Pass
     }
 
-    fn run_command(name: String, _args: String) -> Result<String, String> {
+    fn run_command(name: String, args: String) -> Result<String, String> {
         let kind = match name.as_str() {
             "files" => Kind::Files,
             "commands" => Kind::Commands,
             _ => return Err(format!("no command {name}")),
         };
-        open(kind)?;
+        let args: serde_json::Value = match args.trim() {
+            "" => serde_json::Value::Null,
+            args => serde_json::from_str(args).map_err(|err| format!("{name}: {err}"))?,
+        };
+        open(kind, args["path"].as_str().map(String::from))?;
         Ok("null".into())
     }
 
@@ -107,6 +113,10 @@ impl Guest for Plugin {
                         let &i = open.matches.get(open.selected)?;
                         let kind = open.kind;
                         let text = std::mem::take(&mut open.items[i].text);
+                        let text = match &open.dir {
+                            Some(dir) => format!("{}/{text}", dir.trim_end_matches('/')),
+                            None => text,
+                        };
                         close(picker);
                         return Some((kind, text));
                     }
@@ -142,13 +152,13 @@ impl Guest for Plugin {
     }
 }
 
-fn open(kind: Kind) -> Result<(), String> {
+fn open(kind: Kind, dir: Option<String>) -> Result<(), String> {
     PICKER.with_borrow_mut(|picker| {
         if picker.is_some() {
             return Ok(());
         }
         let (items, listing) = match kind {
-            Kind::Files => (Vec::new(), Some(files::walk(None)?)),
+            Kind::Files => (Vec::new(), Some(files::walk(dir.as_deref())?)),
             Kind::Commands => {
                 let mut items: Vec<Item> = commands::all()
                     .into_iter()
@@ -167,6 +177,7 @@ fn open(kind: Kind) -> Result<(), String> {
             matches: Vec::new(),
             selected: 0,
             listing,
+            dir,
         });
         open.filter();
         open.show();
@@ -184,8 +195,8 @@ fn open_file(path: &str) -> Result<(), String> {
 /// through the core would call into this plugin while it is in a call.
 fn run(name: &str) -> Result<(), String> {
     match name {
-        "picker.files" => open(Kind::Files),
-        "picker.commands" => open(Kind::Commands),
+        "picker.files" => open(Kind::Files, None),
+        "picker.commands" => open(Kind::Commands, None),
         _ => commands::call(name, "{}").map(|_| ()),
     }
 }

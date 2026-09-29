@@ -1,0 +1,8 @@
+# The language server for each language, by the language's name. A
+# language written here replaces the default: rust-analyzer for rust,
+# gopls for go, and pyright-langserver --stdio for python.
+# [settings.servers.rust]
+# command = ["rust-analyzer"]
+#
+# [settings.servers.python]
+# command = ["pyright-langserver", "--stdio"]

@@ -1,0 +1,9 @@
+# Indentation for each language, by the language's name, over config.toml's
+# [core]. "indent" is a number of spaces or "tab". By default go uses tabs,
+# and yaml and json 2 spaces.
+# [settings.languages.python]
+# indent = 4
+#
+# [settings.languages.go]
+# indent = "tab"
+# tab-width = 8

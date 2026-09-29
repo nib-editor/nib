@@ -44,6 +44,7 @@
 |------|----------|
 | 各プラグイン | そのプラグインの操作の一覧へ |
 | Open config.toml | `config.toml` を開く（`config.open`） |
+| Open the settings directory | 設定のディレクトリを開く（`config.open-directory`、[files.md](files.md)） |
 | Reload the settings | 設定を読み直す（`config.reload`） |
 | Add a plugin | 入れるものを打つ欄へ（入れられるときだけ） |
 | Restart all plugins | プラグインを全部再起動する |

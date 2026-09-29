@@ -1,0 +1,6 @@
+# Keys over the built-in ones. The right side is an Emacs command, as M-x
+# calls it ("kill-line"), or a nib command ("picker.files"). A table adds
+# to a prefix such as C-x.
+# [settings.keys.global]
+# "C-x" = { "C-r" = "picker.files" }
+# "C-z" = "undo"

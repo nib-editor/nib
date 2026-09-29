@@ -81,8 +81,8 @@ impl Store {
 
 /// `nib plugin pack <dir>`: writes `<name>-<version>.nib.tar.gz` into `out`.
 /// Packs what nib reads of the plugin in `dir`: its manifest, its code, the
-/// files of its languages, and its licenses. Not sources or build output,
-/// which a plugin's directory often holds too.
+/// files of its languages, the example of its settings, and its licenses.
+/// Not sources or build output, which a plugin's directory often holds too.
 pub fn pack(dir: &Path, out: &Path) -> Result<PathBuf, String> {
     let manifest = read_manifest(dir).map_err(|err| err.to_string())?;
     let file = out.join(format!("{}-{}{SUFFIX}", manifest.name, manifest.version));
@@ -90,6 +90,9 @@ pub fn pack(dir: &Path, out: &Path) -> Result<PathBuf, String> {
     let mut names = vec!["plugin.toml".to_string()];
     if manifest.has_code {
         names.push("plugin.wasm".into());
+    }
+    if dir.join(nib_core::SETTINGS_EXAMPLE).is_file() {
+        names.push(nib_core::SETTINGS_EXAMPLE.into());
     }
     names.extend(manifest.language_files);
     let licenses = fs::read_dir(dir).map_err(|err| format!("{}: {err}", dir.display()))?;

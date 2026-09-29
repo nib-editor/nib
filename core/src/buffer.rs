@@ -207,6 +207,10 @@ impl Buffer {
         let path = self.path.as_ref().ok_or(Error::NoPath)?;
         // Write to the file a symlink points to, instead of replacing the link.
         let target = fs::canonicalize(path).unwrap_or_else(|_| path.clone());
+        // A new file may name directories not made yet (docs/files.md).
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
         let name = target.file_name().unwrap_or_default().to_string_lossy();
         let tmp = target.with_file_name(format!(".{name}.nib-{}~", std::process::id()));
         let result = self.write_file(&tmp).and_then(|()| {

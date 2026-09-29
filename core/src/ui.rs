@@ -141,6 +141,12 @@ fn builtin(name: &str) -> Option<Style> {
             ..Style::default()
         }),
         "ui.popup.key" => Some(fg(3)),
+        // Directories in a listing of files.
+        "ui.directory" => Some(Style {
+            fg: Color::Indexed(4),
+            bold: true,
+            ..Style::default()
+        }),
         // LSP diagnostics: the note after the line and the status counts
         // by severity, and an underline for the range.
         "diagnostic.error" => Some(fg(1)),

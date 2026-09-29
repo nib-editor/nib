@@ -800,6 +800,11 @@ impl commands::Host for PluginData {
     }
 
     fn call(&mut self, name: String, args: String) -> HostResult<Result<String, String>> {
+        let (name, args) = match self.state()?.redirect(&name) {
+            Some(Ok(redirected)) => redirected,
+            Some(Err(err)) => return Ok(Err(err)),
+            None => (name, args),
+        };
         self.wake_for_command(&name)?;
         let state = self.state()?;
         match state.commands.iter().find(|command| command.name == name) {
@@ -895,6 +900,31 @@ impl clipboard::Host for PluginData {
 const NO_CLIPBOARD: &str = "the clipboard needs the \"clipboard\" capability";
 
 impl files::Host for PluginData {
+    fn list(&mut self, dir: String) -> HostResult<Result<Vec<files::DirEntry>, String>> {
+        if !self.can_read_files {
+            return Ok(Err("listing files needs the \"fs-read\" capability".into()));
+        }
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(err) => return Ok(Err(format!("{dir}: {err}"))),
+        };
+        let mut listed: Vec<files::DirEntry> = entries
+            .filter_map(Result::ok)
+            .map(|entry| {
+                // Through links, so a link to a directory can be entered.
+                let metadata = std::fs::metadata(entry.path()).ok();
+                let directory = metadata.as_ref().is_some_and(|m| m.is_dir());
+                files::DirEntry {
+                    name: entry.file_name().to_string_lossy().into_owned(),
+                    directory,
+                    size: metadata.filter(|_| !directory).map_or(0, |m| m.len()),
+                }
+            })
+            .collect();
+        listed.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(Ok(listed))
+    }
+
     fn walk(&mut self, dir: Option<String>) -> HostResult<Result<u64, String>> {
         if !self.can_read_files {
             return Ok(Err("listing files needs the \"fs-read\" capability".into()));

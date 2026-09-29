@@ -67,3 +67,19 @@ expect.screen = ["picker.files"]
 keys = "<ret>"
 wait = 5000
 expect.screen = ["files> ", "a.txt"]
+
+[[test]]
+name = "a directory given picks a file under it"
+file = "notes.md"
+files = { "a.txt" = "", "sub/deep.txt" = "deep\n", "sub/b.txt" = "" }
+
+[[test.step]]
+command = "picker.files"
+args = '{"path": "sub"}'
+wait = 5000
+expect.screen = ["files> ", "deep.txt", "b.txt"]
+expect.absent = ["a.txt"]
+
+[[test.step]]
+keys = "deep<ret>"
+expect.text = "deep\n"

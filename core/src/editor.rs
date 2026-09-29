@@ -85,6 +85,9 @@ pub(crate) struct State {
     /// The plugin the arrows point at in the core menu's list.
     /// Where the settings are, from the frontend.
     pub config_dir: Option<PathBuf>,
+    /// Each plugin's `settings.example.toml`, by name, for the template of
+    /// its settings file.
+    pub settings_examples: BTreeMap<String, String>,
     /// A file there was saved, or config.reload called: the editor reads
     /// the settings again after the call.
     pub reload_config: bool,
@@ -124,11 +127,41 @@ impl State {
     }
 
     fn load(&self, path: PathBuf) -> Result<Buffer, Error> {
+        let template = self.settings_template(&path);
         let mut buffer = Buffer::open(path)?;
         if let Some(language) = buffer.path().and_then(|p| self.languages.for_path(p)) {
             buffer.syntax = Some(BufferSyntax::new(language));
         }
+        // Unsaved, so the file is made only if it is saved.
+        if let Some(template) = template {
+            let version = buffer.version();
+            let edit = vec![Edit::new(0, 0, template)];
+            buffer.apply(version, edit, &Selection::point(0), None, UndoMode::NewStep)?;
+        }
         Ok(buffer)
+    }
+
+    /// What a settings file not made yet starts as: `config.toml` or
+    /// `plugins/<name>.toml` in the settings directory, however it is
+    /// opened (docs/files.md).
+    fn settings_template(&self, path: &Path) -> Option<String> {
+        let dir = self.config_dir.as_ref()?;
+        let path = match path.is_absolute() {
+            true => path.to_path_buf(),
+            false => std::env::current_dir().ok()?.join(path),
+        };
+        if path.exists() {
+            return None;
+        }
+        if path == dir.join("config.toml") {
+            return Some(CONFIG_TEMPLATE.to_string());
+        }
+        let name = path.file_stem()?.to_str()?;
+        let in_plugins = path.parent() == Some(dir.join("plugins").as_path());
+        (in_plugins && path.extension()? == "toml").then(|| {
+            let example = self.settings_examples.get(name).map(String::as_str);
+            plugin_template(name, example)
+        })
     }
 
     /// Opens `path` without showing it, or finds the buffer that has it.
@@ -537,6 +570,30 @@ impl State {
         canonical(path).starts_with(canonical(dir))
     }
 
+    /// The command `[core] open-directory` names, with the arguments that
+    /// open `dir` with it (docs/files.md).
+    pub(crate) fn directory_command(&self, dir: &Path) -> (String, String) {
+        let dir = match dir.is_absolute() {
+            true => dir.to_path_buf(),
+            false => std::env::current_dir().unwrap_or_default().join(dir),
+        };
+        let args = serde_json::json!({ "path": dir.display().to_string() });
+        (self.settings.open_directory.clone(), args.to_string())
+    }
+
+    /// The command a core command stands for, if it stands for one:
+    /// `config.open-directory` opens the settings directory with
+    /// `[core] open-directory`'s command.
+    pub(crate) fn redirect(&self, name: &str) -> Option<Result<(String, String), String>> {
+        (name == "config.open-directory").then(|| match &self.config_dir {
+            _ if self.settings.open_directory == name => {
+                Err(format!("open-directory cannot be {name} itself"))
+            }
+            Some(dir) => Ok(self.directory_command(dir)),
+            None => Err("nib does not know where the settings are".into()),
+        })
+    }
+
     /// Opens config.toml, or `plugins/<plugin>.toml`. A missing one opens
     /// with the defaults commented out, unsaved, so it exists once saved.
     pub fn open_config(&mut self, plugin: Option<&str>) -> Result<(), String> {
@@ -544,32 +601,12 @@ impl State {
             .config_dir
             .clone()
             .ok_or("nib does not know where the settings are")?;
-        let (path, template) = match plugin {
-            None => (dir.join("config.toml"), CONFIG_TEMPLATE.to_string()),
-            Some(name) => (
-                dir.join("plugins").join(format!("{name}.toml")),
-                plugin_template(name),
-            ),
+        let path = match plugin {
+            None => dir.join("config.toml"),
+            Some(name) => dir.join("plugins").join(format!("{name}.toml")),
         };
-        let missing = !path.exists();
-        // So that saving it works, as plugins/ may not be there yet.
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|err| format!("{}: {err}", parent.display()))?;
-        }
         self.open(&path)
-            .map_err(|err| format!("{}: {err}", path.display()))?;
-        let index = self.view.buffer;
-        let buffer = &mut self.buffers[index];
-        if missing && buffer.is_empty() && !buffer.is_modified() {
-            let version = buffer.version();
-            let edit = vec![Edit::new(0, 0, template)];
-            buffer
-                .apply(version, edit, &self.view.selection, None, UndoMode::NewStep)
-                .map_err(|err| err.to_string())?;
-            self.view.selection = Selection::point(0);
-        }
-        Ok(())
+            .map_err(|err| format!("{}: {err}", path.display()))
     }
 
     /// The open buffer after `from`, or before it, going round. `from`
@@ -1028,6 +1065,10 @@ pub(crate) const CORE_COMMANDS: &[(&str, &str)] = &[
         "Open config.toml, or plugins/<name>.toml with {\"plugin\": name}",
     ),
     ("config.reload", "Read the settings again"),
+    (
+        "config.open-directory",
+        "Open the settings directory, as [core] open-directory opens one",
+    ),
     ("core.menu", "Open the core menu"),
     (
         "buffer.close",
@@ -1089,6 +1130,7 @@ impl Default for Editor {
                 inbox,
                 menu_cursor: 0,
                 config_dir: None,
+                settings_examples: BTreeMap::new(),
                 reload_config: false,
                 menu_input: String::new(),
                 hidden_views: HashMap::new(),
@@ -1144,6 +1186,15 @@ impl Editor {
     /// was never touched.
     pub fn open(&mut self, path: impl Into<PathBuf>) -> Result<(), Error> {
         self.state_mut().open(path)
+    }
+
+    /// Opens directory `dir` with the command `[core] open-directory` names
+    /// (docs/files.md).
+    pub fn open_directory(&mut self, dir: &Path) -> Result<(), String> {
+        let (command, args) = self.state().directory_command(dir);
+        self.call_command(&command, &args)
+            .map(drop)
+            .map_err(|err| format!("open-directory: {err}"))
     }
 
     /// Does work left for after a frame, such as the first parse of a
