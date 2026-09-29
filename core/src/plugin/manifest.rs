@@ -64,7 +64,8 @@ pub(crate) fn read(path: &Path) -> Result<Manifest, Error> {
 /// `origin` says where the manifest came from, for errors.
 pub(crate) fn parse(text: &str, origin: &str) -> Result<Manifest, Error> {
     let fail = |message: String| Error::Plugin(format!("{origin}: {message}"));
-    let manifest: Manifest = toml::from_str(text).map_err(|err| fail(err.to_string()))?;
+    let manifest: Manifest =
+        toml::from_str(text).map_err(|err| fail(crate::config::toml_error(&err, text)))?;
     let valid_name = !manifest.name.is_empty()
         && manifest
             .name

@@ -382,7 +382,15 @@ impl Editor {
         }
         let name = buffer.name();
         let modified = if buffer.is_modified() { " [+]" } else { "" };
-        let message = self.message().map(|message| format!("  {message}"));
+        // On one line, whatever it holds.
+        let message = self.message().map(|message| {
+            let lines: Vec<&str> = message
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .collect();
+            format!("  {}", lines.join(" "))
+        });
         // Shorten a long path from the left so the modified mark stays
         // visible, and further for a message, which matters more than the
         // path's start.
@@ -550,6 +558,15 @@ mod tests {
         editor.view_mut().selection = Selection::point(5);
         let (_, cursor) = render(&editor);
         assert_eq!(cursor.map(|c| (c.x, c.y)), Some((7, 0)));
+    }
+
+    #[test]
+    fn a_message_of_many_lines_shows_on_one() {
+        let mut editor = Editor::with_text("a");
+        editor.resize(60, 3);
+        editor.show_message("broken:\n  |\n5 | x\n\nfix it");
+        let (rows, _) = render(&editor);
+        assert!(rows[2].contains("broken: | 5 | x fix it"), "{rows:#?}");
     }
 
     #[test]

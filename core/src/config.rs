@@ -272,7 +272,7 @@ enum RawIndent {
 impl Config {
     pub fn parse(text: &str) -> Result<Self, Error> {
         let fail = |message: String| Error::Config(message);
-        let raw: RawConfig = toml::from_str(text).map_err(|err| fail(err.to_string()))?;
+        let raw: RawConfig = toml::from_str(text).map_err(|err| fail(toml_error(&err, text)))?;
         let mut core = Settings::default();
         let raw_core = raw.core;
 
@@ -350,7 +350,8 @@ impl Config {
     /// Parses `plugins/<name>.toml`.
     pub fn parse_plugin(name: &str, text: &str) -> Result<PluginConfig, Error> {
         let fail = |message: String| Error::Config(format!("plugins/{name}.toml: {message}"));
-        let raw: RawPluginConfig = toml::from_str(text).map_err(|err| fail(err.to_string()))?;
+        let raw: RawPluginConfig =
+            toml::from_str(text).map_err(|err| fail(toml_error(&err, text)))?;
         let limit = |raw: Option<RawTimeout>, key| {
             raw.map(|raw| match raw {
                 RawTimeout::Millis(ms) => timeout(key, ms).map(Timeout::After),
@@ -375,6 +376,17 @@ impl Config {
             settings: serde_json::to_string(&raw.settings).map_err(|err| fail(err.to_string()))?,
         })
     }
+}
+
+/// A TOML error on one line, as a message shows it: where, and what.
+pub(crate) fn toml_error(err: &toml::de::Error, text: &str) -> String {
+    let at = err.span().and_then(|span| {
+        let before = text.get(..span.start)?;
+        let line = before.matches('\n').count() + 1;
+        let column = before.rsplit('\n').next().unwrap_or("").chars().count() + 1;
+        Some(format!("line {line}, column {column}: "))
+    });
+    format!("{}{}", at.unwrap_or_default(), err.message().trim_end())
 }
 
 fn timeout(key: &str, ms: u64) -> Result<Duration, String> {
@@ -509,6 +521,20 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn toml_errors_fit_on_one_line() {
+        let err = Config::parse("[core]\nbase = vim\n")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.ends_with(
+                "line 2, column 8: string values must be quoted, expected literal string"
+            ),
+            "{err}"
+        );
+        assert!(!err.contains('\n'), "{err}");
+    }
 
     #[test]
     fn empty_config_is_default() {
