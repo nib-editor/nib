@@ -2,7 +2,7 @@
 
 | 場所 | 内容 |
 |------|------|
-| [guide/](guide/configuration.md) | 利用者向けの文書（英語）。今は設定とキー（[keys.md](guide/keys.md)）。言語、LSP、プラグインの入れ方を順に足す |
+| [guide/](guide/README.md) | 利用者向けの文書（英語）。設定、キー（ベースごと）、言語、LSP、プラグイン |
 | [design/](design/vision.md) | 設計の記録（日本語）。決めたことと、その理由 |
 
 ## design/

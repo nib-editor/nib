@@ -2,7 +2,7 @@
 
 nib's default way of editing is the `helix` base: you select first, then act, as in [Helix](https://helix-editor.com). It implements a subset of Helix's keys. This page lists what is there; a key that is not listed is not implemented.
 
-Other bases (`vim`, `emacs`, `nano`) have their own keys. See [Configuration](configuration.md#choosing-a-base) for choosing one.
+Other bases have their own keys: [vim](keys-vim.md), [emacs](keys-emacs.md), and [nano](keys-nano.md). See [Configuration](configuration.md#choosing-a-base) for choosing one.
 
 Notation: `C-x` is Ctrl-x, `A-x` is Alt-x, and `space` is the space bar. Keys written together (`gg`) are pressed one after another.
 
