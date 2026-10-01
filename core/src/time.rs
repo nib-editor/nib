@@ -1,5 +1,8 @@
 //! Times as people read them where nib runs, for plugins, which cannot
-//! know the time zone from inside WASI (docs/files.md).
+//! know the time zone from inside WASI (docs/files.md), and the CPU time
+//! the plugins' calls use (docs/architecture.md, "時間と資源の上限").
+
+use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct LocalTime {
@@ -34,6 +37,54 @@ fn local_offset(_seconds: u64) -> Option<i64> {
     None
 }
 
+/// The CPU time the calling thread has used; `None` where nib cannot
+/// tell.
+#[cfg(unix)]
+pub(crate) fn thread_cpu() -> Option<Duration> {
+    let mut time = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: clock_gettime only writes the timespec it is given.
+    let read = unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut time) } == 0;
+    read.then(|| Duration::new(time.tv_sec as u64, time.tv_nsec as u32))
+}
+
+#[cfg(windows)]
+pub(crate) fn thread_cpu() -> Option<Duration> {
+    use std::ffi::c_void;
+    // FILETIMEs, in 100 ns, read as the u64 they are on little-endian
+    // machines.
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetCurrentThread() -> *mut c_void;
+        fn GetThreadTimes(
+            thread: *mut c_void,
+            creation: *mut u64,
+            exit: *mut u64,
+            kernel: *mut u64,
+            user: *mut u64,
+        ) -> i32;
+    }
+    let (mut creation, mut exit, mut kernel, mut user) = (0, 0, 0, 0);
+    // SAFETY: GetThreadTimes only writes the four times it is given.
+    let read = unsafe {
+        GetThreadTimes(
+            GetCurrentThread(),
+            &mut creation,
+            &mut exit,
+            &mut kernel,
+            &mut user,
+        )
+    } != 0;
+    read.then(|| Duration::from_nanos((kernel + user) * 100))
+}
+
+#[cfg(not(any(unix, windows)))]
+pub(crate) fn thread_cpu() -> Option<Duration> {
+    None
+}
+
 /// `seconds` since 1970 in UTC.
 fn utc(seconds: u64) -> LocalTime {
     let days = (seconds / 86_400) as i64;
@@ -65,6 +116,25 @@ fn utc(seconds: u64) -> LocalTime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_thread_cpu_time_grows_with_work_but_not_with_sleep() {
+        let Some(before) = thread_cpu() else {
+            return;
+        };
+        std::thread::sleep(Duration::from_millis(50));
+        let slept = thread_cpu().unwrap() - before;
+        assert!(slept < Duration::from_millis(25), "{slept:?}");
+        // Work counts, however busy the machine: it ends.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let mut x = 0u64;
+        while thread_cpu().unwrap() - before - slept < Duration::from_millis(20) {
+            assert!(std::time::Instant::now() < deadline, "no CPU time counted");
+            for _ in 0..10_000 {
+                x = std::hint::black_box(x.wrapping_mul(31).wrapping_add(7));
+            }
+        }
+    }
 
     #[test]
     fn utc_dates_read_as_calendars_do() {

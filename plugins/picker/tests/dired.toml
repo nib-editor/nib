@@ -12,7 +12,8 @@ files = { "src/main.rs" = "fn main() {}\n", "a.txt" = "a\n" }
 
 [[test.step]]
 command = "picker.directory"
-expect.screen = [":", "  ./", "  ../", "  src/", "  a.txt", "  notes.md", "-rw-", "drwx"]
+# Permissions show only on Unix; the unit tests read them.
+expect.screen = [":", "  ./", "  ../", "  src/", "  a.txt", "  notes.md"]
 
 # The cursor is on the file shown before; src/ is two lines up.
 [[test.step]]

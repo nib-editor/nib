@@ -356,9 +356,33 @@ struct Limits {
 /// The call a store is in, for the checks on each epoch tick.
 struct CallClock {
     started: Instant,
+    /// The CPU time the thread had used when it started.
+    cpu: Option<Duration>,
     limit: Option<Duration>,
     /// The interrupt count when it started.
     interrupts: u64,
+}
+
+impl CallClock {
+    fn new(limit: Option<Duration>, interrupts: u64) -> Self {
+        Self {
+            started: Instant::now(),
+            cpu: crate::time::thread_cpu(),
+            limit,
+            interrupts,
+        }
+    }
+
+    /// How long the call has run, against its limit: the CPU time it used,
+    /// so a busy machine, or a wait for the system such as starting a
+    /// program, does not count; the time on the clock where the CPU time
+    /// cannot be told.
+    fn used(&self) -> Duration {
+        match (self.cpu, crate::time::thread_cpu()) {
+            (Some(start), Some(now)) => now.saturating_sub(start),
+            _ => self.started.elapsed(),
+        }
+    }
 }
 
 struct Instance {
@@ -1113,11 +1137,7 @@ fn call_in<R>(
         .begin();
 
     let data = instance.store.data_mut();
-    data.clock = CallClock {
-        started: Instant::now(),
-        limit: timeout,
-        interrupts: data.interrupts.load(Ordering::Acquire),
-    };
+    data.clock = CallClock::new(timeout, data.interrupts.load(Ordering::Acquire));
     data.state = state.take();
     data.plugins = Some(std::mem::take(plugins));
     // Checked on every tick by `check_call`.
@@ -1261,11 +1281,7 @@ fn start_in(plugins: &mut Plugins, state: &mut Option<State>, id: PluginId) -> R
         can_write_files: plugin.capabilities.iter().any(|c| c == "fs-write"),
         can_use_clipboard: plugin.capabilities.iter().any(|c| c == "clipboard"),
         is_base: plugin.base,
-        clock: CallClock {
-            started: Instant::now(),
-            limit: limits.init,
-            interrupts: plugins.interrupts.load(Ordering::Acquire),
-        },
+        clock: CallClock::new(limits.init, plugins.interrupts.load(Ordering::Acquire)),
         interrupts: plugins.interrupts.clone(),
         wasi,
         table: ResourceTable::new(),
@@ -1319,7 +1335,7 @@ fn check_call(store: StoreContextMut<PluginData>) -> wasmtime::Result<UpdateDead
     if data
         .clock
         .limit
-        .is_some_and(|limit| data.clock.started.elapsed() > limit)
+        .is_some_and(|limit| data.clock.used() > limit)
     {
         return Ok(UpdateDeadline::Interrupt);
     }
