@@ -91,17 +91,46 @@ keys = "<esc>a"
 message = "Mark Set"
 
 [[test]]
-name = "plugins' keys are under Alt, and ^T lists the commands"
+name = "plugins' keys are under ^L, and ^T lists the commands"
 text = "abc\n"
 
 [[test.step]]
-keys = "<A-f>"
+keys = "<C-l>f"
 wait = 5000
 expect.screen = ["files> "]
 
 [[test.step]]
 keys = "<esc><C-t>"
 expect.screen = ["commands> "]
+
+[[test]]
+name = "the keys nano uses are not taken: M-E is redo, and e is under ^L"
+text = "#[|]#abc\n"
+
+[[test.step]]
+keys = "x<A-u><A-e>"
+expect.text = "xabc\n"
+
+[[test.step]]
+keys = "<C-l>e"
+wait = 5000
+expect.screen = ["files> "]
+
+[[test]]
+name = "Alt keys that nano does not use do nothing"
+text = "abc\n"
+keys = "<A-f>"
+
+[test.expect]
+absent = ["files> "]
+
+[[test]]
+name = "Escape leaves the leader without taking the next key as Alt"
+text = "#[|]#abc\n"
+keys = "<C-l><esc>x"
+
+[test.expect]
+text = "xabc\n"
 
 [[test]]
 name = "a paste goes in at the cursor, even with the mark set"

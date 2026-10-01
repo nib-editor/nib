@@ -35,7 +35,7 @@ In a prompt (such as `^W`), `^C` cancels, and `^A`, `^E`, `^B`, `^F`, `^H`, and 
 
 ## Leader
 
-Plugins put their keys under the `M-` keys that nano itself does not use. A plugin's `f` is `M-F` (the file picker), and a two-key sequence `c d` is `M-C` and then `d`. The keys nano uses (`M-A`, `M-E`, `M-Q`, `M-U`, `M-W`, `M-X`, `M-6`, `M-]`, `M-\`, `M-/`, `M-Space`) are never taken, so a plugin key on one of those letters is not reachable here.
+`^L` (for Leader) is where plugins put their keys, and nano itself does not use it. After `^L`, the plugin's key follows: `^L f` opens the file picker, `^L e` all files, `^L ?` the command list, and `^L k` the LSP hover. A two-key sequence `c d` is `^L c d`. A popup at the bottom right lists what each key does, and `esc` or `^C` leaves it. None of nano's own keys is taken.
 
 ## Changing keys
 

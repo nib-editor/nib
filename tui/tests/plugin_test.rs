@@ -68,7 +68,7 @@ fn the_indent_plugin_passes_its_tests() {
 
 #[test]
 fn the_nano_plugin_passes_its_tests() {
-    passes_its_tests("nano", "nano", 11);
+    passes_its_tests("nano", "nano", 14);
 }
 
 #[test]

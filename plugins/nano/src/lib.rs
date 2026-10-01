@@ -56,9 +56,6 @@ const FUNCTIONS: &[(&str, &str)] = &[
     ("tab", "tab"),
 ];
 
-/// The Alt keys nano uses itself; the others hold plugins' keys.
-const OWN_ALT: &[char] = &['a', 'e', 'q', 'u', 'w', 'x', '6', ']', '\\', '/', ' '];
-
 /// Columns each item of the two lines takes, key and all.
 const HELP_ITEM: usize = 15;
 
@@ -232,6 +229,14 @@ impl Nano {
             prompts::act(action);
             return KeyResult::Handled;
         }
+        // Escape and ^C leave a leader or a prefix of the settings.
+        if self.sequence.is_waiting()
+            && ((ev.code == KeyCode::Escape && ev.modifiers.is_empty()) || ctrl(&ev) == Some('c'))
+        {
+            self.sequence.cancel();
+            self.show_hints();
+            return KeyResult::Handled;
+        }
         let mut ev = ev;
         if std::mem::take(&mut self.meta) {
             ev.modifiers |= Modifiers::ALT;
@@ -247,19 +252,16 @@ impl Nano {
         result
     }
 
-    /// Keys of the settings, and plugins' keys under the leader: the Alt
-    /// keys nano leaves. `None` when the key is neither.
+    /// Keys of the settings, and plugins' keys under the leader, ^L. nano
+    /// has no key of its own for it, and its Alt keys are all its own or
+    /// free for the settings. `None` when the key is neither.
     fn sequence_key(&mut self, ev: KeyEvent) -> Option<KeyResult> {
-        let leader_key =
-            !self.sequence.is_waiting() && alt(&ev).is_some_and(|c| !OWN_ALT.contains(&c));
-        let step = if leader_key {
+        if !self.sequence.is_waiting() && ctrl(&ev) == Some('l') {
             let table = leader::keymap(&[], input::leader_keys()).keymap;
-            let plain = KeyEvent {
-                code: ev.code,
-                modifiers: Modifiers::empty(),
-            };
-            self.sequence.key(&table, plain)
-        } else if self.sequence.is_waiting() {
+            self.sequence.enter(table, vec![ev]);
+            return Some(KeyResult::Handled);
+        }
+        let step = if self.sequence.is_waiting() {
             self.sequence.key(&self.keymap, ev)
         } else {
             // The shown buffer's keys come before nano's own; the settings'
@@ -272,9 +274,6 @@ impl Nano {
             self.sequence.key(&table, ev)
         };
         match step {
-            Step::NotMine if leader_key => {
-                ui::show_message(&format!("{}: nothing here", keys::label(&ev)));
-            }
             Step::NotMine => return None,
             Step::Wait | Step::Dropped(_) => {}
             Step::Run(Binding::Command(name), _) => call_or_show(&name),
