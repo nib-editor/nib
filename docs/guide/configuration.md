@@ -44,7 +44,7 @@ plugin-memory-mib = 256
 
 - `menu-key` replaces the key the base plugin uses for the core menu (`C-g` for helix). Key names are written as in Helix: `C-s`, `A-x`, `S-tab`, `ret`, `esc`, `space`.
 - `open-directory` is the command that runs when you give nib a directory (`nib src/`). It is called with `{"path": "<dir>"}`. `picker.directory` lists the directory, and `picker.files` picks a file under it.
-- The three `plugin-*` values are the limits for every plugin. A call that takes longer than `plugin-timeout-ms` is stopped, and a plugin's memory cannot grow past `plugin-memory-mib`. Both can be overridden per plugin (below).
+- The three `plugin-*` values are the limits for every plugin. A call that takes longer than `plugin-timeout-ms` is stopped, and a plugin that tries to use more than `plugin-memory-mib` fails. A failed plugin is restarted; after three failures in a minute it is disabled until you restart it from the core menu. Both can be overridden per plugin (below).
 - `tab-width` and `indent` are the global values. A plugin may override them for a single buffer; the bundled `indent` plugin does so per language (tabs for Go, two spaces for YAML, and so on). To change that, write `[settings.languages.<name>]` with `indent` and `tab-width` in `plugins/indent.toml`.
 
 The old `[core] plugin-dirs` and `[plugins.<name>]` tables are no longer read. nib tells you where they moved: `path` and `[settings]` in `plugins/<name>.toml`.

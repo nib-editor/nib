@@ -69,15 +69,20 @@ nib plugin remove foo
 
 ## The core menu
 
-`C-g` (or your `menu-key`) opens the core menu, which is for managing plugins from inside nib. It works even when a plugin is stuck.
+`C-g` (or your `menu-key`) opens the core menu, which is for managing plugins from inside nib. It works even when a plugin is stuck. Type to filter the list (`rsa` finds `Restart all plugins`), use the arrow keys or `C-p` / `C-n` to move, `enter` to choose, and `esc` to go back or close.
 
-- Choose a plugin to see its permissions, enable or disable it, restart it, or reload it from disk.
-- `Update` appears for plugins that follow releases. It checks in the background, shows the permissions again if they grew, and reloads the plugin without restarting nib.
-- `Add a plugin` takes the same forms as `nib plugin add`: a name, `name@tag`, `owner/repo[@tag]`, or a URL. It shows what it found and asks before installing, then loads it at once.
-- An installed plugin's page has `remove`.
+The first list has every plugin, with its version and state (`running`, `running, the base`, `base, not in use`, `disabled`, `languages`, or the error), followed by:
+
+- `Open config.toml`, `Open the settings directory`, and `Reload the settings`
+- `Add a plugin`, which takes the same forms as `nib plugin add`: a name, `name@tag`, `owner/repo[@tag]`, or a URL. It shows what it found and the permissions it asks for, asks before installing, and loads the plugin at once.
+- `Restart all plugins`
+- `Save all and quit` and `Quit`
+
+Choosing a plugin shows what it can do (its permissions, the time limit, how many calls were slow, and its settings file) and these actions: `Restart`, `Disable` or `Enable` (or `Use as the base`), and `Open its settings`. Installed plugins also have `Update` and `Remove`, and plugins loaded with `--plugin` have `Reload from disk`.
+
+`Update` checks in the background and keeps nib responsive. If the new version asks for more permissions, the menu shows them and asks first. The plugin is reloaded without restarting nib. `Remove` stops the plugin and deletes its files and record, but keeps your settings and the plugin's data; an installed plugin that was already loaded stays listed as disabled until the next start.
 
 ## Problems
 
 - **A plugin will not load.** If the plugin was built for a different plugin API version than your nib, nib skips it and says why, then starts without it. A plugin that fails to load never stops nib itself. Update the plugin, or update nib.
-- **A plugin hangs or loops.** nib stops any call that takes longer than the time limit. Raise or remove the limit in the plugin's file (see [Configuration](configuration.md#pluginsnametoml)), and press `C-g` to stop a call that has no limit.
-- **A plugin crashed.** nib drops that instance and shows the error. A plugin changes text only through transactions, so a crash does not corrupt your buffer. Restart the plugin from the core menu.
+- **A plugin hangs, loops, or crashes.** nib stops a call that takes longer than the time limit, and treats a crash or a memory overrun the same way: it drops the plugin's instance, starts a fresh one, and shows what went wrong. A plugin changes text only through transactions, so a failure does not corrupt your buffer. If a plugin fails three times within a minute, nib disables it and says so; bring it back with "restart all" in the core menu. To raise or remove the time limit, see [Configuration](configuration.md#pluginsnametoml); `C-g` stops a call that has no limit.
