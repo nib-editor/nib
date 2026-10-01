@@ -78,6 +78,7 @@ To turn LSP off, set `enabled = false` in `plugins/lsp.toml` (see [Configuration
 
 ## Notes
 
+- A server needs time to load a project the first time. Until it has, hover and completion may answer "no hover information" or "no completions". Try again after a few seconds. A file that is not part of a project the server knows (a Rust file outside a Cargo package, say) gets fewer answers.
 - Positions are counted the way the server prefers: in UTF-8 if it supports that, otherwise in UTF-16. With UTF-16 servers, nib sends the whole file after every change instead of the changed parts, which can be slow on very large files.
 - Diagnostics arrive both ways servers send them. rust-analyzer reports type errors when nib asks for them, a short time after you stop typing, and reports `cargo check` results on its own, and nib shows both.
 - The server's standard error is discarded. If the server exits, nib shows a message and treats it as stopped.
