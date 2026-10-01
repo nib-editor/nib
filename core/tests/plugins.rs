@@ -687,7 +687,7 @@ fn settings_files_start_from_their_plugins_examples() {
     editor.call_command("config.open-directory", "").unwrap();
     assert_eq!(
         editor.buffer().name(),
-        format!("{}/", dir.display()),
+        format!("{}{}", dir.display(), std::path::MAIN_SEPARATOR),
         "{:#?}",
         screen(&editor)
     );
