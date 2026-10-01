@@ -1,4 +1,4 @@
-//! Language Server Protocol client (docs/lsp.md). It starts a server for a
+//! Language Server Protocol client (docs/design/plugins/lsp.md). It starts a server for a
 //! language when a file of it is opened, keeps the server's copy of each
 //! file in sync, and shows diagnostics, hovers, definitions, and
 //! completions. Servers answer through process events, so nothing here

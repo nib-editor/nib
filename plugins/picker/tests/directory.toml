@@ -1,4 +1,4 @@
-# Directory listings (docs/files.md), netrw's way with the vim base and
+# Directory listings (docs/design/plugins/files.md), netrw's way with the vim base and
 # dired's with helix. Run with
 # `nib plugin test target/plugins/picker plugins/picker/tests/directory.toml`
 # after `cargo xtask build-plugins`; tui/tests/plugin_test.rs does.

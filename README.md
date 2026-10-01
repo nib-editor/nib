@@ -77,7 +77,7 @@ tui/       terminal frontend, builds the `nib` binary
 api/       plugin API definitions (WIT) — the single source of truth
 sdk/       plugin SDKs per language
 plugins/   standard plugins
-docs/      design documents
+docs/      design records (Japanese) and the user guide (English)
 bench/     latency benchmark against other editors
 ```
 

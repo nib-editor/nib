@@ -1,4 +1,4 @@
-//! The core menu (docs/core-menu.md): a box in the middle of the screen
+//! The core menu (docs/design/core/core-menu.md): a box in the middle of the screen
 //! with the plugins and what can be done to them and to the editor,
 //! narrowed by what is typed. The core draws it and takes its keys itself,
 //! so it works when the base does not.

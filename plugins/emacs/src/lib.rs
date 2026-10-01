@@ -1,4 +1,4 @@
-//! GNU Emacs's way of editing (docs/emacs.md): no modes, typed chars go
+//! GNU Emacs's way of editing (docs/design/bases/emacs.md): no modes, typed chars go
 //! in, and Control and Meta keys, with prefixes such as `C-x`, do the rest.
 //! The point is the cursor; the mark and the mark ring are the core's
 //! marks, and while the region is active it is drawn as the selection from

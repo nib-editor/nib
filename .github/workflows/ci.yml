@@ -71,7 +71,7 @@ jobs:
         run: |
           curl -fsSL https://github.com/neovim/neovim/releases/download/v0.12.5/nvim-linux-x86_64.tar.gz | tar xz -C "$HOME"
           echo "$HOME/nvim-linux-x86_64/bin" >> "$GITHUB_PATH"
-      # The version the cases were checked against (docs/emacs.md); the
+      # The version the cases were checked against (docs/design/bases/emacs.md); the
       # distribution's may be older.
       - uses: purcell/setup-emacs@master
         with:

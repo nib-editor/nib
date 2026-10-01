@@ -21,7 +21,7 @@ fn main() -> ExitCode {
     }
 }
 
-/// Readies the crates for crates.io (docs/distribution.md): the built
+/// Readies the crates for crates.io (docs/design/project/distribution.md): the built
 /// standard plugins go into `tui/plugins/`, as a source build there cannot
 /// build them, and the licenses next to each crate's manifest.
 fn package() -> Result<(), String> {

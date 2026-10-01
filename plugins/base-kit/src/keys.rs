@@ -106,7 +106,7 @@ pub fn merge(keymap: &mut Keymap, over: Keymap) {
     }
 }
 
-/// The keys the maker of the shown buffer gave it (docs/plugin-buffers.md),
+/// The keys the maker of the shown buffer gave it (docs/design/core/plugin-buffers.md),
 /// as a table, leaving out those that start with a key the base `keeps`.
 pub fn buffer_keymap(keeps: &dyn Fn(&KeyEvent) -> bool) -> Keymap {
     let buffer = nib_plugin::nib::plugin::view::active().buffer();

@@ -1,5 +1,5 @@
 //! Compares the vim and emacs bases with the editors they follow
-//! (docs/base.md): each case's keys go to `nvim --headless` or
+//! (docs/design/bases/base.md): each case's keys go to `nvim --headless` or
 //! `emacs --batch` and to nib, and the text and cursor must come out the
 //! same. The cases are in `plugins/<base>/compare.toml`; ones marked
 //! `differs` must still differ, so the list of differences stays true.

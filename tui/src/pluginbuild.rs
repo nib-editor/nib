@@ -1,5 +1,5 @@
 //! `nib plugin build`: builds a plugin with the tools of its language and
-//! puts `plugin.wasm` next to its `plugin.toml` (docs/plugin-dev.md).
+//! puts `plugin.wasm` next to its `plugin.toml` (docs/design/api/plugin-dev.md).
 
 use std::fs;
 use std::io::{BufRead, BufReader};
@@ -85,7 +85,7 @@ fn rust(dir: &Path) -> Result<PathBuf, String> {
     })
 }
 
-/// Builds with TinyGo, as the Go SDK needs (docs/plugin-api.md).
+/// Builds with TinyGo, as the Go SDK needs (docs/design/api/plugin-api.md).
 fn go(dir: &Path) -> Result<PathBuf, String> {
     if !dir.join("go.sum").is_file() {
         let mut tidy = Command::new("go");

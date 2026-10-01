@@ -1,7 +1,7 @@
 # Cases for tui/tests/compare.rs: the same keys go to `emacs --batch -Q`
 # and to nib's emacs base, and the text, the point, and the active region
 # must match. A case nib does differently says why in `differs`
-# (docs/emacs.md).
+# (docs/design/bases/emacs.md).
 #
 # `text` ends with a line break and marks the point with #[|]#.
 

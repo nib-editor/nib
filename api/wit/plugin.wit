@@ -125,7 +125,7 @@ interface buffer {
         /// For the plugin that made it: the keys that work in it, as
         /// settings write them ("ret", "s", "C-c C-c"), and the commands of
         /// its own they run. The base takes them over its own keys, but for
-        /// those it keeps, such as vim's motions (docs/plugin-buffers.md).
+        /// those it keeps, such as vim's motions (docs/design/core/plugin-buffers.md).
         set-keys: func(keys: list<tuple<string, string>>) -> result<_, string>;
         /// For the base: the keys its maker gave it.
         keys: func() -> list<tuple<string, string>>;
@@ -531,7 +531,7 @@ interface prompt {
         set-hint: func(hint: string);
         /// Shows it as the input of a box in the middle of the screen, as
         /// the core menu, titled `title`, with the rows of `set-rows` under
-        /// it and `set-preview` beside them (docs/finder.md). Without it,
+        /// it and `set-preview` beside them (docs/design/plugins/finder.md). Without it,
         /// it is drawn above the status line.
         show-in-box: func(title: string);
         /// The rows under the input in the box, and the one selected. A

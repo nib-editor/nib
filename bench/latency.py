@@ -11,7 +11,7 @@ emacs are driven with their own keys; nano is only for --startup.
 nib is run from target/release, so build it with `cargo build --release`.
 
 Memory and idle CPU come from proc_pid_rusage, so only on macOS.
-docs/benchmarks.md lists the files and the results.
+docs/design/project/benchmarks.md lists the files and the results.
 """
 import ctypes, fcntl, os, pty, re, select, statistics, struct, subprocess, sys, termios, time
 

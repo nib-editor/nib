@@ -2,7 +2,7 @@ name = "emacs"
 version = "0.1.0"
 description = "A base: Emacs's keys, checked against GNU Emacs."
 api = "0.7"
-# The whole way of editing (docs/base.md); only one base runs.
+# The whole way of editing (docs/design/bases/base.md); only one base runs.
 base = true
 # The menu bar in Emacs, the core menu here.
 menu-key = "F10"

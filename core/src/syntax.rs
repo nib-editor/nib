@@ -32,7 +32,7 @@ pub(crate) struct Languages {
     list: Vec<Entry>,
     pub cache_dir: Option<PathBuf>,
     /// Set when buffers are parsed on the syntax thread, to wake the main
-    /// loop when a tree is ready (docs/architecture.md, "解析のスレッド").
+    /// loop when a tree is ready (docs/design/architecture.md, "解析のスレッド").
     background: Option<Arc<Inbox>>,
     /// Started with the first parse it gets.
     worker: Option<Worker>,
@@ -193,7 +193,7 @@ pub(crate) struct BufferSyntax {
     /// tree shown would not be painted again where it differs.
     next_old: Option<Tree>,
     injections: Injections,
-    /// The colors of the last frame, kept for the next (docs/architecture.md,
+    /// The colors of the last frame, kept for the next (docs/design/architecture.md,
     /// "構文木"). Drawing only reads the syntax, hence the cell.
     painted: RefCell<Option<Painted>>,
     /// The first parse leaves injections for later, so a file just opened

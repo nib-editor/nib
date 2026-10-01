@@ -39,7 +39,7 @@ GNU nano の操作感のベース（`plugins/nano`、プラグイン名 `nano`�
 | `^H` `Backspace` / `^D` `Delete` | 前 / 後ろの 1 文字を消す。マークがあれば選択を消す |
 | `M-X` | 下の 2 行のキーの案内を出す・隠す（最初は出す） |
 
-- 入力欄（`^W` などの問い）では、`^C` で取り消す。`^A` `^E` `^B` `^F` `^H` `^D` が効き、`^K` で中身を消す。ほかはコアの既定（[plugin-api.md](plugin-api.md) の「入力欄」）。
+- 入力欄（`^W` などの問い）では、`^C` で取り消す。`^A` `^E` `^B` `^F` `^H` `^D` が効き、`^K` で中身を消す。ほかはコアの既定（[plugin-api.md](../api/plugin-api.md) の「入力欄」）。
 - 補完の一覧などが開いているときは、上下と `^P` `^N` で選び、`Tab` と `Enter` で決める。
 
 ## リーダー
@@ -48,7 +48,7 @@ nano の `M-` のうち nano 自身が使わないものを、プラグインの
 
 ## プラグインのバッファのキー
 
-プラグインのバッファ（[plugin-buffers.md](plugin-buffers.md)）が決めたキーは、nano のキーより先に効く。文字は打てないので、文字のキーも使える。`plugins/nano.toml` の `[settings.keys]` で決めたキーは、バッファのキーより先に効く。
+プラグインのバッファ（[plugin-buffers.md](../core/plugin-buffers.md)）が決めたキーは、nano のキーより先に効く。文字は打てないので、文字のキーも使える。`plugins/nano.toml` の `[settings.keys]` で決めたキーは、バッファのキーより先に効く。
 
 ## 設定
 

@@ -2,7 +2,7 @@
 
 > ステータス: 合意済み（2026-09-27）
 
-helix 以外の操作感（vim、Emacs、nano）を足すにあたり、「エディタの操作感を丸ごと持つプラグイン」をベースと呼び、その作り方と、ベース同士で何を共通にするか、コアに何を足すかを決める。[keymap.md](keymap.md) の Helix 風キーマップは、最初のベースになる。
+helix 以外の操作感（vim、Emacs、nano）を足すにあたり、「エディタの操作感を丸ごと持つプラグイン」をベースと呼び、その作り方と、ベース同士で何を共通にするか、コアに何を足すかを決める。[helix.md](helix.md) の Helix 風キーマップは、最初のベースになる。
 
 ## ベースとは
 
@@ -153,8 +153,8 @@ picker や補完の一覧のようなプラグインの画面を、ベースの�
 
 1. helix からライブラリを切り出す。helix の動作は変えず、今のテストで確かめる。（済み）
 2. `plugin.toml` の `base` / `menu-key` と `[core] base`、メニューからの切り替え。止めるキーとメニューのキーを分ける。（済み。`[core] base` を変えて設定を読み直しても切り替わる。メニューでの切り替えはその場限りで、残すには `[core] base` に書く）
-3. コマンドの一覧の API、`:` から名前で呼ぶこと、パレット（`picker.commands`）。（済み。一覧は既存の `commands.all` で足りた。引数は `key=value` か JSON（[keymap.md](keymap.md)））
-4. 文字を打つ欄と画面の操作の意味をコアに足し、helix の `:` と picker を載せ替える。API は [plugin-api.md](plugin-api.md) の「入力欄」。API を 0.5 に上げる。LSP の補完のように、文字を打つ欄を持たない一覧の操作の意味は、この段のあとで足す。（済み。helix の `:` `/` `?` `s` と picker が入力欄に、LSP の補完とホバーが一覧（`prompt.choices`）に載った。picker の一覧は入力欄の上に、良いものから順に並ぶ。一覧を足したので API は 0.5.1）
+3. コマンドの一覧の API、`:` から名前で呼ぶこと、パレット（`picker.commands`）。（済み。一覧は既存の `commands.all` で足りた。引数は `key=value` か JSON（[helix.md](helix.md)））
+4. 文字を打つ欄と画面の操作の意味をコアに足し、helix の `:` と picker を載せ替える。API は [plugin-api.md](../api/plugin-api.md) の「入力欄」。API を 0.5 に上げる。LSP の補完のように、文字を打つ欄を持たない一覧の操作の意味は、この段のあとで足す。（済み。helix の `:` `/` `?` `s` と picker が入力欄に、LSP の補完とホバーが一覧（`prompt.choices`）に載った。picker の一覧は入力欄の上に、良いものから順に並ぶ。一覧を足したので API は 0.5.1）
 5. リーダーと `plugin.toml` の `[keys]`。（済み。API は 0.5.2。`nib plugin list` での表示はしていない）
 6. nano を作る。ライブラリとコアの仕組みで足りるかを確かめる役。最初の起動で聞くのもここで入れる。（済み。nano は [nano.md](nano.md)。コアに足したのは `buffer.save` の `path` だけで、ほかはライブラリとコアの仕組みで足りた。前置きキーの列をたどる部品 `keys::Sequence` をライブラリに足した）
 7. 位置の印をコアに足し、vim と Emacs を作る。本物と比べるテストも作る。（済み。印は `buffer.set-marks` と `buffer.marks` で、API は 0.5.3。vim は [vim.md](vim.md)、Emacs は [emacs.md](emacs.md)。比べるテストは `tui/tests/compare.rs` で、`nvim --headless` と `emacs --batch` と比べる。Emacs に要るものも、ライブラリ（文字の走査 `text::Text` をここに移した）とコアの仕組みで足りた）

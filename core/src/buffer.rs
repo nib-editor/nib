@@ -90,7 +90,7 @@ pub struct Buffer {
     /// Closed with `buffer.close`. Buffers keep their place in the list,
     /// empty, so indices, which plugins hold as handles, never move.
     closed: bool,
-    /// A plugin's own buffer (docs/plugin-buffers.md).
+    /// A plugin's own buffer (docs/design/core/plugin-buffers.md).
     pub(crate) plugin: Option<PluginBuffer>,
 }
 
@@ -207,7 +207,7 @@ impl Buffer {
         let path = self.path.as_ref().ok_or(Error::NoPath)?;
         // Write to the file a symlink points to, instead of replacing the link.
         let target = fs::canonicalize(path).unwrap_or_else(|_| path.clone());
-        // A new file may name directories not made yet (docs/files.md).
+        // A new file may name directories not made yet (docs/design/plugins/files.md).
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)?;
         }

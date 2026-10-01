@@ -1,5 +1,5 @@
 //! The box in the middle of the screen that the core menu and plugins'
-//! prompts show in (docs/core-menu.md, docs/finder.md): a title, an input
+//! prompts show in (docs/design/core/core-menu.md, docs/design/plugins/finder.md): a title, an input
 //! line, rows to choose from, and details or a file beside them.
 
 use crate::editor::Editor;

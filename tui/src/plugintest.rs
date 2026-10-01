@@ -1,5 +1,5 @@
 //! `nib plugin test`: runs a plugin's tests, written in TOML, in an editor
-//! without a terminal (docs/plugin-dev.md).
+//! without a terminal (docs/design/api/plugin-dev.md).
 
 use std::fs;
 use std::path::{Path, PathBuf};

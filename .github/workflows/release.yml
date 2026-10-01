@@ -1,6 +1,6 @@
 # Builds nib for each platform when a tag like v0.9.9 is pushed, and puts
 # the archives on the GitHub release, which mise, cargo-binstall, the
-# Homebrew tap, and the Scoop bucket take (docs/distribution.md).
+# Homebrew tap, and the Scoop bucket take (docs/design/project/distribution.md).
 name: release
 
 on:

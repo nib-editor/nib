@@ -146,7 +146,7 @@ impl State {
 
     /// What a settings file not made yet starts as: `config.toml` or
     /// `plugins/<name>.toml` in the settings directory, however it is
-    /// opened (docs/files.md).
+    /// opened (docs/design/plugins/files.md).
     fn settings_template(&self, path: &Path) -> Option<String> {
         let dir = self.config_dir.as_ref()?;
         let path = match path.is_absolute() {
@@ -406,7 +406,7 @@ impl State {
 
     /// Tells plugins that buffer `index` has an up-to-date tree, so what
     /// they read from it on every key can wait for this instead of for a
-    /// parse (docs/plugin-api.md).
+    /// parse (docs/design/api/plugin-api.md).
     fn syntax_updated(&mut self, index: usize) {
         let version = self.buffers[index].version();
         self.push_event(
@@ -576,7 +576,7 @@ impl State {
     }
 
     /// The command `[core] open-directory` names, with the arguments that
-    /// open `dir` with it (docs/files.md).
+    /// open `dir` with it (docs/design/plugins/files.md).
     pub(crate) fn directory_command(&self, dir: &Path) -> (String, String) {
         let dir = match dir.is_absolute() {
             true => dir.to_path_buf(),
@@ -859,7 +859,7 @@ impl State {
                 .map_err(|err| format!("{name}: invalid arguments: {err}"))?,
         };
         // The same as the functions plugins call, by name for keys and
-        // command lines (docs/api-0.6.md).
+        // command lines (docs/design/api/api-0.6.md).
         match name {
             "buffer.save" => self.save_buffer(self.view.buffer, args["path"].as_str())?,
             "config.open" => self.open_config(args["plugin"].as_str())?,
@@ -1195,7 +1195,7 @@ impl Editor {
     }
 
     /// Opens directory `dir` with the command `[core] open-directory` names
-    /// (docs/files.md).
+    /// (docs/design/plugins/files.md).
     pub fn open_directory(&mut self, dir: &Path) -> Result<(), String> {
         let (command, args) = self.state().directory_command(dir);
         self.call_command(&command, &args)
@@ -1207,7 +1207,7 @@ impl Editor {
     /// buffer, so opening a file shows it before its highlighting. Returns
     /// whether the screen needs drawing again.
     /// Parses buffers on a thread of their own, as the terminal does, so
-    /// keys and frames never wait for a tree (docs/architecture.md, "解析の
+    /// keys and frames never wait for a tree (docs/design/architecture.md, "解析の
     /// スレッド"). Off by default: each key then leaves the trees up to
     /// date, as tests want.
     pub fn set_background_parsing(&mut self, on: bool) {

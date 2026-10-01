@@ -1,4 +1,4 @@
-//! Plugins from elsewhere (docs/plugin-install.md): packing them into
+//! Plugins from elsewhere (docs/design/api/plugin-install.md): packing them into
 //! `.nib.tar.gz` archives, and adding, updating, and removing them. No
 //! plugin code runs here.
 

@@ -221,7 +221,7 @@ func (self Line) SetRows(rows cm.List[StyledLine], selected cm.Option[uint32]) {
 //
 // Shows it as the input of a box in the middle of the screen, as
 // the core menu, titled `title`, with the rows of `set-rows` under
-// it and `set-preview` beside them (docs/finder.md). Without it,
+// it and `set-preview` beside them (docs/design/plugins/finder.md). Without it,
 // it is drawn above the status line.
 //
 //	show-in-box: func(title: string)

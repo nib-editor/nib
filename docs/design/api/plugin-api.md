@@ -2,7 +2,7 @@
 
 > ステータス: 合意済み（2026-09-25）
 
-[architecture.md](architecture.md) で決めたコアの構造を、プラグインから見た API に落とし込む。WIT の実際の定義は [api/wit/plugin.wit](../api/wit/plugin.wit) にあり、実装した範囲だけを載せている。ここでは M1 までの設計の方針と API の形を決める。
+[architecture.md](../architecture.md) で決めたコアの構造を、プラグインから見た API に落とし込む。WIT の実際の定義は [api/wit/plugin.wit](../../../api/wit/plugin.wit) にあり、実装した範囲だけを載せている。ここでは M1 までの設計の方針と API の形を決める。
 
 ## 方針
 
@@ -46,13 +46,13 @@ f = "picker.files"        # helix なら Space f
 
 - ベースは常に起動時に始まる（`load = "lazy"` は効かない）。選ばれていないベースは、止めたまま読み込み、コアメニューから切り替えられる。
 - 名前の `buffer`、`config`、`core`、`editor`、`view` はコアのコマンドと重なるので使えない。
-- マニフェストの隣に `settings.example.toml` を置くと、利用者が `plugins/<name>.toml` を開いたときの雛形の `[settings]` の下に入る。中身は、設定の例をコメントにしたもの（[files.md](files.md) の「設定のファイルを作りやすくする」）。
+- マニフェストの隣に `settings.example.toml` を置くと、利用者が `plugins/<name>.toml` を開いたときの雛形の `[settings]` の下に入る。中身は、設定の例をコメントにしたもの（[files.md](../plugins/files.md) の「設定のファイルを作りやすくする」）。
 
 権限をマニフェストで宣言させるのは、WASM の import だけでは権限を判定できないため。たとえば Rust の標準ライブラリを使うと、使っていなくても `wasi:filesystem` を import する。
 
 ## world
 
-WIT パッケージは `nib:plugin`。プラグインは `plugin` world に対して書く。型と関数の正は [api/wit/plugin.wit](../api/wit/plugin.wit) で、ここには形と決まりを書く。0.6 で作り直したときの理由は [api-0.6.md](api-0.6.md)。
+WIT パッケージは `nib:plugin`。プラグインは `plugin` world に対して書く。型と関数の正は [api/wit/plugin.wit](../../../api/wit/plugin.wit) で、ここには形と決まりを書く。0.6 で作り直したときの理由は [api-0.6.md](api-0.6.md)。
 
 ### プラグインが実装する関数（guest）
 
@@ -95,7 +95,7 @@ WIT パッケージは `nib:plugin`。プラグインは `plugin` world に対�
 - 正規表現の検索は、コアが `find` / `find-groups` / `find-all` として提供する。プラグインが自前で検索すると、大きなバッファの全文を毎回コピーすることになるため。`find-groups` はグループの範囲も返す（置き換えの `\1` のため）。
 - `undo` と `redo` は、変わったところ（変更後のテキストで、いちばん前の変更の範囲）を返す。ベースが、元のエディタの作法でカーソルを置き直すため。
 - `buffer.modified` は、保存したときの undo の状態と今の状態が違うか。undo で保存したときに戻れば、変更なしに戻る。
-- 位置の印（`set-marks` / `marks`）は、vim のマークとジャンプリスト、Emacs のマークとマークリングのように、編集されても同じ場所を指し続けたい位置に使う（[base.md](base.md) の「コアに足すもの」）。
+- 位置の印（`set-marks` / `marks`）は、vim のマークとジャンプリスト、Emacs のマークとマークリングのように、編集されても同じ場所を指し続けたい位置に使う（[base.md](../bases/base.md) の「コアに足すもの」）。
   - どのプラグインの編集でも、コアが動かす。ベースが自分で持つと、LSP の整形のような他のプラグインの編集でずれるため。
   - 動かし方は注記と同じ。印の位置に挿入された文字は印の後ろに入り（Emacs のマーカーの既定と同じ）、消された範囲の印は消えた場所へ動く。undo で文字が戻っても、印は戻らない。
   - 名前空間はプラグインごとに別で、ほかのプラグインの印は読めない。順番は置いたとおりに保つので、リストをそのままリング（マークリング）やジャンプリストに使える。
@@ -104,7 +104,7 @@ WIT パッケージは `nib:plugin`。プラグインは `plugin` world に対�
 
 ## プラグインのバッファ
 
-診断の一覧、ヘルプ、grep の結果のように、プラグインが中身を書くバッファ（[plugin-buffers.md](plugin-buffers.md)）。
+診断の一覧、ヘルプ、grep の結果のように、プラグインが中身を書くバッファ（[plugin-buffers.md](../core/plugin-buffers.md)）。
 
 - `buffer.create(name)` で作る。パスはなく、`name`（`*diagnostics*` など）がステータスラインとバッファの一覧に出る。表示は `view.show`。
 - 中身は、作ったプラグイン（持ち主）が `buffer.apply` で書く。表示していなくても書ける。
@@ -152,7 +152,7 @@ interface syntax {
   - バッファが変わると、古いノードは見つからないことがある。そのときは `none` や空のリストを返す。プラグインは編集のたびに `node-at` からやり直す。
 - 呼ばれたとき、構文木が古ければ（同じ呼び出しの中で `apply` した直後など）解析し直してから答える。裏のスレッドで解析中なら、それを待つ。隠れているバッファも、このときに解析する。
 - 構文木のないバッファ（言語がない、文法の読み込みに失敗した）では、`none` や空のリストを返す。プラグインはテキストだけの処理に戻ればよい。
-- injection の層（Markdown のコードブロックの中の Rust など、[architecture.md](architecture.md) の「構文木」）の中では、その層の構文木で答える。キーマップは、コードブロックの中でも `maf` や `Alt-o` を言語ごとの違いを知らずに書ける。
+- injection の層（Markdown のコードブロックの中の Rust など、[architecture.md](../architecture.md) の「構文木」）の中では、その層の構文木で答える。キーマップは、コードブロックの中でも `maf` や `Alt-o` を言語ごとの違いを知らずに書ける。
   - `node-at` は、範囲を覆ういちばん内側の層（解析済みのもの）の構文木で答える。層が範囲を覆うのは、範囲の始まりと終わりが、それぞれ層の解析範囲に入っているとき。ファイルのドキュメントコメントを全部つないだ Markdown の層でも、あいだにある普通のコードは層に入らない。
   - `parent` と `children` は、ノードが属する構文木で答える。層のいちばん外のノードの親は、埋め込んだ側の構文木の、層を囲むノード（`Alt-o` がコードブロックの外へ広がる）。
   - `captures` は、バッファの言語の構文木と、範囲にかかる解析済みの層のそれぞれで、その言語のクエリを実行し、結果を位置の順に混ぜる。
@@ -184,7 +184,7 @@ interface syntax {
 | `buffer.next` / `buffer.previous` | 次 / 前のバッファを表示する |
 | `config.open` | `config.toml` を開く。`{"plugin": name}` なら `plugins/<name>.toml`。なければ既定値のコメントを書いた状態で開く |
 | `config.reload` | 設定を読み直す（設定のディレクトリのファイルを保存したときも読み直す） |
-| `config.open-directory` | 設定のディレクトリを、`[core]` の `open-directory` のコマンドで開く（[files.md](files.md)） |
+| `config.open-directory` | 設定のディレクトリを、`[core]` の `open-directory` のコマンドで開く（[files.md](../plugins/files.md)） |
 | `core.menu` | コアメニューを開く |
 | `buffer.close` | 表示中のバッファを閉じる。保存していない変更があれば断り、`{"force": true}` で捨てる |
 | `view.split` | `{"direction": "vertical" \| "horizontal"}` で分割する |
@@ -192,20 +192,20 @@ interface syntax {
 | `view.focus` | `{"to": "next" \| "left" \| "right" \| "up" \| "down"}` へフォーカスを移す |
 | `editor.quit` | 終了する。`{"force": true}` で保存していない変更を捨てる |
 
-  分割表示のコマンドは [architecture.md](architecture.md) の「分割表示」も見る。
+  分割表示のコマンドは [architecture.md](../architecture.md) の「分割表示」も見る。
 - バッファを閉じると、それを表示していたビューは、前の開いているバッファを表示する（最後の 1 つなら、空のバッファを作る）。
   - 閉じたバッファは一覧の中に空で残し、番号をずらさない。プラグインが持つバッファの handle は番号なので、ほかのバッファの handle がずれないため。閉じたバッファの handle を使うとトラップする。`buffer.all()` には出ない。
 - `view.show` でバッファを表示すると、nib が起動したときの空のバッファ（パスがなく、何も打っていないもの）は閉じる。ファイルを開いたときにそれが残らないように。
   - まだ届けていない、そのバッファのイベントは捨てる。閉じたあとで、閉じたバッファの handle を渡さないため。
 
-呼び出しを同期にできるのは、呼び出し中はエディタの状態とプラグインの一覧をそのプラグインのストアに貸しているため。呼び出し先のプラグインへは、貸したものをそのまま又貸しする（[architecture.md](architecture.md) の「プラグインの実行」）。
+呼び出しを同期にできるのは、呼び出し中はエディタの状態とプラグインの一覧をそのプラグインのストアに貸しているため。呼び出し先のプラグインへは、貸したものをそのまま又貸しする（[architecture.md](../architecture.md) の「プラグインの実行」）。
 
 JSON を選んだのは、WIT に再帰する型がなく、任意の値の木を型で表せないため。どの言語にも JSON の実装はある。
 
 ## 入力
 
 - `input.push-layer()` で入力スタックに層を積み、`input.pop-layer()` で外す。キーは上の層から順に `handle-key` で届き、`pass` を返すと下の層に回る。
-- コアメニューのキー（既定は Ctrl-g、ベースが `menu-key` で決め、利用者が `[core]` の `menu-key` で変えられる）はプラグインに届かない（[architecture.md](architecture.md) の「入力」）。
+- コアメニューのキー（既定は Ctrl-g、ベースが `menu-key` で決め、利用者が `[core]` の `menu-key` で変えられる）はプラグインに届かない（[architecture.md](../architecture.md) の「入力」）。
 - キーマッププラグインは `init` で 1 層積み、それを外さない。
 - 端末に貼り付けたもの（bracketed paste）は、キーではなく 1 つの塊として、`handle-paste` に同じ順で届く。入力欄が開いているあいだはベースに届く。どのプラグインも `pass` を返したら、コアが入れる: 入力欄が開いていれば欄に（改行は空白にする）、なければ表示中のバッファの各選択の前に、新しい undo の 1 手として。
   - 貼り付けたものが 1 文字ずつキーとして届くと、vim の normal モードではコマンドとして動き、Emacs では改行のたびにインデントが足されるため。
@@ -213,7 +213,7 @@ JSON を選んだのは、WIT に再帰する型がなく、任意の値の木�
 
 ## 入力欄
 
-`:` のコマンドライン、`/` の検索、picker の検索欄のように、1 行の文字を打つ欄。仕組みはコアが、キーの作法はベースが持つ（[base.md](base.md) の「プラグインの画面の操作」）。
+`:` のコマンドライン、`/` の検索、picker の検索欄のように、1 行の文字を打つ欄。仕組みはコアが、キーの作法はベースが持つ（[base.md](../bases/base.md) の「プラグインの画面の操作」）。
 
 ```wit
 interface prompt {
@@ -255,7 +255,7 @@ interface prompt {
 - 持ち主は、イベントを受けて動く。決定や取り消しで欄を閉じるのも持ち主（捨てる）。欄を開いたまま持ち主が止まると、コアが閉じる。
 - `set` は持ち主が補完などで文字列を書き換えるためのもので、`prompt-changed` は出ない。
 - 一覧（補完の候補など）は、持ち主がパネルやポップアップで描く。欄が持つのは 1 行の文字と右端の hint だけ。
-- `show-in-box` で、欄をコアメニューと同じ真ん中の箱の入力の行にできる（picker が使う。[finder.md](finder.md)）。一覧は `set-rows` で渡し、右の欄は `set-preview` で渡す。ファイルを渡せば、コアが読んで構文の色を付ける。キーの流れは、下に出す欄と変わらない。
+- `show-in-box` で、欄をコアメニューと同じ真ん中の箱の入力の行にできる（picker が使う。[finder.md](../plugins/finder.md)）。一覧は `set-rows` で渡し、右の欄は `set-preview` で渡す。ファイルを渡せば、コアが読んで構文の色を付ける。キーの流れは、下に出す欄と変わらない。
 
 ### 文字を打つ欄のない一覧（choices）
 
@@ -350,7 +350,7 @@ record decoration { start: offset, end: offset, style: string }
 set-decorations: func(buf: borrow<buffer>, namespace: string, decorations: list<decoration>);
 ```
 
-- 装飾の位置は、付けたあとの編集に合わせてコアが動かす（[architecture.md](architecture.md) の「装飾」）。プラグインが編集のたびに付け直す必要はない。
+- 装飾の位置は、付けたあとの編集に合わせてコアが動かす（[architecture.md](../architecture.md) の「装飾」）。プラグインが編集のたびに付け直す必要はない。
 - 装飾の範囲はバッファの長さに切り詰め、空の範囲は捨てる。
 - 注記（`record note { at: offset, text: string, style: string }`）も、装飾と同じく名前空間ごとに差し替え、位置は編集に合わせて動く。`at` の行の末尾に描く。まわりのテキストが消えても取り除かず、消えた場所へ動く（LSP の診断のように、編集のたびに付け直されるものに使う想定）。
 - ポップアップの位置は編集に合わせて動かない。位置を変えたいときは作り直す。
@@ -390,7 +390,7 @@ interface settings {
 }
 ```
 
-- 値は、config.toml の `[core]` の値を、プラグインがバッファ単位で上書きしたもの（[architecture.md](architecture.md) の「config.toml」）。
+- 値は、config.toml の `[core]` の値を、プラグインがバッファ単位で上書きしたもの（[architecture.md](../architecture.md) の「config.toml」）。
 - バッファ単位で変えられるのは `tab-width` と `indent` だけ。`scroll-margin` は画面の設定なので、バッファには持たせない。安全装置（予約キー、プラグインの上限）は、どの形でもプラグインから変えられない。
 - 同じバッファの同じキーを複数のプラグインが変えたら、あとから変えたほうが勝つ。変えたプラグインが止まると、その上書きは消える。
 - 言語ごとの既定値は、標準プラグイン `indent` が受け持つ。バッファが開いたら言語を調べ、`set-tab-width` と `set-indent` で上書きする。既定では Go をタブ、YAML と JSON を空白 2 つにする。利用者は `plugins/indent.toml` で変えられる。
@@ -416,7 +416,7 @@ interface files {
 }
 ```
 
-- `list` は、ディレクトリの一覧（picker の `picker.directory`、[files.md](files.md)）のためのもの。1 段だけなので、呼び出しの中で待って返す。`directory` はリンクの先で決める。権限（`mode`）と更新の日時（`modified`）も返す。日時を地域の時刻にするのは `editor.local-time`（WASI からは時間帯が分からないため）。
+- `list` は、ディレクトリの一覧（picker の `picker.directory`、[files.md](../plugins/files.md)）のためのもの。1 段だけなので、呼び出しの中で待って返す。`directory` はリンクの先で決める。権限（`mode`）と更新の日時（`modified`）も返す。日時を地域の時刻にするのは `editor.local-time`（WASI からは時間帯が分からないため）。
 - `walk-with` は、隠しファイルと ignore されたものも含めて数える（`picker.all-files`）。`.git` の中は数えない。`make-dir` は `fs-write` の権限でディレクトリを作る。
 - `walk` は `.gitignore`（と `.ignore`、git の除外設定）を守り、隠しファイルは数えない。ripgrep と同じ `ignore` クレートを使う。
 - 結果は `files-listed(id, paths, done)` のイベントで、1,000 件ずつ届く。`paths` は `dir` からの相対パスで、区切りは `/`。最後の 1 回は `done` が真。
@@ -435,7 +435,7 @@ interface clipboard {
 
 - 同期で読み書きする。貼り付けのように、その場で中身が要る操作のため。OS のクリップボードの読み書きは速いので、呼び出しの時間の上限に収まる。
 - 使うには `clipboard` の権限が要る。クリップボードにはパスワードのような秘密が入ることがあるため、読み書きの両方を権限の対象にする。
-- 読み書きの中身はフロントエンドが決める（[architecture.md](architecture.md) の「クレート構成」）。
+- 読み書きの中身はフロントエンドが決める（[architecture.md](../architecture.md) の「クレート構成」）。
 
 ## 外部プロセス
 

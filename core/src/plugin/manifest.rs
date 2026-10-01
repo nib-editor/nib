@@ -26,7 +26,7 @@ pub(crate) struct Manifest {
     /// What it may do beyond the editor API.
     #[serde(default)]
     pub capabilities: Vec<String>,
-    /// A base: the whole way of editing, keys and all (docs/base.md). Only
+    /// A base: the whole way of editing, keys and all (docs/design/bases/base.md). Only
     /// the one `[core] base` names runs.
     #[serde(default)]
     pub base: bool,

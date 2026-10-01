@@ -51,7 +51,7 @@ pub struct PluginManifest {
     pub language_files: Vec<String>,
     /// It has code to run, not only data such as languages.
     pub has_code: bool,
-    /// It is a base (docs/base.md).
+    /// It is a base (docs/design/bases/base.md).
     pub base: bool,
 }
 
@@ -513,7 +513,7 @@ impl Editor {
             let compiled = thread::scope(|scope| {
                 // One more thread than this one: each keeps a few MB of the
                 // code it compiled scattered over its allocator, and more
-                // barely shorten startup (docs/architecture.md).
+                // barely shorten startup (docs/design/architecture.md).
                 let other = scope.spawn(compile);
                 let mut compiled = compile();
                 compiled.extend(other.join().expect("compiling plugins panicked"));
@@ -609,7 +609,7 @@ impl Editor {
             key.parse()
                 .expect("the manifest's menu key was checked when it was read")
         });
-        // For the template of its settings file (docs/files.md).
+        // For the template of its settings file (docs/design/plugins/files.md).
         if let Ok(Some(example)) = source.read(SETTINGS_EXAMPLE) {
             let example = String::from_utf8_lossy(&example).into_owned();
             self.state_mut()

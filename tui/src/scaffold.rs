@@ -1,5 +1,5 @@
 //! `nib plugin new`: writes a plugin that builds and passes its tests, to
-//! start from (docs/plugin-dev.md).
+//! start from (docs/design/api/plugin-dev.md).
 
 use std::fs;
 use std::path::{Path, PathBuf};

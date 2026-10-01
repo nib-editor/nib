@@ -2,7 +2,7 @@
 
 > ステータス: 合意済み（2026-09-27）
 
-M5「AI で作れる土台」の設計。プラグインを作り始める、試す、直す、配る、の繰り返しを、人にも AI にも短く回せるようにする（[vision.md](vision.md) の「位置づけ」）。
+M5「AI で作れる土台」の設計。プラグインを作り始める、試す、直す、配る、の繰り返しを、人にも AI にも短く回せるようにする（[vision.md](../vision.md) の「位置づけ」）。
 
 AI がプラグインを作るときに要るのは、次の 3 つ。
 
@@ -117,7 +117,7 @@ Helix のテストと同じ印を使う。`#[` と `]#` で主選択、`#(` と 
 
 ### キーの書き方
 
-文字はそのまま、名前のあるキーと修飾つきのキーは `<` と `>` で囲む。中の書き方は設定のキー（[keymap.md](keymap.md) の「設定」）と同じ。
+文字はそのまま、名前のあるキーと修飾つきのキーは `<` と `>` で囲む。中の書き方は設定のキー（[helix.md](../bases/helix.md) の「設定」）と同じ。
 
 ```
 ihello<esc>       i、h、e、l、l、o、Esc
@@ -167,7 +167,7 @@ screen = ["found error"]
 
 ## `nib plugin pack` が入れるもの
 
-ディレクトリの中身を全部入れると、Rust の雛形では `target/` や `src/` まで入ってしまうので、nib が読むものだけにする: `plugin.toml`、`plugin.wasm`、マニフェストの `[[languages]]` が指す文法とクエリ、`settings.example.toml`（[files.md](files.md)）、`LICENSE*`。
+ディレクトリの中身を全部入れると、Rust の雛形では `target/` や `src/` まで入ってしまうので、nib が読むものだけにする: `plugin.toml`、`plugin.wasm`、マニフェストの `[[languages]]` が指す文法とクエリ、`settings.example.toml`（[files.md](../plugins/files.md)）、`LICENSE*`。
 
 ## API の文書
 

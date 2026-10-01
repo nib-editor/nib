@@ -1,6 +1,6 @@
 # Cases for tui/tests/compare.rs: the same keys go to `nvim --headless
 # --clean` and to nib's vim base, and the text and cursor must match. A
-# case nib does differently says why in `differs` (docs/vim.md).
+# case nib does differently says why in `differs` (docs/design/bases/vim.md).
 #
 # `text` ends with a line break and marks the cursor with #[|]#. `keys`
 # end in normal mode.

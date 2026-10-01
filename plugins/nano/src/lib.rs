@@ -1,4 +1,4 @@
-//! GNU nano's way of editing (docs/nano.md): no modes, typed chars go in,
+//! GNU nano's way of editing (docs/design/bases/nano.md): no modes, typed chars go in,
 //! and Ctrl and Alt keys do the rest. The cursor is a point; with the mark
 //! set, the selection runs from the mark, its anchor, to the cursor.
 

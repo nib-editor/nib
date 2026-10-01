@@ -240,7 +240,7 @@ nib_plugin::export!(Plugin);
 /// The keys a plugin's buffer cannot take from helix in normal mode:
 /// motions, counts, search, the command line, selecting, yanking, the
 /// goto, match, and view prefixes, windows, scrolling, and the leader
-/// (docs/keymap.md).
+/// (docs/design/bases/helix.md).
 fn helix_keeps(key: &KeyEvent) -> bool {
     let ctrl = |c| {
         *key == KeyEvent {

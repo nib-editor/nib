@@ -1,4 +1,4 @@
-//! Vim's way of editing (docs/vim.md): normal, insert, replace, and visual
+//! Vim's way of editing (docs/design/bases/vim.md): normal, insert, replace, and visual
 //! modes, operators with motions and text objects, counts, registers,
 //! marks, macros, `.`, and the `:` command line. Where Vim and Neovim
 //! differ, this follows Neovim's defaults.
@@ -205,7 +205,7 @@ nib_plugin::export!(Plugin);
 
 /// The keys a plugin's buffer cannot take from vim in normal mode:
 /// motions, counts, search, the command line, visual mode, yanking,
-/// windows, scrolling, marks, and the leader (docs/vim.md).
+/// windows, scrolling, marks, and the leader (docs/design/bases/vim.md).
 fn vim_keeps(key: &KeyEvent, leader: &KeyEvent) -> bool {
     if key == leader {
         return true;

@@ -42,7 +42,7 @@ open-directory = "picker.directory"
 
 ## ディレクトリの一覧（`picker.directory`）
 
-1 つのディレクトリの中身を、picker のバッファ（[plugin-buffers.md](plugin-buffers.md)）に並べる。netrw 風と dired 風があり、見た目とキーが違う。`plugins/picker.toml` で選ぶ。
+1 つのディレクトリの中身を、picker のバッファ（[plugin-buffers.md](../core/plugin-buffers.md)）に並べる。netrw 風と dired 風があり、見た目とキーが違う。`plugins/picker.toml` で選ぶ。
 
 ```toml
 [settings]
@@ -71,7 +71,7 @@ config.toml
 | `q` | 一覧を閉じる |
 
 - vim の netrw の見出しと並びに似せる（`"` で始まる見出し、名前だけ、ディレクトリに `/`）。見出しの文言は nib のもの。
-- vim ベースは `%`（対応する括弧へ）を、プラグインのバッファに渡すキーにする（[vim.md](vim.md) の「プラグインのバッファのキー」）。一覧では括弧をたどることがなく、netrw の `%` を使えるようにするため。
+- vim ベースは `%`（対応する括弧へ）を、プラグインのバッファに渡すキーにする（[vim.md](../bases/vim.md) の「プラグインのバッファのキー」）。一覧では括弧をたどることがなく、netrw の `%` を使えるようにするため。
 
 ### dired 風
 

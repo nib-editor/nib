@@ -1,4 +1,4 @@
-# Directory listings as dired's, the way with helix (docs/files.md). Run
+# Directory listings as dired's, the way with helix (docs/design/plugins/files.md). Run
 # with `nib plugin test target/plugins/picker plugins/picker/tests/dired.toml`
 # after `cargo xtask build-plugins`; tui/tests/plugin_test.rs does.
 

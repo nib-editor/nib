@@ -1,6 +1,6 @@
 //! Times as people read them where nib runs, for plugins, which cannot
-//! know the time zone from inside WASI (docs/files.md), and the CPU time
-//! the plugins' calls use (docs/architecture.md, "時間と資源の上限").
+//! know the time zone from inside WASI (docs/design/plugins/files.md), and the CPU time
+//! the plugins' calls use (docs/design/architecture.md, "時間と資源の上限").
 
 use std::time::Duration;
 

@@ -24,12 +24,12 @@ pub struct Settings {
     pub indent: Indent,
     /// Lines kept visible above and below the cursor.
     pub scroll_margin: u16,
-    /// The base plugin to use (docs/base.md).
+    /// The base plugin to use (docs/design/bases/base.md).
     pub base: String,
     /// Set by the user; otherwise the base's, or Ctrl-g.
     pub menu_key: Option<KeyEvent>,
     /// The command a directory given to nib goes to, as `{"path": dir}`
-    /// (docs/files.md).
+    /// (docs/design/plugins/files.md).
     pub open_directory: String,
     /// A plugin call taking longer is stopped, unless the plugin's own
     /// settings say otherwise.

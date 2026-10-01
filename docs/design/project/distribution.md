@@ -2,7 +2,7 @@
 
 > ステータス: 合意済み（2026-09-28）。仕組みは用意したが、リリースは 1.0.0 から出す。それまでは、ソースから入れる（README の「Installing」）。tap と bucket のリポジトリは作ってあり、リリースがあるまでは何もしない。mise の一覧への PR は、広く使われてから（下の「入れ方」）。
 
-`nib` の実行ファイルを、mise、Homebrew、Scoop、cargo から入れられるようにする。プラグインの配布（[plugin-install.md](plugin-install.md)）とは別の話。
+`nib` の実行ファイルを、mise、Homebrew、Scoop、cargo から入れられるようにする。プラグインの配布（[plugin-install.md](../api/plugin-install.md)）とは別の話。
 
 ## 土台: GitHub のリリース
 

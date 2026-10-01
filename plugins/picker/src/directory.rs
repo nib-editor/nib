@@ -1,4 +1,4 @@
-//! Directory listings (docs/files.md): `picker.directory` shows what a
+//! Directory listings (docs/design/plugins/files.md): `picker.directory` shows what a
 //! directory holds in a buffer of this plugin's, as Vim's netrw or Emacs's
 //! dired does, with their keys. Moving and searching are the base's, as in
 //! any buffer.

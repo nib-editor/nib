@@ -1,4 +1,4 @@
-//! Ways to open files and run commands (docs/files.md, docs/finder.md).
+//! Ways to open files and run commands (docs/design/plugins/files.md, docs/design/plugins/finder.md).
 //! Fuzzy pickers, in a box in the middle of the screen: `picker.files`
 //! lists the files of the working directory, or of `{"path": dir}`, with
 //! the core's `files.walk`, which honors .gitignore, shows the chosen one

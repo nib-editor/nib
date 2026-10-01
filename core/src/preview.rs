@@ -1,4 +1,4 @@
-//! The file a box shows beside its rows (docs/finder.md): read once per
+//! The file a box shows beside its rows (docs/design/plugins/finder.md): read once per
 //! path, parsed for its colors, and drawn from its start or around a line.
 
 use std::borrow::Cow;

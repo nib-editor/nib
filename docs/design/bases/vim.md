@@ -100,7 +100,7 @@ Vim と Neovim で既定が違うところは、Neovim に合わせる（`nvim -
 | `:noh` | 何もしない（検索の強調がないため） |
 | `:config` `:config-reload`、`:lsp.definition` のような名前 | nib のコマンド（[base.md](base.md) の「コマンドを名前で呼ぶ」） |
 
-コマンドラインでは Ctrl-w、Ctrl-u、Ctrl-b、Ctrl-e、Ctrl-h、Ctrl-r（レジスタ）、上下と Ctrl-p Ctrl-n（履歴）、Tab（コマンドの名前の補完）が効く。ほかはコアの既定（[plugin-api.md](plugin-api.md) の「入力欄」）。
+コマンドラインでは Ctrl-w、Ctrl-u、Ctrl-b、Ctrl-e、Ctrl-h、Ctrl-r（レジスタ）、上下と Ctrl-p Ctrl-n（履歴）、Tab（コマンドの名前の補完）が効く。ほかはコアの既定（[plugin-api.md](../api/plugin-api.md) の「入力欄」）。
 
 検索のパターンは Vim の書き方（magic）で書き、コアの正規表現に直して探す。`\(` `\|` `\+` `\=` `\{n,m}` `\{-}` `\<` `\>` `\s` `\d` `\w` `\a` `\l` `\u` `\x` `\h` `\_s` `\_.` `\v` `\V` `\c` を読む。
 
@@ -110,9 +110,9 @@ Vim と Neovim で既定が違うところは、Neovim に合わせる（`nvim -
 
 ## プラグインのバッファのキー
 
-プラグインのバッファ（[plugin-buffers.md](plugin-buffers.md)）が決めたキーは、normal モードでは vim のキーより先に効く。ただし、次のキーは vim のまま。プラグインの作者は、これを避けてキーを選ぶ（`Enter`、`q`、`s`、`d` のような、一覧の中では使わないキー）。
+プラグインのバッファ（[plugin-buffers.md](../core/plugin-buffers.md)）が決めたキーは、normal モードでは vim のキーより先に効く。ただし、次のキーは vim のまま。プラグインの作者は、これを避けてキーを選ぶ（`Enter`、`q`、`s`、`d` のような、一覧の中では使わないキー）。
 
-- 動きと数: `h` `j` `k` `l` `w` `W` `b` `B` `e` `E` `0`〜`9` `^` `$` `g` `G` `f` `F` `t` `T` `;` `,` `{` `}` `H` `M` `L`、矢印、`Home` `End` `PageUp` `PageDown`（`%` は渡す。ディレクトリの一覧の netrw 風で、新しいファイルに使うため。[files.md](files.md)）
+- 動きと数: `h` `j` `k` `l` `w` `W` `b` `B` `e` `E` `0`〜`9` `^` `$` `g` `G` `f` `F` `t` `T` `;` `,` `{` `}` `H` `M` `L`、矢印、`Home` `End` `PageUp` `PageDown`（`%` は渡す。ディレクトリの一覧の netrw 風で、新しいファイルに使うため。[files.md](../plugins/files.md)）
 - 検索: `/` `?` `n` `N` `*` `#`
 - コマンドライン、visual モード、コピー、印: `:` `v` `V` `y` `"` `'` `` ` `` `m` `z`
 - Ctrl: `C-w`（ウィンドウ）、`C-d` `C-u` `C-f` `C-b` `C-e` `C-y`（スクロール）、`C-o` `C-i`（ジャンプ）、`C-v`、`C-[` `C-c`

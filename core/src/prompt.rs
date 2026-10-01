@@ -1,7 +1,7 @@
 //! Prompts: lines of text a plugin opens for typing, such as a command line
 //! or a picker's query. The core keeps the text and draws it; the base in
 //! use decides what keys do to it, and the core's defaults cover the keys
-//! it leaves (docs/plugin-api.md).
+//! it leaves (docs/design/api/plugin-api.md).
 
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -36,7 +36,7 @@ pub(crate) struct Prompt {
     pub boxed: Option<PromptBox>,
 }
 
-/// What the box of a prompt shows under and beside it (docs/finder.md).
+/// What the box of a prompt shows under and beside it (docs/design/plugins/finder.md).
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PromptBox {
     pub title: String,

@@ -24,8 +24,8 @@ M3.4 の続きで作るもの:
 | `lsp.hover` | カーソル位置の説明をポップアップに出す（helix の `Space k`） |
 | `lsp.definition` | 定義へ移動する（helix の `gd`） |
 | `lsp.complete` | カーソルの前の語の補完を出す（helix の挿入モードの `Ctrl-x`） |
-| `lsp.diagnostics` | 開いているファイルの診断を `*diagnostics*` に並べ、下に分割して出す（`path:行:列: 重さ: メッセージ`）。診断が変わるたびに書き直す。一覧の中では `Enter`（`lsp.goto-diagnostic`）でその位置へ、上のビューで飛び、`q`（`lsp.close-diagnostics`）で閉じる（[plugin-buffers.md](plugin-buffers.md)） |
-| `lsp.status` | 動いているサーバーを、言語ごとに `rust ready` のような 1 行で返す（`starting` / `ready` / 落ちたものは `stopped`）。キーには割り当てていない。使うときは `plugins/helix.toml` の `[settings.keys.normal]`（[keymap.md](keymap.md) の「設定」）に、`space = { l = "lsp.status" }` のように書く |
+| `lsp.diagnostics` | 開いているファイルの診断を `*diagnostics*` に並べ、下に分割して出す（`path:行:列: 重さ: メッセージ`）。診断が変わるたびに書き直す。一覧の中では `Enter`（`lsp.goto-diagnostic`）でその位置へ、上のビューで飛び、`q`（`lsp.close-diagnostics`）で閉じる（[plugin-buffers.md](../core/plugin-buffers.md)） |
+| `lsp.status` | 動いているサーバーを、言語ごとに `rust ready` のような 1 行で返す（`starting` / `ready` / 落ちたものは `stopped`）。キーには割り当てていない。使うときは `plugins/helix.toml` の `[settings.keys.normal]`（[helix.md](../bases/helix.md) の「設定」）に、`space = { l = "lsp.status" }` のように書く |
 
 ## サーバーの設定
 
@@ -69,8 +69,8 @@ command = ["pyright-langserver", "--stdio"]
 - 候補の一覧はポップアップで、カーソルの前の単語の始まりの下に出す。
 - 開き方:
   - 挿入モードの `Ctrl-x`（helix プラグインが `lsp.complete` を呼ぶ）
-  - 自動: 挿入モードで識別子の文字を 2 文字以上打つか、`.` / `::` を打ったあと、打鍵が 150 ms 止まったら要求する。打つたびに要求しないよう、タイマーで待つ。文字を打つ状態かどうかは、ベースが知らせる `mode-changed` イベントの `typing` で知る（どのベースでも同じ。[plugin-api.md](plugin-api.md) の「入力」）。モードのないベース（Emacs、nano）は、いつも打つ状態。
-- キーの受け持ち: 一覧は `prompt.choices`（[plugin-api.md](plugin-api.md) の「文字を打つ欄のない一覧」）で開き、`next`、`previous`、`accept` を受け取る。どのキーがどれかは、使っているベースが決める。
+  - 自動: 挿入モードで識別子の文字を 2 文字以上打つか、`.` / `::` を打ったあと、打鍵が 150 ms 止まったら要求する。打つたびに要求しないよう、タイマーで待つ。文字を打つ状態かどうかは、ベースが知らせる `mode-changed` イベントの `typing` で知る（どのベースでも同じ。[plugin-api.md](../api/plugin-api.md) の「入力」）。モードのないベース（Emacs、nano）は、いつも打つ状態。
+- キーの受け持ち: 一覧は `prompt.choices`（[plugin-api.md](../api/plugin-api.md) の「文字を打つ欄のない一覧」）で開き、`next`、`previous`、`accept` を受け取る。どのキーがどれかは、使っているベースが決める。
   - helix では `Ctrl-n` / `↓` と `Ctrl-p` / `↑` で候補を選び、`Tab` / `Enter` で確定する。
   - ほかのキー（`Esc` を含む）はふつうに効き、そのキーの編集より先に `cancel` が届いて一覧を閉じる（`Esc` なら挿入モードも抜ける）。文字を打てば、少し待ってからその時点の単語で出し直す。
 - 候補は、サーバーが返した一覧を、カーソルの前の単語の始まりから見た接頭辞で絞る（大文字と小文字は区別しない）。並びは `sortText`、なければ `label` の順。

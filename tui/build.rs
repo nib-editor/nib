@@ -1,7 +1,7 @@
 //! Embeds the standard plugins built by `cargo xtask build-plugins`, so `nib`
 //! works without any setup: from `target/plugins/` in the repository, or
 //! from `plugins/` next to this file in the crate on crates.io, which ships
-//! them prebuilt, copied by `cargo xtask package` (docs/distribution.md). Without them, the binary still
+//! them prebuilt, copied by `cargo xtask package` (docs/design/project/distribution.md). Without them, the binary still
 //! builds, with a warning, so checks do not need the wasm toolchain.
 
 use std::path::{Path, PathBuf};

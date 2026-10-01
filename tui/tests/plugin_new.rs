@@ -1,5 +1,5 @@
 //! `nib plugin new` makes plugins that `nib plugin build` builds and whose
-//! tests `nib plugin test` passes, as docs/plugin-dev.md promises. Build the
+//! tests `nib plugin test` passes, as docs/design/api/plugin-dev.md promises. Build the
 //! standard plugins first with `cargo xtask build-plugins`, which also
 //! fetches the crates the Rust template needs; the build here is offline.
 

@@ -1,4 +1,4 @@
-//! What nib's base plugins share (docs/base.md): reading text around a
+//! What nib's base plugins share (docs/design/bases/base.md): reading text around a
 //! position, text objects, keys and keymaps, edits over every selection,
 //! and the command line. Where a cursor sits, and whether a motion moves it
 //! or selects, is each base's own.

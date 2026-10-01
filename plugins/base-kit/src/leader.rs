@@ -1,4 +1,4 @@
-//! The keys under a base's leader (docs/base.md): the base keeps some for
+//! The keys under a base's leader (docs/design/bases/base.md): the base keeps some for
 //! itself, and plugins suggest the rest in their manifests. Earlier ones
 //! win; the ones that lose are kept to say so.
 

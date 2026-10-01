@@ -312,7 +312,7 @@ func (self Buffer) SetEditable(editable bool) {
 // For the plugin that made it: the keys that work in it, as
 // settings write them ("ret", "s", "C-c C-c"), and the commands of
 // its own they run. The base takes them over its own keys, but for
-// those it keeps, such as vim's motions (docs/plugin-buffers.md).
+// those it keeps, such as vim's motions (docs/design/core/plugin-buffers.md).
 //
 //	set-keys: func(keys: list<tuple<string, string>>) -> result<_, string>
 //

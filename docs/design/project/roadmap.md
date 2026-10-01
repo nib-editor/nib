@@ -2,11 +2,11 @@
 
 > ステータス: 合意済み（2026-09-25）
 
-各段階は、終えた時点で CI が通り、動くものを確かめられる状態にする。性能は段階ごとに [bench/latency.py](../bench/latency.py) で測り、[architecture.md](architecture.md) の目標と比べる。結果は [benchmarks.md](benchmarks.md) に残す。
+各段階は、終えた時点で CI が通り、動くものを確かめられる状態にする。性能は段階ごとに [bench/latency.py](../../../bench/latency.py) で測り、[architecture.md](../architecture.md) の目標と比べる。結果は [benchmarks.md](benchmarks.md) に残す。
 
 ## M1 まで
 
-M1 のゴールは、Helix 風キーマップのプラグインだけで、nib 自身のソースコードを編集してコミットできること（[vision.md](vision.md)）。
+M1 のゴールは、Helix 風キーマップのプラグインだけで、nib 自身のソースコードを編集してコミットできること（[vision.md](../vision.md)）。
 
 ### M0.1 データモデル
 
@@ -62,7 +62,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 >
 > 計画から変えた点:
 > - コマンドは、コアのコマンド（`buffer.save`、`buffer.open`、`editor.quit`）を呼ぶ `commands.call` だけにした。プラグインがコマンドを登録する `commands.register` とイベントは、使うプラグインが出てくるまで後に回す。
-> - コマンドラインは、入力スタックに層を積まず、helix プラグインの内部で扱う（[keymap.md](keymap.md)）。
+> - コマンドラインは、入力スタックに層を積まず、helix プラグインの内部で扱う（[helix.md](../bases/helix.md)）。
 > - スクロール（`Ctrl-d` など）の API は M1 に回した。
 
 - ノーマルモードと挿入モード
@@ -84,7 +84,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 > - `mm` / `mi` / `ma` の括弧は、構文木を使わずテキストだけで対応を取る。文字列やコメントの中の括弧も数える（M2 で構文木を使う）。
 > - キーの割り当て変更は、まだない（M4 に回す）。
 
-- [keymap.md](keymap.md) の「M1 で実装するキー」をすべて実装する
+- [helix.md](../bases/helix.md) の「M1 で実装するキー」をすべて実装する
 - 複数のバッファ（`:o`、`gn` / `gp`）
 - スクロールの API（`Ctrl-d` など）と横スクロール（長い行でもカーソルが見えるようにする）
 - ステータスラインで、長いパスでも変更の印（`[+]`）が見えるようにする
@@ -118,7 +118,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 - プラグインが構文木を読む `syntax` インターフェース（ノードの検索、親と子、クエリの捕獲）
 - 言語プラグインのクエリを `[languages.queries]` に名前で並べる形にする（`highlights` のほかに `textobjects` など）
 - Rust の `textobjects` クエリ
-- helix プラグインの、構文木を使うキー（[keymap.md](keymap.md) の「M2.2 で実装するキー」）
+- helix プラグインの、構文木を使うキー（[helix.md](../bases/helix.md) の「M2.2 で実装するキー」）
 
 確かめ方: nib のソースで、`maf`、`]f`、`Alt-o` / `Alt-i`、文字列の中に括弧がある行での `mm` を試す。
 
@@ -128,7 +128,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 
 - バッファの範囲にスタイルを付ける装飾。位置は編集に合わせてコアが動かす
 - 位置か右下の角に結びつけるポップアップ
-- helix プラグインの、対応する括弧の強調とキーの候補（[keymap.md](keymap.md) の「M2.3 で足す表示」）
+- helix プラグインの、対応する括弧の強調とキーの候補（[helix.md](../bases/helix.md) の「M2.3 で足す表示」）
 
 行内・行末の文字列と行頭の記号は、LSP と一緒に M3 で作る。
 
@@ -155,7 +155,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 > - 層（injection ごとの構文木）は、画面の近くのものだけを解析して持つ。Markdown は段落ごとに行内の層があり、6,969 行のファイルでは 1,709 層になる。全部を解析すると 240 ms、全部に編集を伝えると 1 打鍵に 1 ms かかった。
 > - 最初の解析では injection を後回しにし、元の言語の色を先に出す。
 
-- 言語プラグインの `injections` クエリ（[architecture.md](architecture.md) の「構文木」）。コアが、その範囲だけを別の言語で解析する層を持ち、ハイライトを重ねる
+- 言語プラグインの `injections` クエリ（[architecture.md](../architecture.md) の「構文木」）。コアが、その範囲だけを別の言語で解析する層を持ち、ハイライトを重ねる
 - Markdown のコードブロック（情報文字列の言語名か拡張子で言語を選ぶ）と front matter（YAML / TOML）
 - Markdown の行内の要素（強調、コード、リンク）。行内の文法（`markdown_inline`）を Markdown のプラグインに足した
 - Rust のドキュメントコメントを Markdown として（ファイルの全部のドキュメントコメントで 1 つの文書にする）
@@ -166,7 +166,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 
 > 完了（2026-09-27）。同じ時に、裏で解析しない nib と比べた打鍵（中央値 / p99）は、3,455 行の Rust ファイルで 2.41 / 5.15 ms → 1.61 / 3.38 ms、6,969 行の Markdown ファイルで 2.53 / 6.10 ms → 1.74 / 4.39 ms。スクロールは変わらない。残りの大半は、描画でハイライトのクエリを掛ける分（プロセスの中で 0.17 ms）。解析のあいだに打った編集の当て直しは、同期で解析した画面と 1 マスずつ比べるテストで確かめる。
 
-設計は [architecture.md](architecture.md) の「解析のスレッド」。
+設計は [architecture.md](../architecture.md) の「解析のスレッド」。
 
 - undo と redo を、構文木を捨てずに編集として伝える
 - コアの `editor.syntax_updated` イベントと、helix の括弧の強調をそれで更新すること
@@ -180,7 +180,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 >
 > 確かめ方: 使い回した色は、編集の直後（古い構文木で描くフレーム）と解析のあとの両方で、全体を塗り直した色と比べる。層の解析のあいだに打った編集は、同期で解析したエディタの画面と比べる。どちらのテストも、壊した実装（編集した行を塗り直さない、当て直した編集を層の中の injection に伝えない）で落ちることを確かめた。
 
-設計は [architecture.md](architecture.md) の「構文木」と「解析のスレッド」。
+設計は [architecture.md](../architecture.md) の「構文木」と「解析のスレッド」。
 
 - 前のフレームのハイライトを使い回し、編集した行だけ塗り直す
 - injection の層の解析を、解析のスレッドに頼む
@@ -240,7 +240,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 
 > 完了（2026-09-26）。テスト用の偽のサーバーと、実際の rust-analyzer（nib のソースで診断・ホバー・定義へ移動）で確かめた。rust-analyzer は自分で見つけた診断を pull で返すので、pull にも対応した。
 
-- LSP プラグイン（[lsp.md](lsp.md)）: サーバーの起動と同期、診断（下線、行末のメッセージ、件数）、ホバー（ポップアップ）、定義へ移動
+- LSP プラグイン（[lsp.md](../plugins/lsp.md)）: サーバーの起動と同期、診断（下線、行末のメッセージ、件数）、ホバー（ポップアップ）、定義へ移動
 - コアに、作業ディレクトリを返す `editor.working-directory` と、行末に文字列を出す注記（`ui.set-notes`）
 - helix の `gd` と `Space k`
 - 補完（挿入モードの `Ctrl-x` と、打鍵が止まったときの自動の表示）。一覧を開いているあいだだけ、LSP プラグインが入力スタックに層を積む
@@ -252,7 +252,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 > 完了（2026-09-26）。
 
 - Ctrl-g でプラグインの呼び出しを即座に止める（入力のスレッドが呼び出し中でもキーを見る）
-- `plugins/<name>.toml` の `load = "lazy"` と `timeout-ms = "none"`（[architecture.md](architecture.md) の「plugins/<name>.toml」）
+- `plugins/<name>.toml` の `load = "lazy"` と `timeout-ms = "none"`（[architecture.md](../architecture.md) の「plugins/<name>.toml」）
 
 確かめ方: 無限ループするテスト用のプラグインを `timeout-ms = "none"` で動かし、Ctrl-g で止める。lazy のプラグインが、コマンドとイベントで起動することをテストで確かめる。
 
@@ -262,7 +262,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 
 > 完了（2026-09-26）。
 
-- `plugins/helix.toml` の `[settings.keys.normal]` / `insert` / `select`（[keymap.md](keymap.md) の「設定」）
+- `plugins/helix.toml` の `[settings.keys.normal]` / `insert` / `select`（[helix.md](../bases/helix.md) の「設定」）
 
 確かめ方: `"C-s" = "buffer.save"`、Helix のコマンド名への割り当て、挿入モードの `j = { k = "normal_mode" }` をテストで確かめる。
 
@@ -270,13 +270,13 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 
 > 完了（2026-09-26）。
 
-- helix プラグインの `.` と、名前つきレジスタ（[keymap.md](keymap.md) の「M4.2 で足すキー」）
+- helix プラグインの `.` と、名前つきレジスタ（[helix.md](../bases/helix.md) の「M4.2 で足すキー」）
 
 ### M4.3 バッファ単位の設定
 
 > 完了（2026-09-26）。
 
-- `settings.get-for` / `settings.set-for` で、プラグインがバッファ単位にタブ幅とインデントを変える（[plugin-api.md](plugin-api.md) の「設定」）
+- `settings.get-for` / `settings.set-for` で、プラグインがバッファ単位にタブ幅とインデントを変える（[plugin-api.md](../api/plugin-api.md) の「設定」）
 - 描画と縦移動は、表示中のバッファのタブ幅を使う
 - 言語ごとの既定値を受け持つ標準プラグイン `indent`
 
@@ -286,7 +286,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 
 > 完了（2026-09-26）。
 
-- `files.walk` と `files-listed` イベント（[plugin-api.md](plugin-api.md) の「ファイルの一覧」）。`ignore` クレートで `.gitignore` を守る
+- `files.walk` と `files-listed` イベント（[plugin-api.md](../api/plugin-api.md) の「ファイルの一覧」）。`ignore` クレートで `.gitignore` を守る
 - `picker` の一覧の取り方を、git / rg から `files.walk` に替える。`process` の権限を外し、`fs-read` だけにする。一覧が届くたびに件数を増やして見せる
 
 確かめ方: `.gitignore` した場所と隠しファイルが一覧に出ないこと、権限がなければ使えないこと、取り消せることをテストで確かめる。
@@ -295,7 +295,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 
 > 完了（2026-09-26）。macOS で、nib と OS のクリップボードの行き来を確かめた。
 
-- コアの `clipboard` インターフェースと権限。読み書きの口（`Clipboard` トレイト）はフロントエンドが渡し、tui は `arboard` を使う（[architecture.md](architecture.md) の「クレート構成」）
+- コアの `clipboard` インターフェースと権限。読み書きの口（`Clipboard` トレイト）はフロントエンドが渡し、tui は `arboard` を使う（[architecture.md](../architecture.md) の「クレート構成」）
 - helix の `+` レジスタと `Space y` / `Space p` / `Space P`
 
 確かめ方: エディタの中だけのクリップボードでテストし、tui では macOS のクリップボードとの行き来を試す。
@@ -304,7 +304,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 
 > 完了（2026-09-26）。手元のアーカイブで add / update / remove を試し、GitHub の API を読むところは実在のリポジトリで確かめた。GitHub のリリースからの実際のインストールは、配るリポジトリを作った M4.9 で確かめた。
 
-設計は [plugin-install.md](plugin-install.md)。URL ベースで始める。
+設計は [plugin-install.md](../api/plugin-install.md)。URL ベースで始める。
 
 1. WIT のパッケージのバージョンを SDK にそろえ、マニフェストの `api` で合わないプラグインを見分ける
 2. `nib plugin pack` と、`.nib.tar.gz` の形
@@ -317,7 +317,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 
 > 完了（2026-09-26）。
 
-- ビューの木、描画、フォーカス、同じバッファを開くビューどうしの選択の追従（[architecture.md](architecture.md) の「分割表示」）
+- ビューの木、描画、フォーカス、同じバッファを開くビューどうしの選択の追従（[architecture.md](../architecture.md) の「分割表示」）
 - コアのコマンド `view.split` / `view.close` / `view.only` / `view.focus`
 - helix の `Ctrl-w` / `Space w`
 
@@ -327,7 +327,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 
 > 完了（2026-09-26）。Go のテスト用プラグイン（TinyGo 0.42 でビルドして 688 KB）を nib で読み込み、キー、コマンド、イベントがつながることを確かめた。
 
-- `sdk/go`: wit-bindgen-go で生成した型と関数、薄いパッケージ `nib`、WIT の写し（[plugin-api.md](plugin-api.md) の「SDK」）
+- `sdk/go`: wit-bindgen-go で生成した型と関数、薄いパッケージ `nib`、WIT の写し（[plugin-api.md](../api/plugin-api.md) の「SDK」）
 - Go で書いたテスト用のプラグイン。`cargo xtask build-plugins` は TinyGo があればそれもビルドし、なければ飛ばす
 - CI に TinyGo と binaryen を入れて、Go のプラグインもテストする
 
@@ -339,7 +339,7 @@ M1 のゴールは、Helix 風キーマップのプラグインだけで、nib �
 
 - サンプルのプラグイン [nib-editor/plugin-example](https://github.com/nib-editor/plugin-example)。Go で書き、タグを push すると `.nib.tar.gz` をリリースに置く
 - 一覧のリポジトリ [nib-editor/plugins](https://github.com/nib-editor/plugins)（`plugins.toml`）
-- `nib plugin search [語]` と、名前での `nib plugin add`（[plugin-install.md](plugin-install.md) の「名前で探す」）
+- `nib plugin search [語]` と、名前での `nib plugin add`（[plugin-install.md](../api/plugin-install.md) の「名前で探す」）
 
 確かめ方: `nib plugin add wordcount` で入れたプラグインが nib で動き、記録の取得元がリポジトリになっていること。
 
@@ -349,7 +349,7 @@ M3 を終えた時点で、git のエディタ（`core.editor`）を hx から n
 
 ## M5 AI で作れる土台
 
-設計は [plugin-dev.md](plugin-dev.md)。
+設計は [plugin-dev.md](../api/plugin-dev.md)。
 
 ### M5.1 端末なしのテスト
 
@@ -376,7 +376,7 @@ M3 を終えた時点で、git のエディタ（`core.editor`）を hx から n
 
 > 完了（2026-09-28）。作業中に、テストごとの作業ディレクトリと `files`、`expect.absent` も足した。
 
-設計は [plugin-dev.md](plugin-dev.md) の「待つこと、手順、設定」。
+設計は [plugin-dev.md](../api/plugin-dev.md) の「待つこと、手順、設定」。
 
 - `nib plugin test` の `wait`、`[[test.step]]`、`settings`
 - 標準プラグイン（lsp、picker、indent）のテストを TOML で書く。lsp は Python の偽のサーバーを使う
@@ -395,7 +395,7 @@ M3 を終えた時点で、git のエディタ（`core.editor`）を hx から n
 
 1.0.0 で最初のリリースを出す（[distribution.md](distribution.md)）。1.0.0 は「このあと 1.x のあいだは互換を保つ」約束の区切りなので、約束するものを先に固める。次の 4 つがそろったら 1.0.0 にする（2026-09-28 に決めた）。
 
-- **プラグイン API を固める**: WIT を見直し、足りないもの（貼り付けや選択の変化のイベントなど。今は「必要になったら足す」にしてある）と、名前や形の揃わないところ（コアが custom イベントの形で出している `editor.*` を正式な種類にするかなど）を直して、`nib:plugin@1.0.0` にする。1.x のあいだは、足すことはあっても、変えたり消したりしない。SDK も 1.0.0 にする。（0.10.0 で、`nib:plugin@0.6.0` として作り直した: コアの操作とイベントを型に、interface の分け直し、ベースで困ったものを足した。1.0 で固めるときの決まりも含めて [api-0.6.md](api-0.6.md)）
+- **プラグイン API を固める**: WIT を見直し、足りないもの（貼り付けや選択の変化のイベントなど。今は「必要になったら足す」にしてある）と、名前や形の揃わないところ（コアが custom イベントの形で出している `editor.*` を正式な種類にするかなど）を直して、`nib:plugin@1.0.0` にする。1.x のあいだは、足すことはあっても、変えたり消したりしない。SDK も 1.0.0 にする。（0.10.0 で、`nib:plugin@0.6.0` として作り直した: コアの操作とイベントを型に、interface の分け直し、ベースで困ったものを足した。1.0 で固めるときの決まりも含めて [api-0.6.md](../api/api-0.6.md)）
 - **設定の形を固める**: `config.toml`、`plugins/<name>.toml`、helix のキーの書き方を見直す。1.x のあいだは、今の書き方で書いた設定が読めなくなる変更をしない。
 - **自分で普段の編集に使える**: 普段のコードや文章の編集に nib を使い、困ったことを直す。見つけたことは、この節の下に足していく。
 - **利用者向けの文書（英語）**: キー、設定、言語、LSP、プラグインの入れ方を、使う人向けに英語で書く。今あるのは README と、作者向けの `sdk/README.md` と、設計の記録（日本語の docs）だけ。
@@ -407,7 +407,7 @@ M3 を終えた時点で、git のエディタ（`core.editor`）を hx から n
 いつやるかは決めていないが、忘れないように書いておく。
 
 - **Emacs に近づけるもの**
-  - プラグインが持つ特別なバッファ。magit や dired のように、バッファそのものを UI にする。仕組みは 0.11.0 で入れた（[plugin-buffers.md](plugin-buffers.md)）。残りは、それを使うプラグイン（grep の結果、ファイルの一覧、git）。
+  - プラグインが持つ特別なバッファ。magit や dired のように、バッファそのものを UI にする。仕組みは 0.11.0 で入れた（[plugin-buffers.md](../core/plugin-buffers.md)）。残りは、それを使うプラグイン（grep の結果、ファイルの一覧、git）。
   - 自分自身を説明する機能。「このキーは何をするか」「このコマンドは何か」をその場で調べる（Emacs の describe-key）。
   - その場で書き換えて試す体験。Lua や Scheme の処理系をプラグインとして載せれば、コアに言語を持たずに実現できる。
 - **DOOM を動かす**。Emacs の中で DOOM を動かすように、プラグインで動かす。必要なもの:
