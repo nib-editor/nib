@@ -224,6 +224,18 @@ impl Guest for Plugin {
             Event::SyntaxUpdated(_) => {
                 highlight_match(&view::active());
             }
+            // A file opened from the command line or by another plugin
+            // starts with a point for a cursor; Helix's is a character. The
+            // event can arrive after keys, and a point is right in insert
+            // mode.
+            Event::BufferOpened(_) => HELIX.with_borrow(|helix| {
+                let view = view::active();
+                if helix.mode != Mode::Insert
+                    && view.selection().ranges.iter().all(|r| r.anchor == r.head)
+                {
+                    to_blocks(&view);
+                }
+            }),
             Event::PromptChanged(change) => {
                 HELIX.with_borrow_mut(|helix| helix.prompt_changed(change.id))
             }

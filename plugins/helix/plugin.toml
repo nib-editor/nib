@@ -1,5 +1,5 @@
 name = "helix"
-version = "0.1.18"
+version = "0.1.19"
 description = "A base: Helix's keys, where you select first and then act."
 api = "0.7"
 # The whole way of editing (docs/design/bases/base.md); only one base runs.
@@ -7,5 +7,6 @@ base = true
 menu-key = "C-g"
 # For the + register and Space y / Space p.
 capabilities = ["clipboard"]
-# Bracket matching waits for the tree after an edit.
-events = ["syntax-updated"]
+# Bracket matching waits for the tree after an edit; a file opened by the
+# core gets a character for a cursor.
+events = ["buffer-opened", "syntax-updated"]

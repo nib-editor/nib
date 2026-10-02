@@ -58,7 +58,7 @@ fn passes_its_tests(name: &str, dir: &str, count: usize) {
 
 #[test]
 fn the_helix_plugin_passes_its_tests() {
-    passes_its_tests("helix", "helix", 10);
+    passes_its_tests("helix", "helix", 11);
 }
 
 #[test]

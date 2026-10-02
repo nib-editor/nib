@@ -102,3 +102,17 @@ expect.text = "one\n  twoabc\n"
 keys = "A"
 paste = "!\n"
 expect.text = "one\n  twoabc!\n\n"
+
+[[test]]
+name = "a file another plugin or the core opens has a character for a cursor"
+text = "a\n"
+files = { "b.txt" = "xyz\n" }
+
+[[test.step]]
+command = "buffer.open"
+args = '{"path": "b.txt"}'
+
+[[test.step]]
+keys = "d"
+[test.step.expect]
+text = "yz\n"
